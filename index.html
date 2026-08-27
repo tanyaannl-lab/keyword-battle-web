@@ -2,10 +2,105 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>关键词作战工具</title>
+  <link rel="stylesheet" href="assets/styles.css">
 </head>
 <body>
-  建设中
+<div class="auth-wrap">
+  <section class="auth-panel">
+    <div class="brand auth-brand"><span class="brand-mark">K</span><span>关键词作战工具</span></div>
+    <div class="auth-box">
+      <h1>欢迎回来</h1>
+      <p>登录后提交 ASIN 与广告报表，生成关键词作战总表。</p>
+      <div class="tabs">
+        <button class="tab active" type="button" data-mode="login">登录</button>
+        <button class="tab" type="button" data-mode="signup">注册</button>
+      </div>
+      <form class="auth-form" id="authForm">
+        <div class="field"><label for="email">邮箱</label><input class="input" id="email" type="email" autocomplete="email" placeholder="name@example.com" required></div>
+        <div class="field"><label for="password">密码</label><input class="input" id="password" type="password" autocomplete="current-password" placeholder="请输入密码" minlength="6" required></div>
+        <div class="auth-message" id="authMessage" aria-live="polite"></div>
+        <button class="btn btn-primary" type="submit" id="authBtn">登录</button>
+      </form>
+      <div class="auth-note">账号由 Supabase Authentication 管理。登录成功后会自动进入关键词任务页。</div>
+    </div>
+  </section>
+  <aside class="auth-visual">
+    <div class="visual-card">
+      <div class="visual-kicker">KEYWORD BATTLE WORKSPACE</div>
+      <h2>把关键词数据、广告实绩和竞争格局放进一张表。</h2>
+      <p>从反查关键词到作战建议，保留关键数据，减少在多个后台之间来回切换。</p>
+      <div class="mini-grid">
+        <div class="mini"><strong>200</strong><span>全量关键词上限</span></div>
+        <div class="mini"><strong>13 周</strong><span>ABA 周趋势</span></div>
+        <div class="mini"><strong>4 类</strong><span>数据维度汇总</span></div>
+      </div>
+    </div>
+  </aside>
+</div>
+<script src="assets/config.js"></script>
+<script src="assets/auth-client.js"></script>
+<script src="assets/app.js"></script>
+<script>
+(async function(){
+  const tabs=[...document.querySelectorAll('.tab')];
+  const form=document.getElementById('authForm');
+  const btn=document.getElementById('authBtn');
+  const email=document.getElementById('email');
+  const password=document.getElementById('password');
+  const message=document.getElementById('authMessage');
+  let mode='login';
+
+  function setMode(next){
+    mode=next;
+    tabs.forEach(x=>x.classList.toggle('active',x.dataset.mode===mode));
+    btn.textContent=mode==='login'?'登录':'创建账号';
+    password.autocomplete=mode==='login'?'current-password':'new-password';
+    message.textContent='';
+    message.className='auth-message';
+  }
+
+  function showMessage(text,type='error'){
+    message.textContent=text;
+    message.className=`auth-message ${type}`;
+  }
+
+  tabs.forEach(t=>t.addEventListener('click',()=>setMode(t.dataset.mode)));
+
+  const current=await KBAuth.getValidSession();
+  if(current){
+    location.replace('tool/index.html');
+    return;
+  }
+
+  form.addEventListener('submit',async e=>{
+    e.preventDefault();
+    const eMail=email.value.trim();
+    const pwd=password.value;
+    showMessage('', '');
+    KB.setButtonLoading(btn,true,mode==='login'?'登录中…':'创建中…');
+    try{
+      if(mode==='login'){
+        await KBAuth.login(eMail,pwd);
+        location.replace('tool/index.html');
+      }else{
+        const data=await KBAuth.signup(eMail,pwd);
+        if(data?.access_token){
+          location.replace('tool/index.html');
+        }else{
+          showMessage('账号已创建。请按邮箱中的确认邮件完成验证后再登录。','success');
+          setMode('login');
+          email.value=eMail;
+        }
+      }
+    }catch(error){
+      showMessage(KBAuth.humanizeError(error),'error');
+    }finally{
+      KB.setButtonLoading(btn,false,mode==='login'?'登录':'创建账号');
+    }
+  });
+})();
+</script>
 </body>
 </html>

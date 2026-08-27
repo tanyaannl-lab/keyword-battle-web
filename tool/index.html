@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>工具页｜关键词作战工具</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+</head>
+<body>
+<div class="shell" id="appShell" hidden>
+  <header class="topbar">
+    <a class="brand" href="./index.html"><span class="brand-mark">K</span><span>关键词作战工具</span></a>
+    <div class="top-actions"><span id="userEmail">—</span><button class="btn btn-ghost btn-sm" id="logoutBtn">退出</button></div>
+  </header>
+
+  <main class="main">
+    <div class="page-title">
+      <div><h1>关键词任务</h1><p>输入 ASIN 并上传 Amazon 商品推广搜索词报表。</p></div>
+    </div>
+
+    <section class="card">
+      <div class="card-head"><h2>新建任务</h2><p>支持 .xlsx / .csv，最大 20 MB。文件上传成功后才会创建待处理任务。</p></div>
+      <div class="card-body">
+        <form class="submit-grid" id="taskForm">
+          <div class="field">
+            <label for="asin">ASIN</label>
+            <input class="input" id="asin" placeholder="例如 B09V366BDY" maxlength="10" autocomplete="off" required>
+            <div class="help" id="asinHelp">10 位，以 B0 开头。</div>
+          </div>
+
+          <div class="field">
+            <label>广告搜索词报表</label>
+            <label class="filebox" for="file">
+              <span class="file-name" id="fileName">选择 .xlsx 或 .csv 文件</span>
+              <span class="btn btn-secondary btn-sm">选择文件</span>
+            </label>
+            <input id="file" type="file" accept=".xlsx,.csv" hidden required>
+            <div class="help" id="fileHelp">上传到你的 Supabase 私有收件箱目录。</div>
+          </div>
+
+          <button class="btn btn-primary" id="submitBtn" type="submit">提交分析</button>
+        </form>
+        <div class="form-message" id="formMessage" aria-live="polite"></div>
+      </div>
+    </section>
+
+    <div class="section-gap"></div>
+
+    <section class="card table-card">
+      <div class="card-head task-head">
+        <div><h2>我的任务</h2><p>显示最近 20 条；每 30 秒自动刷新，也可以手动刷新。</p></div>
+        <div class="task-head-actions"><span class="refresh-note" id="refreshNote">—</span><button class="btn btn-secondary btn-sm" id="refreshBtn">刷新</button></div>
+      </div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>提交时间</th><th>ASIN</th><th>状态</th><th>说明</th><th style="text-align:right">操作</th></tr></thead>
+          <tbody id="taskRows"><tr><td colspan="5" class="empty">正在加载任务…</td></tr></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="auth-loading" id="loading">正在验证登录状态…</div>
+
+<script src="../assets/config.js"></script>
+<script src="../assets/auth-client.js"></script>
+<script src="../assets/app.js"></script>
+<script src="../assets/task-client.js"></script>
+<script>
+(async function(){
+  const auth = await KBAuth.requireAuth('../index.html');
+  if(!auth) return;
+
+  const userEmail = document.getElementById('userEmail');
+  const loading = document.getElementById('loading');
+  const appShell = document.getElementById('appShell');
+  const logoutBtn = document.getElementById('logoutBtn');
+  const taskForm = document.getElementById('taskForm');
+  const asinInput = document.getElementById('asin');
+  const fileInput = document.getElementById('file');
+  const fileName = document.getElementById('fileName');
+  const submitBtn = document.getElementById('submitBtn');
+  const formMessage = document.getElementById('formMessage');
+  const taskRows = document.getElementById('taskRows');
+  const refreshBtn = document.getElementById('refreshBtn');
+  const refreshNote = document.getElementById('refreshNote');
+
+  userEmail.textContent = auth.user?.email || '已登录用户';
+  loading.remove();
+  appShell.hidden = false;
+
+  function showMessage(text, type=''){
+    formMessage.textContent = text || '';
+    formMessage.className = `form-message ${type}`.trim();
+  }
+
+  function formatTime(value){
+    if(!value) return '—';
+    const d = new Date(value);
+    if(Number.isNaN(d.getTime())) return value;
+    return new Intl.DateTimeFormat('zh-CN',{
+      year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false
+    }).format(d).replaceAll('/','-');
+  }
+
+  function statusClass(status){
+    if(status==='已完成') return 'status-done';
+    if(status==='进行中') return 'status-processing';
+    if(status==='失败') return 'status-failed';
+    return 'status-pending';
+  }
+
+  function taskDescription(task){
+    if(task.status==='已完成') return '报告已生成';
+    if(task.status==='进行中') return '正在处理关键词数据';
+    if(task.status==='失败') return task.failure_reason || '处理失败';
+    return '等待 worker 领取';
+  }
+
+  function appendTextCell(tr, text, className=''){
+    const td = document.createElement('td');
+    td.textContent = text;
+    if(className) td.className = className;
+    tr.appendChild(td);
+    return td;
+  }
+
+  function renderTasks(tasks){
+    taskRows.replaceChildren();
+    if(!Array.isArray(tasks) || tasks.length===0){
+      const tr=document.createElement('tr');
+      const td=document.createElement('td');
+      td.colSpan=5;td.className='empty';td.textContent='还没有任务。提交第一份广告报表开始分析。';
+      tr.appendChild(td);taskRows.appendChild(tr);return;
+    }
+
+    for(const task of tasks){
+      const tr=document.createElement('tr');
+      appendTextCell(tr, formatTime(task.created_at));
+
+      const asinTd=appendTextCell(tr, task.asin || '—');
+      asinTd.style.fontWeight='700';
+
+      const statusTd=document.createElement('td');
+      const badge=document.createElement('span');
+      badge.className=`status ${statusClass(task.status)}`;
+      badge.textContent=task.status || '未知';
+      statusTd.appendChild(badge);tr.appendChild(statusTd);
+
+      const descTd=appendTextCell(tr, taskDescription(task), task.status==='失败'?'task-error':'task-muted');
+      descTd.title=taskDescription(task);
+
+      const actionTd=document.createElement('td');
+      actionTd.style.textAlign='right';
+      if(task.status==='已完成' && task.report_url){
+        const link=document.createElement('a');
+        link.className='btn btn-secondary btn-sm';
+        link.textContent='查看报告';
+        link.href=`../report/index.html?task=${encodeURIComponent(task.id)}`;
+        actionTd.appendChild(link);
+      }else{
+        const btn=document.createElement('button');
+        btn.className='btn btn-secondary btn-sm';
+        btn.disabled=true;
+        btn.textContent=task.status==='失败'?'处理失败':task.status==='进行中'?'处理中':'等待中';
+        actionTd.appendChild(btn);
+      }
+      tr.appendChild(actionTd);
+      taskRows.appendChild(tr);
+    }
+  }
+
+  async function refreshTasks(silent=false){
+    if(!silent){
+      refreshBtn.disabled=true;
+      refreshNote.textContent='刷新中…';
+    }
+    try{
+      const currentAuth = await KBAuth.getValidSession();
+      if(!currentAuth){ location.replace('../index.html'); return; }
+      const tasks = await KBTask.listTasks(currentAuth,20);
+      renderTasks(tasks);
+      refreshNote.textContent='刚刚更新';
+    }catch(error){
+      refreshNote.textContent='刷新失败';
+      if(!silent) KB.toast(KBTask.humanizeError(error));
+    }finally{
+      refreshBtn.disabled=false;
+    }
+  }
+
+  fileInput.addEventListener('change',()=>{
+    const f=fileInput.files?.[0];
+    fileName.textContent=f?.name || '选择 .xlsx 或 .csv 文件';
+    showMessage('');
+    if(!f) return;
+    try{ KBTask.validateFile(f); }
+    catch(error){ showMessage(error.message,'error'); }
+  });
+
+  asinInput.addEventListener('input',()=>{
+    asinInput.value=asinInput.value.toUpperCase().replace(/\s/g,'');
+    showMessage('');
+  });
+
+  taskForm.addEventListener('submit',async e=>{
+    e.preventDefault();
+    showMessage('');
+    const asin=asinInput.value.trim().toUpperCase();
+    const file=fileInput.files?.[0];
+
+    if(!KBTask.validateAsin(asin)){
+      showMessage('ASIN 格式不正确：请输入 10 位、B0 开头。','error');
+      asinInput.focus();
+      return;
+    }
+    try{ KBTask.validateFile(file); }
+    catch(error){ showMessage(error.message,'error'); return; }
+
+    KB.setButtonLoading(submitBtn,true,'提交中…');
+    try{
+      const currentAuth = await KBAuth.getValidSession();
+      if(!currentAuth){ location.replace('../index.html'); return; }
+      await KBTask.createTask(currentAuth,asin,file);
+      showMessage('提交成功：报表已上传，任务已进入待处理队列。','success');
+      KB.toast('任务提交成功');
+      taskForm.reset();
+      fileName.textContent='选择 .xlsx 或 .csv 文件';
+      await refreshTasks(true);
+    }catch(error){
+      showMessage(KBTask.humanizeError(error),'error');
+    }finally{
+      KB.setButtonLoading(submitBtn,false,'提交分析');
+    }
+  });
+
+  refreshBtn.addEventListener('click',()=>refreshTasks(false));
+  logoutBtn.addEventListener('click',async()=>{
+    await KBAuth.logout();
+    location.replace('../index.html');
+  });
+
+  await refreshTasks(false);
+  setInterval(()=>refreshTasks(true),30000);
+})();
+</script>
+</body>
+</html>
