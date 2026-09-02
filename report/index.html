@@ -364,6 +364,12 @@
         );
 
 
+      const adviceIndex =
+        headers.indexOf(
+          'AI解释'
+        );
+
+
       if(
         keywordIndex < 0 ||
         naturalRankIndex < 0 ||
@@ -550,6 +556,46 @@
           font-weight:600;
 
           white-space:nowrap;
+        }
+
+
+        #module-01 td.advice{
+          position:relative;
+          padding-bottom:26px !important;
+        }
+
+
+        #module-01 .m01-advice-toggle{
+          position:absolute;
+          right:8px;
+          bottom:5px;
+
+          border:0;
+          background:transparent;
+          color:#159d84;
+
+          padding:2px 4px;
+
+          font-size:10px;
+          font-weight:700;
+          line-height:1.2;
+
+          cursor:pointer;
+        }
+
+
+        #module-01 .m01-advice-toggle:hover{
+          text-decoration:underline;
+        }
+
+
+        #module-01 .advice-text.m01-advice-expanded{
+          display:block !important;
+          -webkit-line-clamp:unset !important;
+          line-clamp:unset !important;
+          overflow:visible !important;
+          max-height:none !important;
+          white-space:normal !important;
         }
 
 
@@ -791,6 +837,123 @@
           row.children[index]
             ?.textContent || ''
         ).trim();
+
+      }
+
+
+      /*
+      ========================================
+      Module 01 AI解释展开 / 收起
+      ========================================
+      */
+
+      if(adviceIndex >= 0){
+
+        rows.forEach(row => {
+
+          const cell =
+            row.children[
+              adviceIndex
+            ];
+
+
+          if(!cell){
+            return;
+          }
+
+
+          if(
+            cell.querySelector(
+              '.m01-advice-toggle'
+            )
+          ){
+            return;
+          }
+
+
+          const textEl =
+            cell.querySelector(
+              '.advice-text'
+            );
+
+
+          if(!textEl){
+            return;
+          }
+
+
+          const fullText =
+            String(
+              textEl.getAttribute(
+                'title'
+              ) ||
+              textEl.textContent ||
+              ''
+            ).trim();
+
+
+          if(!fullText){
+            return;
+          }
+
+
+          const button =
+            doc.createElement(
+              'button'
+            );
+
+
+          button.type =
+            'button';
+
+          button.className =
+            'm01-advice-toggle';
+
+          button.textContent =
+            '展开';
+
+          button.setAttribute(
+            'aria-expanded',
+            'false'
+          );
+
+
+          button.addEventListener(
+            'click',
+            event => {
+
+              event.preventDefault();
+              event.stopPropagation();
+
+
+              const expanded =
+                textEl.classList.toggle(
+                  'm01-advice-expanded'
+                );
+
+
+              button.textContent =
+                expanded
+                  ? '收起'
+                  : '展开';
+
+
+              button.setAttribute(
+                'aria-expanded',
+                expanded
+                  ? 'true'
+                  : 'false'
+              );
+
+            }
+          );
+
+
+          cell.appendChild(
+            button
+          );
+
+        });
 
       }
 
