@@ -333,6 +333,36 @@
           '结论'
         );
 
+      const searchVolumeIndex =
+        headers.indexOf(
+          '月搜索量'
+        );
+
+      const gapIndex =
+        headers.indexOf(
+          '差值'
+        );
+
+      const spendIndex =
+        headers.indexOf(
+          '花费'
+        );
+
+      const ordersIndex =
+        headers.indexOf(
+          '订单'
+        );
+
+      const salesIndex =
+        headers.indexOf(
+          '销售额'
+        );
+
+      const acosIndex =
+        headers.indexOf(
+          'ACOS'
+        );
+
 
       if(
         keywordIndex < 0 ||
@@ -651,6 +681,47 @@
         </select>
 
 
+        <select id="m01SortSelect">
+
+          <option value="default">
+            排序：默认
+          </option>
+
+          <option value="searchVolume">
+            搜索量最高
+          </option>
+
+          <option value="spend">
+            广告花费最高
+          </option>
+
+          <option value="orders">
+            广告订单最多
+          </option>
+
+          <option value="sales">
+            广告销售额最高
+          </option>
+
+          <option value="acos">
+            ACOS最高
+          </option>
+
+          <option value="rankBest">
+            自然位最好
+          </option>
+
+          <option value="rankWorst">
+            自然位最差
+          </option>
+
+          <option value="gap">
+            落后竞对最多
+          </option>
+
+        </select>
+
+
         <span id="m01FilterCount">
           显示 ${rows.length}/${rows.length}
         </span>
@@ -694,6 +765,11 @@
           'm01RankSelect'
         );
 
+      const sortSelect =
+        doc.getElementById(
+          'm01SortSelect'
+        );
+
       const count =
         doc.getElementById(
           'm01FilterCount'
@@ -721,11 +797,389 @@
 
       /*
       ========================================
+      Module 01 排序
+      ========================================
+      */
+
+      const originalOrder =
+        new Map(
+          rows.map(
+            (row, index) => [
+              row,
+              index
+            ]
+          )
+        );
+
+
+      function parseNumber(
+        text
+      ){
+
+        const cleaned =
+          String(
+            text || ''
+          )
+            .replace(/[$,%]/g, '')
+            .replace(/,/g, '')
+            .trim();
+
+
+        const match =
+          cleaned.match(
+            /-?\d+(?:\.\d+)?/
+          );
+
+
+        return match
+          ? Number(match[0])
+          : null;
+
+      }
+
+
+      function getNumber(
+        row,
+        index
+      ){
+
+        if(index < 0){
+          return null;
+        }
+
+
+        return parseNumber(
+          getCellText(
+            row,
+            index
+          )
+        );
+
+      }
+
+
+      function getGapValue(
+        row
+      ){
+
+        if(gapIndex < 0){
+          return null;
+        }
+
+
+        const text =
+          getCellText(
+            row,
+            gapIndex
+          );
+
+
+        const n =
+          parseNumber(text);
+
+
+        if(n === null){
+
+          if(
+            text.includes(
+              '持平'
+            )
+          ){
+            return 0;
+          }
+
+          return null;
+
+        }
+
+
+        if(
+          text.includes(
+            '落后'
+          )
+        ){
+          return Math.abs(n);
+        }
+
+
+        if(
+          text.includes(
+            '领先'
+          )
+        ){
+          return -Math.abs(n);
+        }
+
+
+        if(
+          text.includes(
+            '持平'
+          )
+        ){
+          return 0;
+        }
+
+
+        return n;
+
+      }
+
+
+      function sortTableRows(){
+
+        const mode =
+          sortSelect.value;
+
+
+        const sorted =
+          [...rows];
+
+
+        function desc(
+          getter
+        ){
+
+          sorted.sort(
+            (a, b) => {
+
+              const av =
+                getter(a);
+
+              const bv =
+                getter(b);
+
+
+              if(
+                av === null &&
+                bv === null
+              ){
+                return (
+                  originalOrder.get(a) -
+                  originalOrder.get(b)
+                );
+              }
+
+
+              if(av === null){
+                return 1;
+              }
+
+              if(bv === null){
+                return -1;
+              }
+
+
+              return (
+                bv - av ||
+                originalOrder.get(a) -
+                originalOrder.get(b)
+              );
+
+            }
+          );
+
+        }
+
+
+        function asc(
+          getter
+        ){
+
+          sorted.sort(
+            (a, b) => {
+
+              const av =
+                getter(a);
+
+              const bv =
+                getter(b);
+
+
+              if(
+                av === null &&
+                bv === null
+              ){
+                return (
+                  originalOrder.get(a) -
+                  originalOrder.get(b)
+                );
+              }
+
+
+              if(av === null){
+                return 1;
+              }
+
+              if(bv === null){
+                return -1;
+              }
+
+
+              return (
+                av - bv ||
+                originalOrder.get(a) -
+                originalOrder.get(b)
+              );
+
+            }
+          );
+
+        }
+
+
+        if(
+          mode === 'default'
+        ){
+
+          sorted.sort(
+            (a, b) =>
+              originalOrder.get(a) -
+              originalOrder.get(b)
+          );
+
+        }
+
+
+        if(
+          mode === 'searchVolume'
+        ){
+
+          desc(
+            row =>
+              getNumber(
+                row,
+                searchVolumeIndex
+              )
+          );
+
+        }
+
+
+        if(
+          mode === 'spend'
+        ){
+
+          desc(
+            row =>
+              getNumber(
+                row,
+                spendIndex
+              )
+          );
+
+        }
+
+
+        if(
+          mode === 'orders'
+        ){
+
+          desc(
+            row =>
+              getNumber(
+                row,
+                ordersIndex
+              )
+          );
+
+        }
+
+
+        if(
+          mode === 'sales'
+        ){
+
+          desc(
+            row =>
+              getNumber(
+                row,
+                salesIndex
+              )
+          );
+
+        }
+
+
+        if(
+          mode === 'acos'
+        ){
+
+          desc(
+            row =>
+              getNumber(
+                row,
+                acosIndex
+              )
+          );
+
+        }
+
+
+        if(
+          mode === 'rankBest'
+        ){
+
+          asc(
+            row =>
+              getNumber(
+                row,
+                naturalRankIndex
+              )
+          );
+
+        }
+
+
+        if(
+          mode === 'rankWorst'
+        ){
+
+          desc(
+            row =>
+              getNumber(
+                row,
+                naturalRankIndex
+              )
+          );
+
+        }
+
+
+        if(
+          mode === 'gap'
+        ){
+
+          desc(
+            row =>
+              getGapValue(row)
+          );
+
+        }
+
+
+        const tbody =
+          mainTable.querySelector(
+            'tbody'
+          );
+
+
+        sorted.forEach(
+          row =>
+            tbody.appendChild(row)
+        );
+
+      }
+
+
+      /*
+      ========================================
       核心筛选函数
       ========================================
       */
 
       function applyFilters(){
+
+        sortTableRows();
 
         /*
         搜索词
@@ -973,6 +1427,12 @@
 
 
       rankSelect.addEventListener(
+        'change',
+        applyFilters
+      );
+
+
+      sortSelect.addEventListener(
         'change',
         applyFilters
       );
