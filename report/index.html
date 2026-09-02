@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
+
   <title>报告｜关键词作战工具</title>
 
   <link rel="stylesheet" href="../assets/styles.css">
@@ -68,12 +69,16 @@
 
     <header class="topbar">
 
-      <a class="brand" href="../tool/index.html">
+      <a
+        class="brand"
+        href="../tool/index.html"
+      >
         <span class="brand-mark">K</span>
         <span>关键词作战工具</span>
       </a>
 
       <div class="top-actions">
+
         <span id="userEmail">—</span>
 
         <a
@@ -82,6 +87,7 @@
         >
           返回工具页
         </a>
+
       </div>
 
     </header>
@@ -92,6 +98,7 @@
       <div class="report-toolbar">
 
         <div>
+
           <h1 style="font-size:22px;margin:0 0 6px">
             关键词作战总表
           </h1>
@@ -102,6 +109,7 @@
           >
             正在读取任务…
           </div>
+
         </div>
 
         <button
@@ -118,11 +126,15 @@
         id="stateBox"
         class="report-state"
       >
-        <strong>正在加载真实报告</strong>
+
+        <strong>
+          正在加载真实报告
+        </strong>
 
         <div>
           正在验证任务归属，并获取私有 OSS 报告。
         </div>
+
       </div>
 
 
@@ -131,11 +143,13 @@
         class="report-frame-card"
         hidden
       >
+
         <iframe
           id="reportFrame"
           class="report-frame"
           sandbox="allow-same-origin"
         ></iframe>
+
       </section>
 
     </main>
@@ -155,7 +169,9 @@
 (async function(){
 
   const auth =
-    await KBAuth.requireAuth('../index.html');
+    await KBAuth.requireAuth(
+      '../index.html'
+    );
 
   if(!auth){
     return;
@@ -163,48 +179,49 @@
 
 
   const gate =
-    document.getElementById('reportGate');
+    document.getElementById(
+      'reportGate'
+    );
 
   const app =
-    document.getElementById('reportApp');
+    document.getElementById(
+      'reportApp'
+    );
 
   const stateBox =
-    document.getElementById('stateBox');
+    document.getElementById(
+      'stateBox'
+    );
 
   const frameCard =
-    document.getElementById('frameCard');
+    document.getElementById(
+      'frameCard'
+    );
 
   const reportFrame =
-    document.getElementById('reportFrame');
+    document.getElementById(
+      'reportFrame'
+    );
 
   const reportMeta =
-    document.getElementById('reportMeta');
+    document.getElementById(
+      'reportMeta'
+    );
 
   const refreshBtn =
-    document.getElementById('refreshBtn');
+    document.getElementById(
+      'refreshBtn'
+    );
 
   const userEmail =
-    document.getElementById('userEmail');
+    document.getElementById(
+      'userEmail'
+    );
 
 
   /*
   ==========================================
-  Module 01 外层筛选器
-  ==========================================
-
-  功能：
-
-  1. 搜索关键词
-  2. 广告筛选
-  3. 作战结论筛选
-  4. 自然位筛选
-
-  四个条件可以同时叠加。
-
-  报告本身仍然保持：
-  sandbox="allow-same-origin"
-
-  不开启 iframe 内部 script。
+  Module 01 搜索 + 筛选
   ==========================================
   */
 
@@ -221,7 +238,9 @@
 
 
       const module01 =
-        doc.getElementById('module-01');
+        doc.getElementById(
+          'module-01'
+        );
 
       if(!module01){
         return;
@@ -229,7 +248,7 @@
 
 
       /*
-      防止同一份报告重复安装
+      防止重复安装
       */
 
       if(
@@ -243,7 +262,115 @@
 
       /*
       ========================================
-      关闭报告内部原来的按钮式筛选
+      找到 Module 01 主表
+      ========================================
+      */
+
+      const tableWrap =
+        module01.querySelector(
+          '.table-wrap'
+        );
+
+      if(!tableWrap){
+        console.error(
+          'Module 01 筛选：找不到主表容器'
+        );
+
+        return;
+      }
+
+
+      const mainTable =
+        tableWrap.querySelector(
+          'table'
+        );
+
+      if(!mainTable){
+        console.error(
+          'Module 01 筛选：找不到主表'
+        );
+
+        return;
+      }
+
+
+      /*
+      ========================================
+      根据表头自动定位列
+      ========================================
+      */
+
+      const headers =
+        Array.from(
+          mainTable.querySelectorAll(
+            'thead th'
+          )
+        ).map(
+          th =>
+            String(
+              th.textContent || ''
+            ).trim()
+        );
+
+
+      const keywordIndex =
+        headers.indexOf(
+          '关键词'
+        );
+
+      const naturalRankIndex =
+        headers.indexOf(
+          '自然位'
+        );
+
+      const adStatusIndex =
+        headers.indexOf(
+          '广告状态'
+        );
+
+      const battleIndex =
+        headers.indexOf(
+          '结论'
+        );
+
+
+      if(
+        keywordIndex < 0 ||
+        naturalRankIndex < 0 ||
+        adStatusIndex < 0 ||
+        battleIndex < 0
+      ){
+
+        console.error(
+          'Module 01 筛选：没有找到所需表头',
+          headers
+        );
+
+        return;
+      }
+
+
+      /*
+      ========================================
+      获取实际关键词行
+      ========================================
+      */
+
+      const rows =
+        Array.from(
+          mainTable.querySelectorAll(
+            'tbody > tr'
+          )
+        ).filter(
+          row =>
+            row.children.length ===
+            headers.length
+        );
+
+
+      /*
+      ========================================
+      隐藏报告内部旧按钮筛选
       ========================================
       */
 
@@ -253,17 +380,20 @@
         );
 
       if(oldFilter){
-        oldFilter.style.display = 'none';
+        oldFilter.style.display =
+          'none';
       }
 
 
       /*
-      同时把内部旧筛选恢复到“全部”
-      避免旧 CSS 过滤条件和新筛选冲突
+      把旧筛选全部恢复到“全部”
+      避免旧 CSS 和新筛选冲突
       */
 
       const oldAdAll =
-        doc.getElementById('m01-ad-all');
+        doc.getElementById(
+          'm01-ad-all'
+        );
 
       const oldBattleAll =
         doc.getElementById(
@@ -274,6 +404,7 @@
         doc.getElementById(
           'm01-rank-all'
         );
+
 
       if(oldAdAll){
         oldAdAll.checked = true;
@@ -290,12 +421,14 @@
 
       /*
       ========================================
-      注入筛选栏 CSS
+      筛选栏样式
       ========================================
       */
 
       const style =
-        doc.createElement('style');
+        doc.createElement(
+          'style'
+        );
 
       style.id =
         'm01ParentFilterStyle';
@@ -338,6 +471,10 @@
           padding:0 10px;
 
           outline:none;
+
+          transition:
+            border-color .15s ease,
+            box-shadow .15s ease;
         }
 
 
@@ -380,6 +517,8 @@
           color:#7a8491;
 
           font-size:11px;
+          font-weight:600;
+
           white-space:nowrap;
         }
 
@@ -388,7 +527,6 @@
 
           #m01ParentFilterBar{
             overflow-x:auto;
-            align-items:center;
           }
 
           #m01ParentFilterBar input{
@@ -402,12 +540,15 @@
           #m01FilterCount{
             padding-right:6px;
           }
+
         }
 
       `;
 
 
-      doc.head.appendChild(style);
+      doc.head.appendChild(
+        style
+      );
 
 
       /*
@@ -417,7 +558,9 @@
       */
 
       const bar =
-        doc.createElement('div');
+        doc.createElement(
+          'div'
+        );
 
       bar.id =
         'm01ParentFilterBar';
@@ -439,11 +582,11 @@
             广告：全部
           </option>
 
-          <option value="m01-ad-on">
+          <option value="on">
             有投放
           </option>
 
-          <option value="m01-ad-off">
+          <option value="off">
             无投放
           </option>
 
@@ -456,27 +599,27 @@
             结论：全部
           </option>
 
-          <option value="m01-battle-protect">
+          <option value="守住">
             守住
           </option>
 
-          <option value="m01-battle-loss">
+          <option value="控损">
             控损
           </option>
 
-          <option value="m01-battle-scale">
+          <option value="放大">
             放大
           </option>
 
-          <option value="m01-battle-cautious">
+          <option value="谨慎硬投">
             谨慎硬投
           </option>
 
-          <option value="m01-battle-test">
+          <option value="小额测试">
             小额测试
           </option>
 
-          <option value="m01-battle-observe">
+          <option value="继续观察">
             继续观察
           </option>
 
@@ -489,19 +632,19 @@
             自然位：全部
           </option>
 
-          <option value="m01-rank-top10">
+          <option value="top10">
             Top10
           </option>
 
-          <option value="m01-rank-mid">
+          <option value="mid">
             11–30
           </option>
 
-          <option value="m01-rank-poor">
+          <option value="poor">
             30+
           </option>
 
-          <option value="m01-rank-none">
+          <option value="none">
             未上榜
           </option>
 
@@ -509,26 +652,15 @@
 
 
         <span id="m01FilterCount">
+          显示 ${rows.length}/${rows.length}
         </span>
 
       `;
 
 
       /*
-      ========================================
-      把筛选栏插到关键词表上方
-      ========================================
+      放在主表正上方
       */
-
-      const tableWrap =
-        module01.querySelector(
-          '.table-wrap'
-        );
-
-      if(!tableWrap){
-        return;
-      }
-
 
       module01.insertBefore(
         bar,
@@ -538,7 +670,7 @@
 
       /*
       ========================================
-      获取筛选控件
+      获取控件
       ========================================
       */
 
@@ -569,15 +701,22 @@
 
 
       /*
-      获取所有关键词行
+      ========================================
+      工具函数
+      ========================================
       */
 
-      const rows =
-        Array.from(
-          module01.querySelectorAll(
-            '.m01-keyword-row'
-          )
-        );
+      function getCellText(
+        row,
+        index
+      ){
+
+        return String(
+          row.children[index]
+            ?.textContent || ''
+        ).trim();
+
+      }
 
 
       /*
@@ -589,7 +728,7 @@
       function applyFilters(){
 
         /*
-        关键词
+        搜索词
         */
 
         const keyword =
@@ -601,8 +740,18 @@
 
 
         /*
-        当前显示数量
+        当前筛选条件
         */
+
+        const adValue =
+          adSelect.value;
+
+        const battleValue =
+          battleSelect.value;
+
+        const rankValue =
+          rankSelect.value;
+
 
         let visible = 0;
 
@@ -610,67 +759,163 @@
         rows.forEach(row => {
 
           /*
-          第一列就是关键词
+          ====================================
+          关键词
+          ====================================
           */
-
-          const firstCell =
-            row.querySelector('td');
-
 
           const rowKeyword =
-            String(
-              firstCell?.textContent || ''
-            )
-              .trim()
-              .toLowerCase();
+            getCellText(
+              row,
+              keywordIndex
+            ).toLowerCase();
 
-
-          /*
-          关键词匹配
-          */
 
           const keywordOk =
-            !keyword ||
+            keyword === '' ||
             rowKeyword.includes(
               keyword
             );
 
 
           /*
-          广告匹配
+          ====================================
+          广告状态
+          ====================================
           */
 
-          const adOk =
-            adSelect.value === 'all' ||
-            row.classList.contains(
-              adSelect.value
+          const adText =
+            getCellText(
+              row,
+              adStatusIndex
             );
 
 
+          let adOk = true;
+
+
+          if(adValue === 'on'){
+
+            adOk =
+              adText.includes(
+                '有投放'
+              );
+
+          }
+
+
+          if(adValue === 'off'){
+
+            adOk =
+              adText.includes(
+                '无投放'
+              ) ||
+              !adText.includes(
+                '有投放'
+              );
+
+          }
+
+
           /*
-          结论匹配
+          ====================================
+          作战结论
+          ====================================
           */
+
+          const battleText =
+            getCellText(
+              row,
+              battleIndex
+            );
+
 
           const battleOk =
-            battleSelect.value === 'all' ||
-            row.classList.contains(
-              battleSelect.value
+            battleValue === 'all' ||
+            battleText.includes(
+              battleValue
             );
 
 
           /*
-          自然位匹配
+          ====================================
+          自然位
+          ====================================
           */
 
-          const rankOk =
-            rankSelect.value === 'all' ||
-            row.classList.contains(
-              rankSelect.value
+          const rankText =
+            getCellText(
+              row,
+              naturalRankIndex
             );
 
 
           /*
+          页面自然位可能是：
+          1
+          23
+          无
+          —
+          */
+
+          const rankMatch =
+            rankText.match(
+              /^\s*(\d+)/
+            );
+
+
+          const rank =
+            rankMatch
+              ? Number(
+                  rankMatch[1]
+                )
+              : null;
+
+
+          let rankOk = true;
+
+
+          if(rankValue === 'top10'){
+
+            rankOk =
+              rank !== null &&
+              rank >= 1 &&
+              rank <= 10;
+
+          }
+
+
+          if(rankValue === 'mid'){
+
+            rankOk =
+              rank !== null &&
+              rank >= 11 &&
+              rank <= 30;
+
+          }
+
+
+          if(rankValue === 'poor'){
+
+            rankOk =
+              rank !== null &&
+              rank > 30;
+
+          }
+
+
+          if(rankValue === 'none'){
+
+            rankOk =
+              rank === null;
+
+          }
+
+
+          /*
+          ====================================
           四个条件同时满足
+          ====================================
           */
 
           const show =
@@ -681,7 +926,9 @@
 
 
           row.style.display =
-            show ? '' : 'none';
+            show
+              ? ''
+              : 'none';
 
 
           if(show){
@@ -692,7 +939,7 @@
 
 
         /*
-        更新数量
+        更新显示数量
         */
 
         count.textContent =
@@ -703,7 +950,7 @@
 
       /*
       ========================================
-      监听搜索输入
+      绑定事件
       ========================================
       */
 
@@ -713,35 +960,17 @@
       );
 
 
-      /*
-      ========================================
-      监听广告筛选
-      ========================================
-      */
-
       adSelect.addEventListener(
         'change',
         applyFilters
       );
 
 
-      /*
-      ========================================
-      监听结论筛选
-      ========================================
-      */
-
       battleSelect.addEventListener(
         'change',
         applyFilters
       );
 
-
-      /*
-      ========================================
-      监听自然位筛选
-      ========================================
-      */
 
       rankSelect.addEventListener(
         'change',
@@ -750,7 +979,7 @@
 
 
       /*
-      第一次初始化
+      初始化
       */
 
       applyFilters();
@@ -759,7 +988,7 @@
     }catch(error){
 
       console.error(
-        '安装 Module 01 筛选失败:',
+        '安装 Module 01 筛选失败：',
         error
       );
 
@@ -769,8 +998,9 @@
 
 
   /*
-  每次 iframe 加载新报告后
-  都重新安装 Module 01 筛选
+  ==========================================
+  iframe 每次载入报告后安装筛选
+  ==========================================
   */
 
   reportFrame.addEventListener(
@@ -781,7 +1011,7 @@
 
   /*
   ==========================================
-  原有页面逻辑
+  原页面逻辑
   ==========================================
   */
 
@@ -818,6 +1048,7 @@
 
     stateBox.hidden = false;
 
+
     stateBox.className =
       `report-state${
         isError
@@ -833,6 +1064,12 @@
 
   }
 
+
+  /*
+  ==========================================
+  加载报告
+  ==========================================
+  */
 
   async function loadReport(){
 
@@ -904,15 +1141,19 @@
 
 
       /*
-      把 OSS HTML 放入 iframe
+      OSS 报告写入 iframe
       */
 
-      reportFrame.srcdoc = html;
+      reportFrame.srcdoc =
+        html;
 
 
-      stateBox.hidden = true;
+      stateBox.hidden =
+        true;
 
-      frameCard.hidden = false;
+
+      frameCard.hidden =
+        false;
 
 
     }catch(error){
@@ -924,27 +1165,32 @@
 
 
       const corsHint =
-        error?.code === 'OSS_CORS'
+        error?.code ===
+        'OSS_CORS'
 
           ? `
             <div class="report-actions">
+
               <a
                 class="btn btn-secondary btn-sm"
                 href="../tool/index.html"
               >
                 返回工具页
               </a>
+
             </div>
           `
 
           : `
             <div class="report-actions">
+
               <button
                 class="btn btn-secondary btn-sm"
                 id="retryBtn"
               >
                 重试
               </button>
+
             </div>
           `;
 
@@ -969,7 +1215,8 @@
 
     }finally{
 
-      refreshBtn.disabled = false;
+      refreshBtn.disabled =
+        false;
 
     }
 
@@ -995,7 +1242,6 @@
 
 })();
 </script>
-
 
 </body>
 </html>
