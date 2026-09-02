@@ -4,115 +4,998 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>报告｜关键词作战工具</title>
+
   <link rel="stylesheet" href="../assets/styles.css">
+
   <style>
-    .report-state{background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:42px 28px;text-align:center;color:var(--muted)}
-    .report-state strong{display:block;color:var(--text);font-size:16px;margin-bottom:8px}
-    .report-state.error strong{color:var(--red)}
-    .report-actions{display:flex;justify-content:center;gap:10px;margin-top:18px;flex-wrap:wrap}
-    .report-frame{width:100%;height:calc(100vh - 150px);min-height:620px;border:0;background:#fff;display:block}
-    .report-frame-card{overflow:hidden;background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+    .report-state{
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      padding:42px 28px;
+      text-align:center;
+      color:var(--muted);
+    }
+
+    .report-state strong{
+      display:block;
+      color:var(--text);
+      font-size:16px;
+      margin-bottom:8px;
+    }
+
+    .report-state.error strong{
+      color:var(--red);
+    }
+
+    .report-actions{
+      display:flex;
+      justify-content:center;
+      gap:10px;
+      margin-top:18px;
+      flex-wrap:wrap;
+    }
+
+    .report-frame{
+      width:100%;
+      height:calc(100vh - 150px);
+      min-height:620px;
+      border:0;
+      background:#fff;
+      display:block;
+    }
+
+    .report-frame-card{
+      overflow:hidden;
+      background:#fff;
+      border:1px solid var(--line);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+    }
   </style>
 </head>
+
 <body>
-<div id="reportGate" class="auth-loading">正在验证登录状态…</div>
+
+<div id="reportGate" class="auth-loading">
+  正在验证登录状态…
+</div>
+
 <div id="reportApp" hidden>
+
   <div class="shell">
+
     <header class="topbar">
-      <a class="brand" href="../tool/index.html"><span class="brand-mark">K</span><span>关键词作战工具</span></a>
-      <div class="top-actions"><span id="userEmail">—</span><a class="btn btn-secondary btn-sm" href="../tool/index.html">返回工具页</a></div>
+
+      <a class="brand" href="../tool/index.html">
+        <span class="brand-mark">K</span>
+        <span>关键词作战工具</span>
+      </a>
+
+      <div class="top-actions">
+        <span id="userEmail">—</span>
+
+        <a
+          class="btn btn-secondary btn-sm"
+          href="../tool/index.html"
+        >
+          返回工具页
+        </a>
+      </div>
+
     </header>
 
+
     <main class="report-wrap">
+
       <div class="report-toolbar">
+
         <div>
-          <h1 style="font-size:22px;margin:0 0 6px">关键词作战总表</h1>
-          <div class="report-meta" id="reportMeta">正在读取任务…</div>
+          <h1 style="font-size:22px;margin:0 0 6px">
+            关键词作战总表
+          </h1>
+
+          <div
+            class="report-meta"
+            id="reportMeta"
+          >
+            正在读取任务…
+          </div>
         </div>
-        <button class="btn btn-secondary btn-sm" id="refreshBtn">刷新报告</button>
+
+        <button
+          class="btn btn-secondary btn-sm"
+          id="refreshBtn"
+        >
+          刷新报告
+        </button>
+
       </div>
 
-      <div id="stateBox" class="report-state">
+
+      <div
+        id="stateBox"
+        class="report-state"
+      >
         <strong>正在加载真实报告</strong>
-        <div>正在验证任务归属，并获取私有 OSS 报告。</div>
+
+        <div>
+          正在验证任务归属，并获取私有 OSS 报告。
+        </div>
       </div>
 
-      <section id="frameCard" class="report-frame-card" hidden>
-        <iframe id="reportFrame" class="report-frame" sandbox="allow-same-origin"></iframe>
+
+      <section
+        id="frameCard"
+        class="report-frame-card"
+        hidden
+      >
+        <iframe
+          id="reportFrame"
+          class="report-frame"
+          sandbox="allow-same-origin"
+        ></iframe>
       </section>
+
     </main>
+
   </div>
+
 </div>
+
 
 <script src="../assets/config.js"></script>
 <script src="../assets/auth-client.js"></script>
 <script src="../assets/app.js"></script>
 <script src="../assets/report-client.js"></script>
+
+
 <script>
 (async function(){
-  const auth = await KBAuth.requireAuth('../index.html');
-  if(!auth) return;
 
-  const gate = document.getElementById('reportGate');
-  const app = document.getElementById('reportApp');
-  const stateBox = document.getElementById('stateBox');
-  const frameCard = document.getElementById('frameCard');
-  const reportFrame = document.getElementById('reportFrame');
-  const reportMeta = document.getElementById('reportMeta');
-  const refreshBtn = document.getElementById('refreshBtn');
-  const userEmail = document.getElementById('userEmail');
+  const auth =
+    await KBAuth.requireAuth('../index.html');
 
-  userEmail.textContent = auth.user?.email || '已登录用户';
-  gate.remove();
-  app.hidden = false;
-
-  const params = new URLSearchParams(location.search);
-  const taskId = String(params.get('task') || '').trim();
-
-  function showState(title, text, isError=false, extraHtml=''){
-    frameCard.hidden = true;
-    stateBox.hidden = false;
-    stateBox.className = `report-state${isError ? ' error' : ''}`;
-    stateBox.innerHTML = `<strong>${title}</strong><div>${text}</div>${extraHtml}`;
+  if(!auth){
+    return;
   }
 
+
+  const gate =
+    document.getElementById('reportGate');
+
+  const app =
+    document.getElementById('reportApp');
+
+  const stateBox =
+    document.getElementById('stateBox');
+
+  const frameCard =
+    document.getElementById('frameCard');
+
+  const reportFrame =
+    document.getElementById('reportFrame');
+
+  const reportMeta =
+    document.getElementById('reportMeta');
+
+  const refreshBtn =
+    document.getElementById('refreshBtn');
+
+  const userEmail =
+    document.getElementById('userEmail');
+
+
+  /*
+  ==========================================
+  Module 01 外层筛选器
+  ==========================================
+
+  功能：
+
+  1. 搜索关键词
+  2. 广告筛选
+  3. 作战结论筛选
+  4. 自然位筛选
+
+  四个条件可以同时叠加。
+
+  报告本身仍然保持：
+  sandbox="allow-same-origin"
+
+  不开启 iframe 内部 script。
+  ==========================================
+  */
+
+  function installModule01Filters(){
+
+    try{
+
+      const doc =
+        reportFrame.contentDocument;
+
+      if(!doc){
+        return;
+      }
+
+
+      const module01 =
+        doc.getElementById('module-01');
+
+      if(!module01){
+        return;
+      }
+
+
+      /*
+      防止同一份报告重复安装
+      */
+
+      if(
+        doc.getElementById(
+          'm01ParentFilterBar'
+        )
+      ){
+        return;
+      }
+
+
+      /*
+      ========================================
+      关闭报告内部原来的按钮式筛选
+      ========================================
+      */
+
+      const oldFilter =
+        module01.querySelector(
+          '.module01-filter-wrap'
+        );
+
+      if(oldFilter){
+        oldFilter.style.display = 'none';
+      }
+
+
+      /*
+      同时把内部旧筛选恢复到“全部”
+      避免旧 CSS 过滤条件和新筛选冲突
+      */
+
+      const oldAdAll =
+        doc.getElementById('m01-ad-all');
+
+      const oldBattleAll =
+        doc.getElementById(
+          'm01-battle-all'
+        );
+
+      const oldRankAll =
+        doc.getElementById(
+          'm01-rank-all'
+        );
+
+      if(oldAdAll){
+        oldAdAll.checked = true;
+      }
+
+      if(oldBattleAll){
+        oldBattleAll.checked = true;
+      }
+
+      if(oldRankAll){
+        oldRankAll.checked = true;
+      }
+
+
+      /*
+      ========================================
+      注入筛选栏 CSS
+      ========================================
+      */
+
+      const style =
+        doc.createElement('style');
+
+      style.id =
+        'm01ParentFilterStyle';
+
+
+      style.textContent = `
+
+        #m01ParentFilterBar{
+          display:flex;
+          align-items:center;
+          gap:8px;
+
+          width:100%;
+          box-sizing:border-box;
+
+          margin:0 0 10px;
+          padding:8px;
+
+          background:#fff;
+
+          border:1px solid #e1e5e8;
+          border-radius:8px;
+        }
+
+
+        #m01ParentFilterBar input,
+        #m01ParentFilterBar select{
+          height:34px;
+
+          box-sizing:border-box;
+
+          border:1px solid #dce2e6;
+          border-radius:7px;
+
+          background:#fff;
+          color:#394550;
+
+          font-size:12px;
+
+          padding:0 10px;
+
+          outline:none;
+        }
+
+
+        #m01ParentFilterBar input{
+          width:220px;
+          min-width:180px;
+        }
+
+
+        #m01ParentFilterBar select{
+          min-width:125px;
+          cursor:pointer;
+        }
+
+
+        #m01ParentFilterBar input:hover,
+        #m01ParentFilterBar select:hover{
+          border-color:#b9c5ca;
+        }
+
+
+        #m01ParentFilterBar input:focus,
+        #m01ParentFilterBar select:focus{
+          border-color:#159d84;
+
+          box-shadow:
+            0 0 0 2px
+            rgba(21,157,132,.10);
+        }
+
+
+        #m01KeywordSearch::placeholder{
+          color:#9aa3aa;
+        }
+
+
+        #m01FilterCount{
+          margin-left:auto;
+
+          color:#7a8491;
+
+          font-size:11px;
+          white-space:nowrap;
+        }
+
+
+        @media(max-width:900px){
+
+          #m01ParentFilterBar{
+            overflow-x:auto;
+            align-items:center;
+          }
+
+          #m01ParentFilterBar input{
+            min-width:190px;
+          }
+
+          #m01ParentFilterBar select{
+            min-width:125px;
+          }
+
+          #m01FilterCount{
+            padding-right:6px;
+          }
+        }
+
+      `;
+
+
+      doc.head.appendChild(style);
+
+
+      /*
+      ========================================
+      创建筛选栏
+      ========================================
+      */
+
+      const bar =
+        doc.createElement('div');
+
+      bar.id =
+        'm01ParentFilterBar';
+
+
+      bar.innerHTML = `
+
+        <input
+          id="m01KeywordSearch"
+          type="search"
+          placeholder="搜索关键词……"
+          autocomplete="off"
+        >
+
+
+        <select id="m01AdSelect">
+
+          <option value="all">
+            广告：全部
+          </option>
+
+          <option value="m01-ad-on">
+            有投放
+          </option>
+
+          <option value="m01-ad-off">
+            无投放
+          </option>
+
+        </select>
+
+
+        <select id="m01BattleSelect">
+
+          <option value="all">
+            结论：全部
+          </option>
+
+          <option value="m01-battle-protect">
+            守住
+          </option>
+
+          <option value="m01-battle-loss">
+            控损
+          </option>
+
+          <option value="m01-battle-scale">
+            放大
+          </option>
+
+          <option value="m01-battle-cautious">
+            谨慎硬投
+          </option>
+
+          <option value="m01-battle-test">
+            小额测试
+          </option>
+
+          <option value="m01-battle-observe">
+            继续观察
+          </option>
+
+        </select>
+
+
+        <select id="m01RankSelect">
+
+          <option value="all">
+            自然位：全部
+          </option>
+
+          <option value="m01-rank-top10">
+            Top10
+          </option>
+
+          <option value="m01-rank-mid">
+            11–30
+          </option>
+
+          <option value="m01-rank-poor">
+            30+
+          </option>
+
+          <option value="m01-rank-none">
+            未上榜
+          </option>
+
+        </select>
+
+
+        <span id="m01FilterCount">
+        </span>
+
+      `;
+
+
+      /*
+      ========================================
+      把筛选栏插到关键词表上方
+      ========================================
+      */
+
+      const tableWrap =
+        module01.querySelector(
+          '.table-wrap'
+        );
+
+      if(!tableWrap){
+        return;
+      }
+
+
+      module01.insertBefore(
+        bar,
+        tableWrap
+      );
+
+
+      /*
+      ========================================
+      获取筛选控件
+      ========================================
+      */
+
+      const search =
+        doc.getElementById(
+          'm01KeywordSearch'
+        );
+
+      const adSelect =
+        doc.getElementById(
+          'm01AdSelect'
+        );
+
+      const battleSelect =
+        doc.getElementById(
+          'm01BattleSelect'
+        );
+
+      const rankSelect =
+        doc.getElementById(
+          'm01RankSelect'
+        );
+
+      const count =
+        doc.getElementById(
+          'm01FilterCount'
+        );
+
+
+      /*
+      获取所有关键词行
+      */
+
+      const rows =
+        Array.from(
+          module01.querySelectorAll(
+            '.m01-keyword-row'
+          )
+        );
+
+
+      /*
+      ========================================
+      核心筛选函数
+      ========================================
+      */
+
+      function applyFilters(){
+
+        /*
+        关键词
+        */
+
+        const keyword =
+          String(
+            search.value || ''
+          )
+            .trim()
+            .toLowerCase();
+
+
+        /*
+        当前显示数量
+        */
+
+        let visible = 0;
+
+
+        rows.forEach(row => {
+
+          /*
+          第一列就是关键词
+          */
+
+          const firstCell =
+            row.querySelector('td');
+
+
+          const rowKeyword =
+            String(
+              firstCell?.textContent || ''
+            )
+              .trim()
+              .toLowerCase();
+
+
+          /*
+          关键词匹配
+          */
+
+          const keywordOk =
+            !keyword ||
+            rowKeyword.includes(
+              keyword
+            );
+
+
+          /*
+          广告匹配
+          */
+
+          const adOk =
+            adSelect.value === 'all' ||
+            row.classList.contains(
+              adSelect.value
+            );
+
+
+          /*
+          结论匹配
+          */
+
+          const battleOk =
+            battleSelect.value === 'all' ||
+            row.classList.contains(
+              battleSelect.value
+            );
+
+
+          /*
+          自然位匹配
+          */
+
+          const rankOk =
+            rankSelect.value === 'all' ||
+            row.classList.contains(
+              rankSelect.value
+            );
+
+
+          /*
+          四个条件同时满足
+          */
+
+          const show =
+            keywordOk &&
+            adOk &&
+            battleOk &&
+            rankOk;
+
+
+          row.style.display =
+            show ? '' : 'none';
+
+
+          if(show){
+            visible += 1;
+          }
+
+        });
+
+
+        /*
+        更新数量
+        */
+
+        count.textContent =
+          `显示 ${visible}/${rows.length}`;
+
+      }
+
+
+      /*
+      ========================================
+      监听搜索输入
+      ========================================
+      */
+
+      search.addEventListener(
+        'input',
+        applyFilters
+      );
+
+
+      /*
+      ========================================
+      监听广告筛选
+      ========================================
+      */
+
+      adSelect.addEventListener(
+        'change',
+        applyFilters
+      );
+
+
+      /*
+      ========================================
+      监听结论筛选
+      ========================================
+      */
+
+      battleSelect.addEventListener(
+        'change',
+        applyFilters
+      );
+
+
+      /*
+      ========================================
+      监听自然位筛选
+      ========================================
+      */
+
+      rankSelect.addEventListener(
+        'change',
+        applyFilters
+      );
+
+
+      /*
+      第一次初始化
+      */
+
+      applyFilters();
+
+
+    }catch(error){
+
+      console.error(
+        '安装 Module 01 筛选失败:',
+        error
+      );
+
+    }
+
+  }
+
+
+  /*
+  每次 iframe 加载新报告后
+  都重新安装 Module 01 筛选
+  */
+
+  reportFrame.addEventListener(
+    'load',
+    installModule01Filters
+  );
+
+
+  /*
+  ==========================================
+  原有页面逻辑
+  ==========================================
+  */
+
+  userEmail.textContent =
+    auth.user?.email ||
+    '已登录用户';
+
+
+  gate.remove();
+
+  app.hidden = false;
+
+
+  const params =
+    new URLSearchParams(
+      location.search
+    );
+
+
+  const taskId =
+    String(
+      params.get('task') || ''
+    ).trim();
+
+
+  function showState(
+    title,
+    text,
+    isError=false,
+    extraHtml=''
+  ){
+
+    frameCard.hidden = true;
+
+    stateBox.hidden = false;
+
+    stateBox.className =
+      `report-state${
+        isError
+          ? ' error'
+          : ''
+      }`;
+
+
+    stateBox.innerHTML =
+      `<strong>${title}</strong>
+       <div>${text}</div>
+       ${extraHtml}`;
+
+  }
+
+
   async function loadReport(){
+
     if(!taskId){
-      showState('缺少任务号','请从“我的任务”里的“查看报告”按钮进入。',true);
-      reportMeta.textContent = '任务号缺失';
+
+      showState(
+        '缺少任务号',
+        '请从“我的任务”里的“查看报告”按钮进入。',
+        true
+      );
+
+
+      reportMeta.textContent =
+        '任务号缺失';
+
+
       return;
     }
 
+
     refreshBtn.disabled = true;
-    showState('正在加载真实报告','正在验证任务归属，并获取私有 OSS 报告。');
-    reportMeta.textContent = `任务：${taskId}`;
+
+
+    showState(
+      '正在加载真实报告',
+      '正在验证任务归属，并获取私有 OSS 报告。'
+    );
+
+
+    reportMeta.textContent =
+      `任务：${taskId}`;
+
 
     try{
-      const currentAuth = await KBAuth.getValidSession();
-      if(!currentAuth){ location.replace('../index.html'); return; }
 
-      const result = await KBReport.getSignedReportUrl(currentAuth, taskId);
-      reportMeta.textContent = `ASIN：${result.asin || '—'}　|　任务：${taskId}　|　真实 OSS 报告`;
+      const currentAuth =
+        await KBAuth.getValidSession();
 
-      const html = await KBReport.fetchReportHtml(result.url);
+
+      if(!currentAuth){
+
+        location.replace(
+          '../index.html'
+        );
+
+        return;
+      }
+
+
+      const result =
+        await KBReport.getSignedReportUrl(
+          currentAuth,
+          taskId
+        );
+
+
+      reportMeta.textContent =
+        `ASIN：${
+          result.asin || '—'
+        }　|　任务：${
+          taskId
+        }　|　真实 OSS 报告`;
+
+
+      const html =
+        await KBReport.fetchReportHtml(
+          result.url
+        );
+
+
+      /*
+      把 OSS HTML 放入 iframe
+      */
+
       reportFrame.srcdoc = html;
+
+
       stateBox.hidden = true;
+
       frameCard.hidden = false;
+
+
     }catch(error){
-      const text = KBReport.humanizeError(error);
-      const corsHint = error?.code === 'OSS_CORS'
-        ? '<div class="report-actions"><a class="btn btn-secondary btn-sm" href="../tool/index.html">返回工具页</a></div>'
-        : '<div class="report-actions"><button class="btn btn-secondary btn-sm" id="retryBtn">重试</button></div>';
-      showState('报告加载失败', text, true, corsHint);
-      document.getElementById('retryBtn')?.addEventListener('click', loadReport);
+
+      const text =
+        KBReport.humanizeError(
+          error
+        );
+
+
+      const corsHint =
+        error?.code === 'OSS_CORS'
+
+          ? `
+            <div class="report-actions">
+              <a
+                class="btn btn-secondary btn-sm"
+                href="../tool/index.html"
+              >
+                返回工具页
+              </a>
+            </div>
+          `
+
+          : `
+            <div class="report-actions">
+              <button
+                class="btn btn-secondary btn-sm"
+                id="retryBtn"
+              >
+                重试
+              </button>
+            </div>
+          `;
+
+
+      showState(
+        '报告加载失败',
+        text,
+        true,
+        corsHint
+      );
+
+
+      document
+        .getElementById(
+          'retryBtn'
+        )
+        ?.addEventListener(
+          'click',
+          loadReport
+        );
+
+
     }finally{
+
       refreshBtn.disabled = false;
+
     }
+
   }
 
-  refreshBtn.addEventListener('click', loadReport);
+
+  /*
+  刷新报告
+  */
+
+  refreshBtn.addEventListener(
+    'click',
+    loadReport
+  );
+
+
+  /*
+  初始加载
+  */
+
   await loadReport();
+
+
 })();
 </script>
+
+
 </body>
 </html>
