@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Amazon 销量观察｜关键词作战工具</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+  <link rel="stylesheet" href="../assets/sales.css">
+</head>
+<body>
+<div class="shell" id="appShell" hidden>
+  <header class="topbar">
+    <a class="brand" href="../tool/index.html"><span class="brand-mark">K</span><span>关键词作战工具</span></a>
+    <div class="top-actions">
+      <a class="btn btn-secondary btn-sm" href="../tool/index.html">关键词任务</a>
+      <span class="desktop-only" id="userEmail">—</span>
+      <button class="btn btn-ghost btn-sm" id="logoutBtn">退出</button>
+    </div>
+  </header>
+
+  <main class="main sales-main">
+    <div class="page-title sales-title">
+      <div>
+        <span class="sales-eyebrow">AMAZON · US MARKET</span>
+        <h1>销量观察</h1>
+        <p>近 15 天订单与已识别商品的汇总。数据来自最近一次发布的数据库快照。</p>
+        <p class="sales-period" id="periodText">统计日期：—</p>
+      </div>
+      <div class="sales-actions">
+        <span class="sales-updated" id="snapshotTime">数据发布时间：—</span>
+        <button class="btn btn-secondary btn-sm" id="refreshBtn">刷新</button>
+      </div>
+    </div>
+
+    <div class="sales-banner warn" id="notice" role="status" aria-live="polite">正在加载销量数据…</div>
+
+    <section class="sales-kpis" aria-label="近 15 天概况">
+      <article class="card sales-kpi"><div class="sales-kpi-label">订单记录</div><div class="sales-kpi-value" id="totalOrders">—</div><div class="sales-kpi-note">近 15 天录入数据库的订单，含不同状态</div></article>
+      <article class="card sales-kpi"><div class="sales-kpi-label">已识别商品件数</div><div class="sales-kpi-value" id="unitsSold">—</div><div class="sales-kpi-note">取自现有 sales_daily 汇总</div></article>
+      <article class="card sales-kpi"><div class="sales-kpi-label">商品识别覆盖率</div><div class="sales-kpi-value" id="coverageRate">—</div><div class="sales-kpi-note">已标记成功且有 ASIN / 近 15 天订单</div></article>
+      <article class="card sales-kpi"><div class="sales-kpi-label">待补全订单</div><div class="sales-kpi-value" id="pendingOrders">—</div><div class="sales-kpi-note">近 15 天商品仍未识别的订单</div></article>
+    </section>
+
+    <div class="sales-grid">
+      <section class="card">
+        <div class="card-head"><h2>近 15 天已识别商品件数</h2><p>按数据库的 sale_date 汇总；柱状图不代表全店完整销量。</p></div>
+        <div class="sales-chart-body"><div class="sales-chart-scroll"><div class="sales-bars" id="trendBars" role="img" aria-label="近 15 天已识别商品件数趋势"></div></div></div>
+        <div class="sales-chart-foot" id="trendFoot">—</div>
+      </section>
+      <section class="card">
+        <div class="card-head"><h2>同步与补全</h2><p>了解数据何时更新、还有多少订单未识别。</p></div>
+        <div class="sales-health">
+          <div class="sales-health-row"><span>最近成功的同步日志</span><strong id="lastSync">—</strong></div>
+          <div class="sales-health-row"><span>近 15 天已识别订单</span><strong id="identifiedOrders">—</strong></div>
+          <div class="sales-progress" aria-hidden="true"><span id="coverageFill" style="width:0%"></span></div>
+          <div class="sales-health-row"><span>历史待补全总数</span><strong id="allPending">—</strong></div>
+          <div class="sales-health-row"><span>历史补全失败总数</span><strong id="allFailed">—</strong></div>
+          <p class="sales-footnote">同步完成时间和页面发布时间分别显示；页面只读取汇总快照，不读取买家信息。</p>
+        </div>
+      </section>
+    </div>
+
+    <section class="card table-card">
+      <div class="card-head"><h2>ASIN 已识别销量排行</h2><p>近 15 天，按已识别件数排序；仅展示已有商品明细的订单。</p></div>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>排名</th><th>ASIN</th><th>SKU</th><th>商品标题</th><th style="text-align:right">件数</th><th style="text-align:right">订单数</th></tr></thead>
+          <tbody id="rankingRows"><tr><td class="empty" colspan="6">正在加载…</td></tr></tbody>
+        </table>
+      </div>
+      <div class="sales-note">当前订单表以 order_id 唯一存储，若一笔订单包含多个商品，部分商品可能未被完整记录；排行只代表已识别记录。</div>
+    </section>
+
+    <section class="card table-card sales-detail-card" aria-labelledby="dailyHeading">
+      <div class="card-head sales-detail-head">
+        <div><h2 id="dailyHeading">每日 ASIN 销售明细</h2><p>近 15 天，按日期和 ASIN 汇总；同一 ASIN 的多个 SKU 合并显示。</p></div>
+        <div class="sales-detail-filters">
+          <label for="dailyDateFilter">日期
+            <select id="dailyDateFilter"><option value="">全部日期</option></select>
+          </label>
+          <label for="dailyAsinFilter">ASIN
+            <input id="dailyAsinFilter" type="search" placeholder="搜索 ASIN" autocomplete="off">
+          </label>
+        </div>
+      </div>
+      <div class="sales-detail-summary" id="dailyCount">正在加载明细…</div>
+      <div class="table-scroll">
+        <table class="sales-detail-table">
+          <thead><tr><th>日期</th><th>ASIN</th><th class="sales-number">销量（件）</th><th class="sales-number">销售额</th><th class="sales-number">订单量</th></tr></thead>
+          <tbody id="dailyRows"><tr><td class="empty" colspan="5">正在加载…</td></tr></tbody>
+        </table>
+      </div>
+      <div class="sales-detail-pager">
+        <span id="dailyPageInfo">—</span>
+        <div><button class="btn btn-secondary btn-sm" id="dailyPrevBtn" disabled>上一页</button><button class="btn btn-secondary btn-sm" id="dailyNextBtn" disabled>下一页</button></div>
+      </div>
+      <div class="sales-note">销售额取自 sales_daily.sales_amount，按原记录显示。商品补全不完整，且历史金额可能经价格补算；请与 Amazon 后台对账后再用于财务判断。订单量按该表的 orders_count 汇总，同一订单涉及多个 ASIN 时会分别计入。</div>
+    </section>
+  </main>
+</div>
+<div class="auth-loading" id="loading">正在验证登录状态…</div>
+<script src="../assets/config.js"></script>
+<script src="../assets/auth-client.js"></script>
+<script src="../assets/app.js"></script>
+<script src="../assets/sales-client.js"></script>
+<script src="../assets/sales-page.js"></script>
+</body>
+</html>
