@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>销量观察｜首页｜关键词作战工具</title>
   <link rel="stylesheet" href="../assets/styles.css">
-  <link rel="stylesheet" href="../assets/sales.css?v=20261010-children1">
+  <link rel="stylesheet" href="../assets/sales.css?v=20261010-history1">
 </head>
 <body>
 <div class="shell" id="appShell" hidden>
@@ -89,10 +89,18 @@
     </div>
 
     <div id="viewToday" class="sales-view" aria-label="今日数据" hidden>
+      <div class="sales-summary-head"><div><h2>今日 / 昨日数据看板</h2><p>全店已识别商品汇总 · 取消订单已排除 · ASIN 搜索只筛选下方列表</p></div></div>
+      <section class="sales-kpis sales-summary-kpis" aria-label="今日与昨日销售汇总">
+        <article class="card sales-kpi"><div class="sales-kpi-label">销量（件）</div><div id="todayUnits" class="sales-kpi-value">—</div><div class="sales-kpi-note">今日 / 昨日 · 订购件数</div></article>
+        <article class="card sales-kpi"><div class="sales-kpi-label">销售额</div><div id="todayAmount" class="sales-kpi-value">—</div><div class="sales-kpi-note">含估算金额；缺价另行提示</div></article>
+        <article class="card sales-kpi"><div class="sales-kpi-label">已识别商品订单量</div><div id="todayOrders" class="sales-kpi-value">—</div><div class="sales-kpi-note">全店按订单号去重，含待付款</div></article>
+        <article class="card sales-kpi"><div class="sales-kpi-label" id="todayProductLabel">有记录的子 ASIN 数</div><div id="todayProducts" class="sales-kpi-value">—</div><div class="sales-kpi-note" id="todayProductNote">今日 / 昨日 · 按当前统计维度</div></article>
+      </section>
+      <p class="sales-summary-status" id="todaySummaryStatus" role="status"></p>
       <section class="card table-card" aria-labelledby="todayHeading">
         <div class="card-head sales-detail-head">
           <div><h2 id="todayHeading">今日 / 昨日子 ASIN 数据</h2><p id="todayDescription">同一子 ASIN 的多个 SKU 合并显示；按今日销量排序。</p></div>
-          <div class="sales-detail-filters"><label for="todayAsinFilter"><span id="todayFilterLabel">子 ASIN</span><input id="todayAsinFilter" type="search" placeholder="搜索子 ASIN" autocomplete="off"></label></div>
+          <div class="sales-detail-filters"><button class="btn btn-secondary btn-sm sales-export-btn" id="todayExportBtn" disabled>导出 CSV</button><label for="todayAsinFilter"><span id="todayFilterLabel">子 ASIN</span><input id="todayAsinFilter" type="search" placeholder="搜索子 ASIN" autocomplete="off"></label></div>
         </div>
         <div class="sales-comparison-legend"><span class="sales-today">斜杠前：今日 <strong id="todayDate">—</strong></span><span class="sales-legend-slash" aria-hidden="true">/</span><span class="sales-yesterday">斜杠后：昨日 <strong id="yesterdayDate">—</strong></span><span class="sales-comparison-partial">今日为截至数据发布时间的累计值</span></div>
         <div class="sales-comparison-status" id="todayStatus" role="status"></div>
@@ -109,18 +117,34 @@
     </div>
 
     <div id="viewHistory" class="sales-view" aria-label="历史数据" hidden>
+      <div class="sales-summary-head"><div><h2>历史数据看板</h2><p id="historyScopeText">查看所选期间的全店已识别商品汇总</p></div>
+        <div class="sales-history-controls">
+          <label for="historyMode">查看方式<select id="historyMode"><option value="summary">期间汇总</option><option value="daily">每日明细（近 15 天）</option></select></label>
+          <div id="historyRangeGroup" class="sales-range-controls" role="group" aria-label="历史汇总天数">
+            <button type="button" data-history-days="7" aria-pressed="true">7 天</button><button type="button" data-history-days="30" aria-pressed="false">30 天</button><button type="button" data-history-days="90" aria-pressed="false">90 天</button><button type="button" data-history-days="150" aria-pressed="false">150 天</button><button type="button" data-history-days="240" aria-pressed="false">240 天</button><button type="button" data-history-days="360" aria-pressed="false">360 天</button>
+          </div>
+        </div>
+      </div>
+      <section class="sales-kpis sales-summary-kpis" aria-label="历史销售汇总">
+        <article class="card sales-kpi"><div class="sales-kpi-label">销量（件）</div><div id="historyUnits" class="sales-kpi-value">—</div><div class="sales-kpi-note">所选期间的订购件数</div></article>
+        <article class="card sales-kpi"><div class="sales-kpi-label">销售额</div><div id="historyAmount" class="sales-kpi-value">—</div><div class="sales-kpi-note">含估算金额；缺价另行提示</div></article>
+        <article class="card sales-kpi"><div class="sales-kpi-label">已识别商品订单量</div><div id="historyOrders" class="sales-kpi-value">—</div><div class="sales-kpi-note">全店按订单号去重，含待付款</div></article>
+        <article class="card sales-kpi"><div class="sales-kpi-label" id="historyProductLabel">有记录的子 ASIN 数</div><div id="historyProducts" class="sales-kpi-value">—</div><div class="sales-kpi-note" id="historyProductNote">按当前统计维度</div></article>
+      </section>
+      <p class="sales-summary-status" id="historyCoverage" role="status"></p>
       <section class="card table-card" aria-labelledby="dailyHeading">
         <div class="card-head sales-detail-head">
           <div><h2 id="dailyHeading">每日子 ASIN 销售明细</h2><p id="dailyDescription">近 15 天，按日期和子 ASIN 汇总；同一子 ASIN 的多个 SKU 合并显示。</p></div>
           <div class="sales-detail-filters">
-            <label for="dailyDateFilter">日期<select id="dailyDateFilter"><option value="">全部日期</option></select></label>
+            <button class="btn btn-secondary btn-sm sales-export-btn" id="historyExportBtn" disabled>导出 CSV</button>
+            <label id="dailyDateControl" for="dailyDateFilter">日期<select id="dailyDateFilter"><option value="">全部日期</option></select></label>
             <label for="dailyAsinFilter"><span id="dailyFilterLabel">子 ASIN</span><input id="dailyAsinFilter" type="search" placeholder="搜索子 ASIN" autocomplete="off"></label>
           </div>
         </div>
         <div class="sales-detail-summary" id="dailyCount">正在加载明细…</div>
         <div class="table-scroll">
           <table class="sales-detail-table">
-            <thead><tr><th scope="col">日期</th><th scope="col" id="dailyAsinHeading">商品 / 子 ASIN</th><th scope="col" class="sales-number">销量（件）</th><th scope="col" class="sales-number">销售额</th><th scope="col" class="sales-number">订单量</th></tr></thead>
+            <thead><tr><th scope="col" id="historyDateHeading">统计期间</th><th scope="col" id="dailyAsinHeading">商品 / 子 ASIN</th><th scope="col" class="sales-number">销量（件）</th><th scope="col" class="sales-number">销售额</th><th scope="col" class="sales-number">订单量</th></tr></thead>
             <tbody id="dailyRows"><tr><td class="empty" colspan="5">正在加载…</td></tr></tbody>
           </table>
         </div>
@@ -135,7 +159,7 @@
 <script src="../assets/auth-client.js"></script>
 <script src="../assets/app.js"></script>
 <script src="../assets/sales-client.js"></script>
-<script src="../assets/sales-model.js?v=20261010-children1"></script>
-<script src="../assets/sales-page.js?v=20261010-children1"></script>
+<script src="../assets/sales-model.js?v=20261010-history1"></script>
+<script src="../assets/sales-page.js?v=20261010-history1"></script>
 </body>
 </html>

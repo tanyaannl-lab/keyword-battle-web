@@ -116,3 +116,21 @@
 @media(max-width:600px){.sales-nav{width:100%;gap:4px}.sales-nav a{flex:1;text-align:center;padding:11px 8px;font-size:14px}.sales-comparison-legend{padding:14px;gap:10px;font-size:12px}.sales-comparison-partial{width:100%;margin-left:0}.sales-pair{gap:7px}.sales-today-table .sales-number{font-size:15px}.sales-product-cell{min-width:200px}.sales-product{gap:9px}.sales-product-image{width:64px;height:64px;flex-basis:64px}.sales-detail-pager{padding:12px 14px}.sales-health-row{font-size:12px}.sales-note{padding:12px 14px}}
 @media(max-width:600px){.sales-dimension-bar{gap:10px}.sales-dimension-status{flex-basis:100%;min-width:0}.sales-dimension-controls button{padding:8px 14px}}
 @media(max-width:600px){.sales-child-detail-row>.sales-child-detail-cell{padding:0 10px 12px 14px}.sales-child-panel{padding:10px 9px 0}.sales-child-toggle{font-size:11px}}
+.sales-summary-head{display:flex;align-items:center;justify-content:space-between;gap:18px;flex-wrap:wrap;margin:5px 0 16px}
+.sales-summary-head h2{margin:0 0 6px;font-size:18px;color:var(--text)}
+.sales-summary-head p{margin:0;font-size:12px;line-height:1.6;color:var(--muted)}
+.sales-summary-kpis .sales-kpi-value{font-size:25px;line-height:1.35;overflow-wrap:anywhere}
+.sales-summary-kpis .sales-pair{justify-content:flex-start;gap:10px;flex-wrap:wrap;white-space:normal}
+.sales-summary-kpis .sales-pair-side{align-items:flex-start}
+.sales-summary-kpis .sales-price-badges{justify-content:flex-start;letter-spacing:normal}
+.sales-summary-status{font-size:12px;line-height:1.65;color:var(--muted);margin:-3px 0 18px;padding:0 2px}
+.sales-history-controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.sales-history-controls label{display:grid;gap:5px;font-size:12px;color:var(--muted)}
+.sales-history-controls select{height:35px;padding:0 10px;border:1px solid var(--line-strong);border-radius:8px;background:#fff;font:inherit;color:var(--text)}
+.sales-range-controls{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.sales-range-controls button{padding:8px 12px;border:1px solid #dbe3ef;border-radius:7px;background:#fff;font:inherit;font-size:12px;font-weight:650;color:#53627a;cursor:pointer}
+.sales-range-controls button[aria-pressed=true]{background:#eaf1ff;border-color:#8eaff0;color:#1d4ed8}
+.sales-range-controls button:focus-visible,.sales-history-controls select:focus-visible{outline:3px solid #93b7fa;outline-offset:3px}
+.sales-export-btn{align-self:end;white-space:nowrap}
+#historyRangeGroup[hidden],#dailyDateControl[hidden]{display:none}
+@media(max-width:600px){.sales-summary-head{gap:12px}.sales-history-controls{width:100%;gap:10px}.sales-range-controls{width:100%}.sales-range-controls button{flex:1;min-width:48px;padding:8px}.sales-summary-kpis .sales-kpi-value{font-size:21px}.sales-summary-kpis .sales-pair{gap:6px}.sales-export-btn{align-self:end}}
