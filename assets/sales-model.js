@@ -42,12 +42,22 @@
     return flags;
   }
 
-  function todayComparison(snapshot, now = new Date()) {
+  function dimensionRows(snapshot, dimension = 'child') {
+    const data = snapshot?.payload || {};
+    if (dimension === 'parent') {
+      const available = data.parent_asin_available === true && Array.isArray(data.parent_daily_rows) && Array.isArray(data.parent_ranking);
+      return { available, daily: available ? data.parent_daily_rows : [], ranking: available ? data.parent_ranking : [] };
+    }
+    return { available: Array.isArray(data.daily_rows), daily: Array.isArray(data.daily_rows) ? data.daily_rows : [], ranking: Array.isArray(data.ranking) ? data.ranking : [] };
+  }
+
+  function todayComparison(snapshot, now = new Date(), dimension = 'child') {
     const data = snapshot?.payload || {};
     const today = beijingDate(now);
     const yesterday = previousDate(today);
     const publishedDay = snapshot?.generated_at ? beijingDate(snapshot.generated_at) : null;
-    const rowsAvailable = Array.isArray(data.daily_rows);
+    const source = dimensionRows(snapshot, dimension);
+    const rowsAvailable = source.available;
     const available = date => rowsAvailable && DATE_PATTERN.test(String(data.period?.start_date)) &&
       DATE_PATTERN.test(String(data.period?.end_date)) && data.period.start_date <= date &&
       date <= data.period.end_date && !!publishedDay && date <= publishedDay;
@@ -55,19 +65,28 @@
     const yesterdayAvailable = available(yesterday);
     const index = new Map();
     const zero = () => ({ units: 0, orders_count: 0, sales_amount: '0', currency: 'USD', estimated_rows: 0, missing_price_rows: 0, legacy_unknown_price_rows: 0 });
-    for (const row of rowsAvailable ? data.daily_rows : []) {
+    for (const row of source.daily) {
       if (!row || typeof row.asin !== 'string' || !row.asin.trim()) continue;
       if (row.date !== today && row.date !== yesterday) continue;
       if (!available(row.date)) continue;
       const asin = row.asin.trim().toUpperCase();
-      if (!index.has(asin)) index.set(asin, { asin, today: todayAvailable ? zero() : null, yesterday: yesterdayAvailable ? zero() : null });
-      index.get(asin)[row.date === today ? 'today' : 'yesterday'] = row;
+      const key = dimension === 'parent' ? `${row.group_type === 'parent' ? 'parent' : 'child'}:${asin}` : asin;
+      if (!index.has(key)) index.set(key, { asin, group_type: row.group_type, parent_asin: row.parent_asin,
+        image_asin: row.image_asin || asin, child_asins_count: row.child_asins_count,
+        today: todayAvailable ? zero() : null, yesterday: yesterdayAvailable ? zero() : null });
+      const entry = index.get(key);
+      entry[row.date === today ? 'today' : 'yesterday'] = row;
+      // Prefer today's representative image and variant count when both dates have data.
+      if (row.date === today) {
+        entry.image_asin = row.image_asin || asin;
+        entry.child_asins_count = row.child_asins_count;
+      }
     }
     const rows = [...index.values()].sort((a, b) => (count(b.today?.units) || 0) - (count(a.today?.units) || 0) || a.asin.localeCompare(b.asin));
     return { today, yesterday, todayAvailable, yesterdayAvailable, rows };
   }
 
-  const model = { beijingDate, previousDate, imageUrl, priceFlags, todayComparison };
+  const model = { beijingDate, previousDate, imageUrl, priceFlags, dimensionRows, todayComparison };
   if (typeof module !== 'undefined' && module.exports) module.exports = model;
   else root.KBSalesModel = model;
 })(typeof window === 'undefined' ? globalThis : window);

@@ -37,6 +37,14 @@
       <a href="#today" data-sales-view="today">今日数据</a>
       <a href="#history" data-sales-view="history">历史数据</a>
     </nav>
+    <div class="sales-dimension-bar">
+      <div class="sales-dimension-controls" role="group" aria-label="ASIN 统计维度">
+        <span class="sales-dimension-label">统计维度</span>
+        <button type="button" id="dimensionChild" data-sales-dimension="child" aria-pressed="true">子 ASIN</button>
+        <button type="button" id="dimensionParent" data-sales-dimension="parent" aria-pressed="false" disabled>父 ASIN</button>
+      </div>
+      <p id="dimensionStatus" class="sales-dimension-status" role="status" aria-live="polite">父 ASIN 关系尚未同步</p>
+    </div>
     <div class="sales-banner" id="notice" role="status" aria-live="polite">正在加载销量数据…</div>
 
     <div id="viewHome" class="sales-view" aria-label="首页">
@@ -69,50 +77,50 @@
       </div>
 
       <section class="card table-card">
-        <div class="card-head"><h2>ASIN 已识别销量排行</h2><p>近 15 天，按订购件数排序，展示前 10 名。</p></div>
+        <div class="card-head"><h2 id="rankingHeading">子 ASIN 已识别销量排行</h2><p>近 15 天，按订购件数排序，展示前 10 名。</p></div>
         <div class="table-scroll">
           <table class="sales-ranking-table">
-            <thead><tr><th scope="col">排名</th><th scope="col">商品 / ASIN</th><th scope="col">SKU</th><th scope="col">商品标题</th><th scope="col" class="sales-number">销量（件）</th><th scope="col" class="sales-number">订单量</th></tr></thead>
+            <thead><tr><th scope="col">排名</th><th scope="col" id="rankingAsinHeading">商品 / 子 ASIN</th><th scope="col" id="rankingVariantHeading">SKU</th><th scope="col" id="rankingTitleHeading">商品标题</th><th scope="col" class="sales-number">销量（件）</th><th scope="col" class="sales-number">订单量</th></tr></thead>
             <tbody id="rankingRows"><tr><td class="empty" colspan="6">正在加载…</td></tr></tbody>
           </table>
         </div>
-        <div class="sales-note">排行按商品 SKU 展示；同一 ASIN 如有多个 SKU，可能出现多行。今日数据与历史数据按 ASIN 合并。</div>
+        <div class="sales-note" id="rankingNote">排行按商品 SKU 展示；同一子 ASIN 如有多个 SKU，可能出现多行。今日数据与历史数据按子 ASIN 合并。</div>
       </section>
     </div>
 
     <div id="viewToday" class="sales-view" aria-label="今日数据" hidden>
       <section class="card table-card" aria-labelledby="todayHeading">
         <div class="card-head sales-detail-head">
-          <div><h2 id="todayHeading">今日 / 昨日 ASIN 数据</h2><p>同一 ASIN 的多个 SKU 合并显示；按今日销量排序。</p></div>
-          <div class="sales-detail-filters"><label for="todayAsinFilter">ASIN<input id="todayAsinFilter" type="search" placeholder="搜索 ASIN" autocomplete="off"></label></div>
+          <div><h2 id="todayHeading">今日 / 昨日子 ASIN 数据</h2><p id="todayDescription">同一子 ASIN 的多个 SKU 合并显示；按今日销量排序。</p></div>
+          <div class="sales-detail-filters"><label for="todayAsinFilter"><span id="todayFilterLabel">子 ASIN</span><input id="todayAsinFilter" type="search" placeholder="搜索子 ASIN" autocomplete="off"></label></div>
         </div>
         <div class="sales-comparison-legend"><span class="sales-today">斜杠前：今日 <strong id="todayDate">—</strong></span><span class="sales-legend-slash" aria-hidden="true">/</span><span class="sales-yesterday">斜杠后：昨日 <strong id="yesterdayDate">—</strong></span><span class="sales-comparison-partial">今日为截至数据发布时间的累计值</span></div>
         <div class="sales-comparison-status" id="todayStatus" role="status"></div>
         <div class="sales-detail-summary" id="todayCount">正在加载明细…</div>
         <div class="table-scroll">
           <table class="sales-today-table">
-            <thead><tr><th scope="col">商品 / ASIN</th><th scope="col" class="sales-number">销量（件）<small>今日 / 昨日</small></th><th scope="col" class="sales-number">销售额<small>今日 / 昨日</small></th><th scope="col" class="sales-number">订单量<small>今日 / 昨日</small></th></tr></thead>
+            <thead><tr><th scope="col" id="todayAsinHeading">商品 / 子 ASIN</th><th scope="col" class="sales-number">销量（件）<small>今日 / 昨日</small></th><th scope="col" class="sales-number">销售额<small>今日 / 昨日</small></th><th scope="col" class="sales-number">订单量<small>今日 / 昨日</small></th></tr></thead>
             <tbody id="todayRows"><tr><td class="empty" colspan="4">正在加载…</td></tr></tbody>
           </table>
         </div>
         <div class="sales-detail-pager"><span id="todayPageInfo">—</span><div><button class="btn btn-secondary btn-sm" id="todayPrevBtn" disabled>上一页</button><button class="btn btn-secondary btn-sm" id="todayNextBtn" disabled>下一页</button></div></div>
-        <div class="sales-note">“—”表示该日期尚无可用发布数据；已覆盖日期中某 ASIN 没有销售记录时显示 0。同一日期、同一 ASIN 的订单按订单号去重。</div>
+        <div class="sales-note" id="todayNote">“—”表示该日期尚无可用发布数据；已覆盖日期中某子 ASIN 没有销售记录时显示 0。同一日期、同一子 ASIN 的订单按订单号去重。</div>
       </section>
     </div>
 
     <div id="viewHistory" class="sales-view" aria-label="历史数据" hidden>
       <section class="card table-card" aria-labelledby="dailyHeading">
         <div class="card-head sales-detail-head">
-          <div><h2 id="dailyHeading">每日 ASIN 销售明细</h2><p>近 15 天，按日期和 ASIN 汇总；同一 ASIN 的多个 SKU 合并显示。</p></div>
+          <div><h2 id="dailyHeading">每日子 ASIN 销售明细</h2><p id="dailyDescription">近 15 天，按日期和子 ASIN 汇总；同一子 ASIN 的多个 SKU 合并显示。</p></div>
           <div class="sales-detail-filters">
             <label for="dailyDateFilter">日期<select id="dailyDateFilter"><option value="">全部日期</option></select></label>
-            <label for="dailyAsinFilter">ASIN<input id="dailyAsinFilter" type="search" placeholder="搜索 ASIN" autocomplete="off"></label>
+            <label for="dailyAsinFilter"><span id="dailyFilterLabel">子 ASIN</span><input id="dailyAsinFilter" type="search" placeholder="搜索子 ASIN" autocomplete="off"></label>
           </div>
         </div>
         <div class="sales-detail-summary" id="dailyCount">正在加载明细…</div>
         <div class="table-scroll">
           <table class="sales-detail-table">
-            <thead><tr><th scope="col">日期</th><th scope="col">商品 / ASIN</th><th scope="col" class="sales-number">销量（件）</th><th scope="col" class="sales-number">销售额</th><th scope="col" class="sales-number">订单量</th></tr></thead>
+            <thead><tr><th scope="col">日期</th><th scope="col" id="dailyAsinHeading">商品 / 子 ASIN</th><th scope="col" class="sales-number">销量（件）</th><th scope="col" class="sales-number">销售额</th><th scope="col" class="sales-number">订单量</th></tr></thead>
             <tbody id="dailyRows"><tr><td class="empty" colspan="5">正在加载…</td></tr></tbody>
           </table>
         </div>
