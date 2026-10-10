@@ -31,6 +31,7 @@
   let todayPage = 0;
   let loading = false;
   let dimension = 'child';
+  const expandedChildren = new Set();
   const dimensionLabel = () => dimension === 'parent' ? '父 ASIN' : '子 ASIN';
 
   $('userEmail').textContent = auth.user?.email || '已登录用户';
@@ -72,11 +73,11 @@
     addCell(tr, message, 'empty').colSpan = columns;
     body.appendChild(tr);
   }
-  function productCell(tr, entry) {
+  function productCell(tr, entry, childDetail = false) {
     const cell = addCell(tr, '', 'sales-product-cell');
     const normalizedAsin = String(entry.asin || '').trim().toUpperCase();
     const imageAsin = String(entry.image_asin || normalizedAsin).trim().toUpperCase();
-    const parentGroup = dimension === 'parent' && entry.group_type === 'parent';
+    const parentGroup = !childDetail && dimension === 'parent' && entry.group_type === 'parent';
     const validAsin = /^[A-Z0-9]{10}$/.test(normalizedAsin);
     const product = document.createElement(validAsin ? 'a' : 'span');
     product.className = 'sales-product';
@@ -113,7 +114,7 @@
     asinText.className = 'sales-asin';
     asinText.textContent = normalizedAsin || '—';
     text.appendChild(asinText);
-    if (dimension === 'parent') {
+    if (!childDetail && dimension === 'parent') {
       const detail = document.createElement('span');
       detail.className = parentGroup ? 'sales-variant-count' : 'sales-parent-unknown';
       detail.textContent = parentGroup ? `含 ${fmt(entry.child_asins_count)} 个子 ASIN` : '未识别父 ASIN';
@@ -122,6 +123,96 @@
     }
     product.append(frame, text);
     cell.appendChild(product);
+  }
+
+  function addChildrenExpansion(body, tr, entry, view) {
+    if (dimension !== 'parent' || entry.group_type !== 'parent') return;
+    const children = model.parentChildren(currentSnapshot, entry.asin);
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'sales-child-toggle';
+    if (!children.available || !children.asins.length) {
+      button.disabled = true;
+      button.textContent = children.available ? '暂无子 ASIN 记录' : '子 ASIN 明细待同步';
+      button.title = children.available ? '近 15 天尚无可展示的子 ASIN 记录。' : '本次发布尚未提供父子 ASIN 明细，请等待后台更新。';
+      tr.querySelector('.sales-product-cell').appendChild(button);
+      return;
+    }
+    const key = `${view}:${entry.date || ''}:${entry.asin}`;
+    const regionId = `children-${view}-${entry.date || 'period'}-${entry.asin}`;
+    button.setAttribute('aria-controls', regionId);
+    button.setAttribute('aria-label', `展开 ${entry.asin} 的子 ASIN 明细`);
+    tr.querySelector('.sales-product-cell').appendChild(button);
+    const detailTr = document.createElement('tr');
+    detailTr.className = 'sales-child-detail-row';
+    const cell = addCell(detailTr, '', 'sales-child-detail-cell');
+    cell.colSpan = tr.children.length;
+    const region = document.createElement('div');
+    region.id = regionId;
+    region.className = 'sales-child-panel';
+    region.setAttribute('role', 'region');
+    region.setAttribute('aria-label', `${entry.asin} 的子 ASIN 明细`);
+    cell.appendChild(region);
+    body.appendChild(detailTr);
+    let populated = false;
+    const setOpen = open => {
+      if (open && !populated) {
+        renderChildren(region, entry, view, children.asins.length);
+        populated = true;
+      }
+      detailTr.hidden = !open;
+      button.setAttribute('aria-expanded', String(open));
+      button.setAttribute('aria-label', `${open ? '收起' : '展开'} ${entry.asin} 的子 ASIN 明细`);
+      button.textContent = `${open ? '▴ 收起' : '▾ 展开'}子 ASIN (${fmt(children.asins.length)})`;
+      if (open) expandedChildren.add(key);
+      else expandedChildren.delete(key);
+    };
+    button.addEventListener('click', () => setOpen(!expandedChildren.has(key)));
+    setOpen(expandedChildren.has(key));
+  }
+
+  function renderChildren(region, entry, view, childCount) {
+    const heading = document.createElement('div');
+    heading.className = 'sales-child-heading';
+    heading.textContent = `近 15 天有记录的子 ASIN · ${fmt(childCount)} 个${view === 'history' ? ` · ${entry.date}` : ''}`;
+    const note = document.createElement('p');
+    note.className = 'sales-child-note';
+    note.textContent = view === 'today' ? '蓝色为今日，橙色为昨日；无记录且已覆盖的日期显示 0。'
+      : view === 'history' ? '仅展示该父 ASIN 本行日期的子商品数据。'
+      : '按子 ASIN 汇总近 15 天；同一订单含多个子 ASIN 时，子级订单量相加可能高于父级去重订单量。';
+    const table = document.createElement('table');
+    table.className = `sales-child-table ${view === 'today' ? 'sales-today-table' : ''}`;
+    const head = document.createElement('thead');
+    const header = document.createElement('tr');
+    const suffix = view === 'today' ? '（今日 / 昨日）' : '';
+    for (const [index, label] of ['商品 / 子 ASIN', `销量（件）${suffix}`, `销售额${suffix}`, `订单量${suffix}`].entries()) {
+      const th = document.createElement('th');
+      th.scope = 'col';
+      th.textContent = label;
+      if (index) th.className = 'sales-number';
+      header.appendChild(th);
+    }
+    head.appendChild(header);
+    const childBody = document.createElement('tbody');
+    let rows;
+    if (view === 'today') rows = model.childrenTodayComparison(currentSnapshot, entry.asin, new Date());
+    else if (view === 'history') rows = model.childRowsForDate(currentSnapshot, entry.asin, entry.date).map(row =>
+      row.data || { asin: row.asin, units: null, sales_amount: null, orders_count: null });
+    else rows = model.childrenPeriodRows(currentSnapshot, entry.asin);
+    for (const row of rows) {
+      const childTr = document.createElement('tr');
+      productCell(childTr, row, true);
+      if (view === 'today') {
+        for (const metric of ['units', 'sales_amount', 'orders_count']) pairCell(childTr, row, metric);
+      } else {
+        addCell(childTr, fmt(row.units), 'sales-number');
+        amountCell(childTr, row);
+        addCell(childTr, fmt(row.orders_count), 'sales-number');
+      }
+      childBody.appendChild(childTr);
+    }
+    table.append(head, childBody);
+    region.append(heading, note, table);
   }
   function money(value, currency) {
     if (currency === 'MIXED') return '混合币种';
@@ -208,6 +299,7 @@
       amountCell(tr, row);
       addCell(tr, fmt(row.orders_count), 'sales-number');
       body.appendChild(tr);
+      addChildrenExpansion(body, tr, row, 'history');
     }
     pageState('daily', filtered.length, dailyPage, dailyMessage);
   }
@@ -253,6 +345,7 @@
       productCell(tr, entry);
       for (const metric of ['units', 'sales_amount', 'orders_count']) pairCell(tr, entry, metric);
       body.appendChild(tr);
+      addChildrenExpansion(body, tr, entry, 'today');
     }
     pageState('today', rows.length, todayPage, message);
   }
@@ -297,6 +390,7 @@
       addCell(tr, fmt(entry.units), 'sales-number');
       addCell(tr, fmt(entry.orders_count), 'sales-number');
       body.appendChild(tr);
+      addChildrenExpansion(body, tr, entry, 'home');
     });
   }
   function renderDimension() {
@@ -348,6 +442,7 @@
     const data = snapshot?.payload;
     if (!data || data.schema_version !== 1) throw new Error('销量数据格式不匹配，请联系管理员。');
     currentSnapshot = snapshot;
+    expandedChildren.clear();
     productImages = data.product_images && typeof data.product_images === 'object' ? data.product_images : {};
     const coverage = data.coverage_15d || {};
     const total = Number(coverage.total_orders) || 0;
@@ -414,6 +509,7 @@
   for (const button of document.querySelectorAll('[data-sales-dimension]')) button.addEventListener('click', () => {
     if (button.disabled || dimension === button.dataset.salesDimension) return;
     dimension = button.dataset.salesDimension;
+    expandedChildren.clear();
     dailyPage = 0;
     todayPage = 0;
     $('todayAsinFilter').value = '';
