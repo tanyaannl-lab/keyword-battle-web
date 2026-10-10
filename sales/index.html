@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>销量观察｜首页｜关键词作战工具</title>
   <link rel="stylesheet" href="../assets/styles.css">
-  <link rel="stylesheet" href="../assets/sales.css?v=20261010-history1">
+  <link rel="stylesheet" href="../assets/sales.css?v=20261010-pacific1">
 </head>
 <body>
 <div class="shell" id="appShell" hidden>
@@ -23,7 +23,7 @@
       <div>
         <span class="sales-eyebrow">AMAZON · US MARKET</span>
         <h1>销量观察</h1>
-        <p id="viewDescription">查看近 15 天概况、今日与昨日对比及历史销售明细。</p>
+        <p id="viewDescription">按美国太平洋时间查看近 15 天概况、今日与昨日对比及历史销售明细。</p>
         <p class="sales-period" id="periodText">统计日期：—</p>
       </div>
       <div class="sales-actions">
@@ -119,8 +119,7 @@
     <div id="viewHistory" class="sales-view" aria-label="历史数据" hidden>
       <div class="sales-summary-head"><div><h2>历史数据看板</h2><p id="historyScopeText">查看所选期间的全店已识别商品汇总</p></div>
         <div class="sales-history-controls">
-          <label for="historyMode">查看方式<select id="historyMode"><option value="summary">期间汇总</option><option value="daily">每日明细（近 15 天）</option></select></label>
-          <div id="historyRangeGroup" class="sales-range-controls" role="group" aria-label="历史汇总天数">
+          <div id="historyRangeGroup" class="sales-range-controls" role="group" aria-label="历史看板汇总天数（仅改变上方看板）">
             <button type="button" data-history-days="7" aria-pressed="true">7 天</button><button type="button" data-history-days="30" aria-pressed="false">30 天</button><button type="button" data-history-days="90" aria-pressed="false">90 天</button><button type="button" data-history-days="150" aria-pressed="false">150 天</button><button type="button" data-history-days="240" aria-pressed="false">240 天</button><button type="button" data-history-days="360" aria-pressed="false">360 天</button>
           </div>
         </div>
@@ -132,6 +131,7 @@
         <article class="card sales-kpi"><div class="sales-kpi-label" id="historyProductLabel">有记录的子 ASIN 数</div><div id="historyProducts" class="sales-kpi-value">—</div><div class="sales-kpi-note" id="historyProductNote">按当前统计维度</div></article>
       </section>
       <p class="sales-summary-status" id="historyCoverage" role="status"></p>
+      <p class="sales-summary-status sales-history-table-scope">上方天数仅调整汇总看板；下方始终展示近 15 天每日明细，日期筛选与导出只作用于下方列表。</p>
       <section class="card table-card" aria-labelledby="dailyHeading">
         <div class="card-head sales-detail-head">
           <div><h2 id="dailyHeading">每日子 ASIN 销售明细</h2><p id="dailyDescription">近 15 天，按日期和子 ASIN 汇总；同一子 ASIN 的多个 SKU 合并显示。</p></div>
@@ -144,7 +144,7 @@
         <div class="sales-detail-summary" id="dailyCount">正在加载明细…</div>
         <div class="table-scroll">
           <table class="sales-detail-table">
-            <thead><tr><th scope="col" id="historyDateHeading">统计期间</th><th scope="col" id="dailyAsinHeading">商品 / 子 ASIN</th><th scope="col" class="sales-number">销量（件）</th><th scope="col" class="sales-number">销售额</th><th scope="col" class="sales-number">订单量</th></tr></thead>
+            <thead><tr><th scope="col" id="historyDateHeading">日期</th><th scope="col" id="dailyAsinHeading">商品 / 子 ASIN</th><th scope="col" class="sales-number">销量（件）</th><th scope="col" class="sales-number">销售额</th><th scope="col" class="sales-number">订单量</th></tr></thead>
             <tbody id="dailyRows"><tr><td class="empty" colspan="5">正在加载…</td></tr></tbody>
           </table>
         </div>
@@ -159,7 +159,7 @@
 <script src="../assets/auth-client.js"></script>
 <script src="../assets/app.js"></script>
 <script src="../assets/sales-client.js"></script>
-<script src="../assets/sales-model.js?v=20261010-history1"></script>
-<script src="../assets/sales-page.js?v=20261010-history1"></script>
+<script src="../assets/sales-model.js?v=20261010-pacific1"></script>
+<script src="../assets/sales-page.js?v=20261010-pacific1"></script>
 </body>
 </html>

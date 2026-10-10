@@ -12,14 +12,14 @@
     const date = new Date(value);
     if (!Number.isFinite(date.getTime())) return '—';
     return new Intl.DateTimeFormat('zh-CN', {
-      timeZone: 'Asia/Shanghai', month: '2-digit', day: '2-digit',
+      timeZone: 'America/Los_Angeles', month: '2-digit', day: '2-digit',
       hour: '2-digit', minute: '2-digit', hour12: false
-    }).format(date).replaceAll('/', '-') + ' 北京时间';
+    }).format(date).replaceAll('/', '-') + ' 美国太平洋时间';
   };
   const descriptions = {
     home: '近 15 天订单与已识别商品的汇总。',
     today: '逐个 ASIN 对比今日与昨日的销量、销售额和订单量。',
-    history: '查看 7 至 360 天的销售汇总，或近 15 天每日明细，并导出当前筛选结果。'
+    history: '上方看板可选择 7 至 360 天汇总；下方保留近 15 天每日销售明细与导出。'
   };
   const viewLabels = { home: '首页', today: '今日数据', history: '历史数据' };
   let currentSnapshot = null;
@@ -32,7 +32,6 @@
   let loading = false;
   let dimension = 'child';
   let historyDays = 7;
-  let historyMode = 'summary';
   const expandedChildren = new Set();
   const dimensionLabel = () => dimension === 'parent' ? '父 ASIN' : '子 ASIN';
 
@@ -126,9 +125,7 @@
 
   function addChildrenExpansion(body, tr, entry, view) {
     if (dimension !== 'parent' || entry.group_type !== 'parent') return;
-    const children = view === 'historySummary'
-      ? model.historyParentChildren(currentSnapshot, entry.asin, historyDays)
-      : model.parentChildren(currentSnapshot, entry.asin);
+    const children = model.parentChildren(currentSnapshot, entry.asin);
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'sales-child-toggle';
@@ -139,8 +136,8 @@
       tr.querySelector('.sales-product-cell').appendChild(button);
       return;
     }
-    const key = `${view}:${view === 'historySummary' ? historyDays : entry.date || ''}:${entry.asin}`;
-    const regionId = `children-${view}-${view === 'historySummary' ? historyDays : entry.date || 'period'}-${entry.asin}`;
+    const key = `${view}:${entry.date || ''}:${entry.asin}`;
+    const regionId = `children-${view}-${entry.date || 'period'}-${entry.asin}`;
     button.setAttribute('aria-controls', regionId);
     button.setAttribute('aria-label', `展开 ${entry.asin} 的子 ASIN 明细`);
     tr.querySelector('.sales-product-cell').appendChild(button);
@@ -175,12 +172,11 @@
   function renderChildren(region, entry, view, childCount) {
     const heading = document.createElement('div');
     heading.className = 'sales-child-heading';
-    heading.textContent = `近 ${view === 'historySummary' ? historyDays : 15} 天有记录的子 ASIN · ${fmt(childCount)} 个${view === 'history' ? ` · ${entry.date}` : ''}`;
+    heading.textContent = `近 15 天有记录的子 ASIN · ${fmt(childCount)} 个${view === 'history' ? ` · ${entry.date}` : ''}`;
     const note = document.createElement('p');
     note.className = 'sales-child-note';
     note.textContent = view === 'today' ? '蓝色为今日，橙色为昨日；无记录且已覆盖的日期显示 0。'
       : view === 'history' ? '仅展示该父 ASIN 本行日期的子商品数据。'
-      : view === 'historySummary' ? `按子 ASIN 汇总所选 ${historyDays} 天；同一订单含多个子 ASIN 时，子级订单量相加可能高于父级去重订单量。`
       : '按子 ASIN 汇总近 15 天；同一订单含多个子 ASIN 时，子级订单量相加可能高于父级去重订单量。';
     const table = document.createElement('table');
     table.className = `sales-child-table ${view === 'today' ? 'sales-today-table' : ''}`;
@@ -197,8 +193,7 @@
     head.appendChild(header);
     const childBody = document.createElement('tbody');
     let rows;
-    if (view === 'historySummary') rows = model.historyChildrenRows(currentSnapshot, entry.asin, historyDays);
-    else if (view === 'today') rows = model.childrenTodayComparison(currentSnapshot, entry.asin, new Date());
+    if (view === 'today') rows = model.childrenTodayComparison(currentSnapshot, entry.asin, new Date());
     else if (view === 'history') rows = model.childRowsForDate(currentSnapshot, entry.asin, entry.date).map(row =>
       row.data || { asin: row.asin, units: null, sales_amount: null, orders_count: null });
     else rows = model.childrenPeriodRows(currentSnapshot, entry.asin);
@@ -279,16 +274,15 @@
   }
   function pageState(prefix, count, page, message) {
     const pages = Math.max(1, Math.ceil(count / PAGE_SIZE));
-    $(`${prefix}Count`).textContent = message || `共 ${fmt(count)} ${prefix === 'today' || historyMode === 'summary' ? `个 ${dimensionLabel()}${dimension === 'parent' ? '分组（含未识别子 ASIN）' : ''}` : `条日期 + ${dimensionLabel()}明细`}，每页 ${PAGE_SIZE} 条 · 导出包含当前筛选的全部记录`;
+    $(`${prefix}Count`).textContent = message || `共 ${fmt(count)} ${prefix === 'today' ? `个 ${dimensionLabel()}${dimension === 'parent' ? '分组（含未识别子 ASIN）' : ''}` : `条日期 + ${dimensionLabel()}明细`}，每页 ${PAGE_SIZE} 条 · 导出包含当前筛选的全部记录`;
     $(`${prefix}PageInfo`).textContent = message ? '—' : `第 ${page + 1} / ${pages} 页`;
     $(`${prefix}PrevBtn`).disabled = !!message || page === 0;
     $(`${prefix}NextBtn`).disabled = !!message || page >= pages - 1;
   }
 
-  function historySource() { return model.historyWindow(currentSnapshot, historyDays, dimension); }
   function historyFilteredRows() {
-    const source = historyMode === 'summary' ? historySource().rows : dailyAllRows;
-    const date = historyMode === 'daily' ? $('dailyDateFilter').value : '';
+    const source = dailyAllRows;
+    const date = $('dailyDateFilter').value;
     const query = $('dailyAsinFilter').value.trim().toUpperCase();
     return source.filter(row => row && typeof row.asin === 'string' &&
       (!date || row.date === date) && (!query || row.asin.toUpperCase().includes(query)));
@@ -311,7 +305,7 @@
     if (metric === 'sales_amount' && row) appendPriceFlags(container, row);
   }
   function renderTodaySummary() {
-    const today = comparison?.today || model.beijingDate();
+    const today = comparison?.today || model.pacificDate();
     const yesterday = comparison?.yesterday || model.previousDate(today);
     const parentAvailable = model.dimensionRows(currentSnapshot, 'parent').available;
     const todaySummary = model.dailySummary(currentSnapshot, today);
@@ -337,31 +331,18 @@
       : '蓝色为今日，橙色为昨日。汇总范围为全店已识别商品；ASIN 搜索只筛选下方列表。';
   }
   function renderHistorySummary() {
-    const period = currentSnapshot?.payload?.period;
     const source = model.historyWindow(currentSnapshot, historyDays);
-    let summary;
-    let productTotal = null;
-    if (historyMode === 'summary') {
-      summary = source.summary;
-      productTotal = productCount(summary, source.parentAvailable);
-      $('historyScopeText').textContent = source.period
-        ? `近 ${historyDays} 天 · ${source.period.start_date} 至 ${source.period.end_date}（北京时间）· 全店已识别商品汇总`
-        : `近 ${historyDays} 天 · 全店已识别商品汇总`;
-      $('historyCoverage').textContent = !source.available ? '历史汇总尚未发布，请先安装后台更新并发布数据；不以近 15 天代替所选期间。'
+    const summary = source.summary;
+    const productTotal = productCount(summary, source.parentAvailable);
+    $('historyScopeText').textContent = source.period
+      ? `近 ${historyDays} 天 · ${source.period.start_date} 至 ${source.period.end_date}（美国太平洋时间）· 全店已识别商品汇总`
+      : `近 ${historyDays} 天 · 全店已识别商品汇总（美国太平洋时间）`;
+    $('historyCoverage').textContent = !model.reportTimezoneMatches(currentSnapshot)
+      ? '后台尚未按美国太平洋时间发布数据，等待时区迁移完成。'
+      : !source.available ? '历史汇总尚未发布，请先安装后台更新并发布数据；不以近 15 天代替所选期间。'
         : source.recorded_start_date && source.recorded_end_date
-          ? `数据库现有记录：${source.recorded_start_date} 至 ${source.recorded_end_date}，所选期间有记录 ${fmt(source.days_with_records)} 天。仅统计已入库数据，尚未导入的历史日期不代表零销量。ASIN 搜索只筛选下方列表。`
+          ? `数据库现有记录：${source.recorded_start_date} 至 ${source.recorded_end_date}，所选期间有记录 ${fmt(source.days_with_records)} 天。仅统计已入库数据，尚未导入的历史日期不代表零销量。下方日期和 ASIN 筛选不改变此看板。`
           : '所选期间暂无已入库销售记录。未导入的历史日期不代表零销量。';
-    } else {
-      const date = $('dailyDateFilter').value;
-      summary = model.dailyScopeSummary(currentSnapshot, date);
-      const scopeRows = dailyAllRows.filter(row => !date || row.date === date);
-      productTotal = summary && model.dimensionRows(currentSnapshot, dimension).available
-        ? new Set(scopeRows.map(row => `${dimension === 'parent' && row.group_type === 'parent' ? 'parent' : 'child'}:${row.asin}`)).size : null;
-      $('historyScopeText').textContent = `${date || `${period?.start_date || '—'} 至 ${period?.end_date || '—'}`}（北京时间）· 每日明细范围的全店汇总`;
-      $('historyCoverage').textContent = summary
-        ? '当前为近 15 天每日明细。日期选择同时改变看板范围；ASIN 搜索只筛选下方列表。订单量使用全店每日去重汇总。'
-        : '该日期范围的全店汇总尚未发布，卡片显示“—”；下方保留可读取的明细。';
-    }
     summaryCard('historyUnits', summary, 'units');
     summaryCard('historyAmount', summary, 'sales_amount');
     summaryCard('historyOrders', summary, 'orders_count');
@@ -374,35 +355,25 @@
   function renderDailyTable() {
     const body = $('dailyRows');
     body.replaceChildren();
-    const source = historySource();
     const filtered = historyFilteredRows();
-    if (historyMode === 'summary') filtered.sort((a, b) => (Number(b.units) || 0) - (Number(a.units) || 0) || a.asin.localeCompare(b.asin));
-    const message = historyMode === 'daily' ? dailyMessage : !source.available
-      ? dimension === 'parent' && model.historyWindow(currentSnapshot, historyDays).available
-        ? '所选期间的父 ASIN 汇总尚未发布，请先查看子 ASIN 数据。' : '历史汇总尚未发布，请等待后台数据更新。' : '';
-    $('dailyDateControl').hidden = historyMode !== 'daily';
-    $('historyRangeGroup').hidden = historyMode !== 'summary';
-    $('historyDateHeading').textContent = historyMode === 'summary' ? '统计期间' : '日期';
-    $('dailyHeading').textContent = `${historyMode === 'summary' ? `近 ${historyDays} 天` : '每日'}${dimensionLabel()}销售${historyMode === 'summary' ? '汇总' : '明细'}`;
-    $('dailyDescription').textContent = historyMode === 'summary'
-      ? '每个 ASIN 一行，按所选期间累计销量排序；同一分组订单量按订单号去重。'
-      : '近 15 天，按日期和 ASIN 汇总；多个 SKU 合并显示。';
+    const message = dailyMessage;
+    $('dailyHeading').textContent = `每日${dimensionLabel()}销售明细`;
+    $('dailyDescription').textContent = '近 15 天，按美国太平洋日期和 ASIN 汇总；多个 SKU 合并显示。';
     dailyPage = Math.min(dailyPage, Math.max(0, Math.ceil(filtered.length / PAGE_SIZE) - 1));
     const visible = filtered.slice(dailyPage * PAGE_SIZE, (dailyPage + 1) * PAGE_SIZE);
     if (message || !visible.length) emptyRow(body, message || '当前筛选条件下没有明细记录', 5);
     else for (const row of visible) {
       const tr = document.createElement('tr');
-      addCell(tr, historyMode === 'summary' ? `${source.period?.start_date || '—'} 至 ${source.period?.end_date || '—'}` : row.date || '—');
+      addCell(tr, row.date || '—');
       productCell(tr, row);
       addCell(tr, fmt(row.units), 'sales-number');
       amountCell(tr, row);
       addCell(tr, fmt(row.orders_count), 'sales-number');
       body.appendChild(tr);
-      addChildrenExpansion(body, tr, row, historyMode === 'summary' ? 'historySummary' : 'history');
+      addChildrenExpansion(body, tr, row, 'history');
     }
     pageState('daily', filtered.length, dailyPage, message);
     $('historyExportBtn').disabled = !!message || !filtered.length;
-    renderHistorySummary();
   }
   function setDailyRows(rows, message = '') {
     dailyAllRows = Array.isArray(rows) ? rows.filter(row => row && typeof row.asin === 'string' && typeof row.date === 'string') : [];
@@ -431,8 +402,8 @@
     const query = $('todayAsinFilter').value.trim().toUpperCase();
     const rows = todayFilteredRows();
     todayPage = Math.min(todayPage, Math.max(0, Math.ceil(rows.length / PAGE_SIZE) - 1));
-    $('todayDate').textContent = comparison?.today || model.beijingDate();
-    $('yesterdayDate').textContent = comparison?.yesterday || model.previousDate(model.beijingDate());
+    $('todayDate').textContent = comparison?.today || model.pacificDate();
+    $('yesterdayDate').textContent = comparison?.yesterday || model.previousDate(model.pacificDate());
     const missingDates = [];
     if (comparison && !comparison.todayAvailable) missingDates.push(`今日（${comparison.today}）`);
     if (comparison && !comparison.yesterdayAvailable) missingDates.push(`昨日（${comparison.yesterday}）`);
@@ -499,19 +470,14 @@
   function renderDimension() {
     const data = currentSnapshot?.payload || {};
     const source = model.dimensionRows(currentSnapshot, dimension);
-    const inHistorySummary = location.hash === '#history' && historyMode === 'summary';
-    const parentAvailable = inHistorySummary ? model.historyWindow(currentSnapshot, historyDays, 'parent').available
-      : model.dimensionRows(currentSnapshot, 'parent').available;
+    const parentAvailable = model.dimensionRows(currentSnapshot, 'parent').available;
     $('dimensionChild').setAttribute('aria-pressed', String(dimension === 'child'));
     $('dimensionParent').setAttribute('aria-pressed', String(dimension === 'parent'));
     $('dimensionParent').disabled = !parentAvailable;
     const status = $('dimensionStatus');
     status.classList.toggle('warn', !parentAvailable);
-    if (!parentAvailable) status.textContent = inHistorySummary ? '所选期间的父 ASIN 汇总尚未发布' : '父 ASIN 关系尚未同步';
-    else if (inHistorySummary && dimension === 'parent') {
-      const summary = model.historyWindow(currentSnapshot, historyDays).summary;
-      status.textContent = `近 ${historyDays} 天：${fmt(summary?.mapped_parent_asins_count)} 个已匹配父 ASIN，${fmt(summary?.unknown_child_asins_count)} 个未匹配子 ASIN 单独展示；同组订单按订单号去重。`;
-    }
+    if (!model.reportTimezoneMatches(currentSnapshot)) status.textContent = '等待后台按美国太平洋时间发布数据';
+    else if (!parentAvailable) status.textContent = '父 ASIN 关系尚未同步';
     else if (dimension === 'parent') {
       const coverage = data.parent_coverage_15d;
       status.textContent = coverage
@@ -540,12 +506,13 @@
     }
     $('todayNote').textContent = `“—”表示该日期尚无可用发布数据；已覆盖日期中某${label}没有销售记录时显示 0。同一日期、同一${label}的订单按订单号去重。${dimension === 'parent' ? '图片展示代表变体；未识别父 ASIN 的商品单独显示。' : ''}`;
     renderRanking(source.ranking);
-    const message = source.available ? '' : dimension === 'parent'
+    const message = !model.reportTimezoneMatches(currentSnapshot) ? '后台时区待迁移：尚无美国太平洋时间统计数据。' : source.available ? '' : dimension === 'parent'
       ? '父 ASIN 关系尚未同步，请先查看子 ASIN 数据。'
       : '本次发布尚未提供每日明细，请等待数据更新。';
     setDailyRows(source.daily, message);
     comparison = model.todayComparison(currentSnapshot, new Date(), dimension);
     renderToday();
+    renderHistorySummary();
   }
   function render(snapshot) {
     const data = snapshot?.payload;
@@ -553,12 +520,25 @@
     currentSnapshot = snapshot;
     expandedChildren.clear();
     productImages = data.product_images && typeof data.product_images === 'object' ? data.product_images : {};
+    if (!model.reportTimezoneMatches(snapshot)) {
+      $('snapshotTime').textContent = `数据发布时间：${time(snapshot.generated_at)}`;
+      $('periodText').textContent = '统计日期：等待后台按美国太平洋时间重新发布';
+      for (const id of ['totalOrders', 'coverageRate', 'pendingOrders', 'paymentPending', 'identifiedOrders',
+        'allPending', 'allFailed', 'lastSync', 'priceCoverage']) $(id).textContent = '—';
+      $('coverageFill').style.width = '0%';
+      renderTrend([]);
+      $('unitsSold').textContent = '—';
+      $('trendFoot').textContent = '等待按美国太平洋时间发布的趋势数据';
+      renderDimension();
+      setNotice(`后台时区待迁移：当前快照${data.report_timezone ? `使用 ${data.report_timezone}` : '未提供统计时区'}。请等待按 America/Los_Angeles 重新发布；旧日期数据不会当作美国太平洋时间显示。`, 'warn');
+      return;
+    }
     const coverage = data.coverage_15d || {};
     const total = Number(coverage.total_orders) || 0;
     const identified = Number(coverage.identified_orders) || 0;
     const ratio = total ? Math.min(100, Math.max(0, identified / total * 100)) : 0;
     $('snapshotTime').textContent = `数据发布时间：${time(snapshot.generated_at)}`;
-    $('periodText').textContent = `统计日期：${data.period?.start_date || '—'} 至 ${data.period?.end_date || '—'}（北京时间）`;
+    $('periodText').textContent = `统计日期：${data.period?.start_date || '—'} 至 ${data.period?.end_date || '—'}（美国太平洋时间）`;
     $('totalOrders').textContent = fmt(total);
     $('coverageRate').textContent = total ? `${ratio.toFixed(1)}%` : '—';
     $('pendingOrders').textContent = fmt(coverage.item_pending_orders ?? coverage.pending_orders);
@@ -633,10 +613,10 @@
   function exportHistory() {
     const rows = historyFilteredRows();
     if ($('historyExportBtn').disabled || !rows.length) return;
-    const period = historyMode === 'summary' ? historySource().period : currentSnapshot?.payload?.period;
+    const period = currentSnapshot?.payload?.period;
     try {
-      downloadCsv(model.historyCsv(rows, period, dimension, historyMode),
-        `sales-history-${historyMode === 'summary' ? `${historyDays}d` : $('dailyDateFilter').value || '15d-daily'}-${dimension}.csv`);
+      downloadCsv(model.historyCsv(rows, period, dimension, 'daily'),
+        `sales-history-${$('dailyDateFilter').value || '15d-daily'}-${dimension}.csv`);
     } catch (error) { setNotice(`导出失败：${error?.message || '浏览器未能创建下载文件'}`, 'error'); }
   }
 
@@ -653,19 +633,11 @@
     renderDimension();
   });
   $('dailyDateFilter').addEventListener('change', () => { dailyPage = 0; renderDailyTable(); });
-  $('historyMode').addEventListener('change', () => {
-    historyMode = $('historyMode').value === 'daily' ? 'daily' : 'summary';
-    dailyPage = 0;
-    expandedChildren.clear();
-    renderDimension();
-  });
   for (const button of document.querySelectorAll('[data-history-days]')) button.addEventListener('click', () => {
     historyDays = Number(button.dataset.historyDays);
     if (!model.HISTORY_DAYS.includes(historyDays)) historyDays = 7;
-    dailyPage = 0;
-    expandedChildren.clear();
     for (const item of document.querySelectorAll('[data-history-days]')) item.setAttribute('aria-pressed', String(Number(item.dataset.historyDays) === historyDays));
-    renderDimension();
+    renderHistorySummary();
   });
   $('todayExportBtn').addEventListener('click', exportToday);
   $('historyExportBtn').addEventListener('click', exportHistory);

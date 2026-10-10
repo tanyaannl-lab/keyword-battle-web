@@ -1,14 +1,16 @@
 (function (root) {
   'use strict';
 
+  const REPORT_TIMEZONE = 'America/Los_Angeles';
+  const reportTimezoneMatches = snapshot => snapshot?.payload?.report_timezone === REPORT_TIMEZONE;
   const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
   const count = value => Number.isSafeInteger(Number(value)) && Number(value) >= 0 ? Number(value) : null;
 
-  function beijingDate(value = new Date()) {
+  function pacificDate(value = new Date()) {
     const date = value instanceof Date ? value : new Date(value);
     if (!Number.isFinite(date.getTime())) return null;
     const parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit'
+      timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit'
     }).formatToParts(date);
     const read = type => parts.find(part => part.type === type).value;
     return `${read('year')}-${read('month')}-${read('day')}`;
@@ -44,6 +46,7 @@
 
   function dimensionRows(snapshot, dimension = 'child') {
     const data = snapshot?.payload || {};
+    if (!reportTimezoneMatches(snapshot)) return { available: false, daily: [], ranking: [] };
     if (dimension === 'parent') {
       const available = data.parent_asin_available === true && Array.isArray(data.parent_daily_rows) && Array.isArray(data.parent_ranking);
       return { available, daily: available ? data.parent_daily_rows : [], ranking: available ? data.parent_ranking : [] };
@@ -53,8 +56,8 @@
 
   function coveredDate(snapshot, date) {
     const data = snapshot?.payload || {};
-    const publishedDay = snapshot?.generated_at ? beijingDate(snapshot.generated_at) : null;
-    return Array.isArray(data.daily_rows) && DATE_PATTERN.test(String(date)) &&
+    const publishedDay = snapshot?.generated_at ? pacificDate(snapshot.generated_at) : null;
+    return reportTimezoneMatches(snapshot) && Array.isArray(data.daily_rows) && DATE_PATTERN.test(String(date)) &&
       DATE_PATTERN.test(String(data.period?.start_date)) && DATE_PATTERN.test(String(data.period?.end_date)) &&
       data.period.start_date <= date && date <= data.period.end_date && !!publishedDay && date <= publishedDay;
   }
@@ -63,7 +66,7 @@
     const data = snapshot?.payload || {};
     const key = String(parentAsin || '').trim().toUpperCase();
     const mapping = data.parent_child_asins;
-    const available = data.parent_children_available === true && mapping && typeof mapping === 'object' &&
+    const available = reportTimezoneMatches(snapshot) && data.parent_children_available === true && mapping && typeof mapping === 'object' &&
       !Array.isArray(mapping) && Object.hasOwn(mapping, key) && Array.isArray(mapping[key]);
     return { available: !!available, asins: available ? [...new Set(mapping[key].filter(asin =>
       typeof asin === 'string' && /^[A-Z0-9]{10}$/.test(asin) && asin !== key))].sort() : [] };
@@ -84,7 +87,7 @@
   }
 
   function childrenTodayComparison(snapshot, parentAsin, now = new Date()) {
-    const today = beijingDate(now);
+    const today = pacificDate(now);
     const yesterday = previousDate(today);
     const yesterdayRows = new Map(childRowsForDate(snapshot, parentAsin, yesterday).map(row => [row.asin, row.data]));
     return childRowsForDate(snapshot, parentAsin, today).map(row => ({ asin: row.asin,
@@ -129,9 +132,9 @@
 
   function todayComparison(snapshot, now = new Date(), dimension = 'child') {
     const data = snapshot?.payload || {};
-    const today = beijingDate(now);
+    const today = pacificDate(now);
     const yesterday = previousDate(today);
-    const publishedDay = snapshot?.generated_at ? beijingDate(snapshot.generated_at) : null;
+    const publishedDay = snapshot?.generated_at ? pacificDate(snapshot.generated_at) : null;
     const source = dimensionRows(snapshot, dimension);
     const rowsAvailable = source.available;
     const available = date => rowsAvailable && DATE_PATTERN.test(String(data.period?.start_date)) &&
@@ -165,8 +168,8 @@
   const HISTORY_DAYS = [7, 30, 90, 150, 240, 360];
   function historyWindow(snapshot, days = 7, dimension = 'child') {
     const history = snapshot?.payload?.sales_history;
-    const window = HISTORY_DAYS.includes(Number(days)) ? history?.windows?.[String(days)] : null;
-    const available = history?.available === true && !!window && Array.isArray(window.child_rows) &&
+    const window = reportTimezoneMatches(snapshot) && HISTORY_DAYS.includes(Number(days)) ? history?.windows?.[String(days)] : null;
+    const available = reportTimezoneMatches(snapshot) && history?.available === true && !!window && Array.isArray(window.child_rows) &&
       (dimension !== 'parent' || window.parent_asin_available === true && Array.isArray(window.parent_rows));
     return { available: !!available, parentAvailable: window?.parent_asin_available === true,
       period: window?.period || null, summary: available ? window.summary || null : null,
@@ -258,10 +261,10 @@
     return '\uFEFF' + [headers, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n') + '\r\n';
   }
   const priceBasis = row => !row ? '' : priceFlags(row).map(flag => flag.label).join('；') || '实际金额';
-  function historyCsv(rows, period, dimension, mode = 'summary') {
-    return csvDocument(['开始日期', '结束日期', '统计方式', '统计维度', '分组类型', 'ASIN', '父ASIN', '商品标题',
+  function historyCsv(rows, period, dimension, mode = 'daily') {
+    return csvDocument(['开始日期', '结束日期', '统计时区', '统计方式', '统计维度', '分组类型', 'ASIN', '父ASIN', '商品标题',
       '销量', '销售额', '币种', '订单量', '子ASIN数', '估算明细数', '缺价明细数', '待核价明细数', '金额口径'], rows.map(row => [
-      mode === 'daily' ? row.date : period?.start_date, mode === 'daily' ? row.date : period?.end_date,
+      mode === 'daily' ? row.date : period?.start_date, mode === 'daily' ? row.date : period?.end_date, REPORT_TIMEZONE,
       mode === 'daily' ? '每日明细' : '期间汇总', dimension === 'parent' ? '父ASIN' : '子ASIN',
       row.group_type === 'parent' ? '父ASIN' : dimension === 'parent' ? '未匹配子ASIN' : '子ASIN',
       row.asin, row.parent_asin, row.title, row.units, row.sales_amount, row.currency, row.orders_count,
@@ -272,15 +275,15 @@
     const metrics = ['销量', '销售额', '币种', '订单量', '估算明细数', '缺价明细数', '待核价明细数', '金额口径'];
     const values = row => row ? [row.units, row.sales_amount, row.currency, row.orders_count, row.estimated_rows,
       row.missing_price_rows, row.legacy_unknown_price_rows, priceBasis(row)] : Array(metrics.length).fill(null);
-    return csvDocument(['今日日期', '昨日日期', '统计维度', '分组类型', 'ASIN', '父ASIN',
+    return csvDocument(['今日日期', '昨日日期', '统计时区', '统计维度', '分组类型', 'ASIN', '父ASIN',
       ...metrics.map(label => `今日${label}`), ...metrics.map(label => `昨日${label}`)], rows.map(row => [
-      dates?.today, dates?.yesterday, dimension === 'parent' ? '父ASIN' : '子ASIN',
+      dates?.today, dates?.yesterday, REPORT_TIMEZONE, dimension === 'parent' ? '父ASIN' : '子ASIN',
       row.group_type === 'parent' ? '父ASIN' : dimension === 'parent' ? '未匹配子ASIN' : '子ASIN',
       row.asin, row.parent_asin, ...values(row.today), ...values(row.yesterday)
     ]));
   }
 
-  const model = { beijingDate, previousDate, imageUrl, priceFlags, dimensionRows, todayComparison,
+  const model = { REPORT_TIMEZONE, reportTimezoneMatches, pacificDate, previousDate, imageUrl, priceFlags, dimensionRows, todayComparison,
     parentChildren, childRowsForDate, childrenTodayComparison, childrenPeriodRows,
     HISTORY_DAYS, historyWindow, historyParentChildren, historyChildrenRows, dailySummary,
     sumSummaries, dailyScopeSummary, csvCell, csvDocument, historyCsv, todayCsv };

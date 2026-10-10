@@ -124,6 +124,7 @@
 .sales-summary-kpis .sales-pair-side{align-items:flex-start}
 .sales-summary-kpis .sales-price-badges{justify-content:flex-start;letter-spacing:normal}
 .sales-summary-status{font-size:12px;line-height:1.65;color:var(--muted);margin:-3px 0 18px;padding:0 2px}
+.sales-history-table-scope{border-left:3px solid #a8c3f1;padding:8px 12px;margin-top:-7px;border-radius:0 6px 6px 0;background:#f4f8ff;color:#456488}
 .sales-history-controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .sales-history-controls label{display:grid;gap:5px;font-size:12px;color:var(--muted)}
 .sales-history-controls select{height:35px;padding:0 10px;border:1px solid var(--line-strong);border-radius:8px;background:#fff;font:inherit;color:var(--text)}
