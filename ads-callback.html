@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex,nofollow">
+  <title>广告账户授权 | MCCARE Ads Tool</title>
+  <style>
+    *{box-sizing:border-box}body{margin:0;background:#f5f7f8;color:#192b34;font:16px/1.7 system-ui,-apple-system,"Segoe UI",sans-serif}.wrap{max-width:700px;margin:56px auto;padding:0 20px}.brand{font-size:12px;font-weight:700;letter-spacing:.09em;color:#536570;margin:0 0 18px}.card{padding:32px;background:#fff;border:1px solid #dce4e8;border-radius:14px}h1{font-size:28px;line-height:1.3;margin:0 0 14px}p{margin:0 0 16px}.muted{color:#576a75;font-size:14px}label{display:block;font-weight:600;margin:22px 0 8px}input,textarea{display:block;width:100%;padding:12px;border:1px solid #b7c7ce;border-radius:7px;font:14px/1.6 ui-monospace,monospace;overflow-wrap:anywhere}textarea{min-height:120px;resize:vertical}button{font:inherit;background:#146359;color:#fff;border:0;border-radius:7px;padding:11px 20px;margin:18px 8px 0 0;cursor:pointer}button.secondary{background:#eaf0f2;color:#243c48}button:disabled{opacity:.55;cursor:not-allowed}.notice{padding:12px 16px;background:#edf6f2;border-radius:7px;font-size:14px;margin-bottom:20px}.error{background:#fff1ee;color:#7e2f22}code{overflow-wrap:anywhere}.foot{font-size:12px;color:#6b7a83;margin-top:18px}[hidden]{display:none!important}@media(max-width:500px){.wrap{margin:24px auto}.card{padding:24px}}
+  </style>
+</head>
+<body>
+<main class="wrap">
+  <p class="brand">MCCARE COMMERCE LIMITED · MCCARE Ads Tool</p>
+  <div class="card">
+    <h1 id="heading">连接 Amazon 广告账户</h1>
+    <div id="message" role="status" hidden></div>
+    <section id="start-panel">
+      <p>完成一次账户授权后，在服务器上保存令牌，用于自动读取广告账户和报表。</p>
+      <div class="notice">先在 Amazon 的「允许返回 URL」登记本页面地址，并提前打开服务器上的授权脚本。</div>
+      <p class="muted">本页回调地址：<br><code id="redirect-label"></code></p>
+      <form id="auth-form">
+        <label for="client-id">LWA Client ID（客户端 ID）</label>
+        <input id="client-id" autocomplete="off" spellcheck="false" placeholder="amzn1.application-oa2-client.…" required>
+        <p class="muted">这里只填 Client ID。Client Secret 只在服务器终端输入。</p>
+        <button id="start-button" type="submit">前往 Amazon 授权</button>
+      </form>
+    </section>
+    <section id="result-panel" hidden>
+      <p>授权返回成功，浏览器已核对本次请求。将下方的一次性授权码粘贴到服务器授权脚本中。</p>
+      <label for="auth-code">一次性授权码</label>
+      <textarea id="auth-code" readonly autocomplete="off" spellcheck="false"></textarea>
+      <p class="muted">请在 5 分钟内使用。授权码只保留在当前页面内存中，未写入浏览器存储。</p>
+      <button id="copy-button" type="button">复制授权码</button>
+      <button id="clear-button" class="secondary" type="button">已完成，清除页面</button>
+      <p class="muted" id="copy-status" role="status"></p>
+    </section>
+    <section id="restart-panel" hidden>
+      <button id="restart-button" type="button">重新开始授权</button>
+    </section>
+  </div>
+  <p class="foot">本页仅处理账户授权，不读取广告报表，不调用外部 AI 服务。</p>
+</main>
+<script>
+'use strict';
+(() => {
+  const KEY = 'mccare_ads_oauth_pending_v1';
+  const EXPECTED_ORIGIN = 'https://www.gogoleleh.com';
+  const REDIRECT_URI = EXPECTED_ORIGIN + '/ads-callback.html';
+  const MAX_AGE = 30 * 60 * 1000;
+  const $ = id => document.getElementById(id);
+  const params = new URLSearchParams(location.search);
+  // Strip credential-bearing URL parameters before any further page interaction.
+  if (location.search || location.hash) history.replaceState(null, '', location.pathname);
+  $('redirect-label').textContent = REDIRECT_URI;
+  function fail(message) {
+    $('start-panel').hidden = true;
+    $('result-panel').hidden = true;
+    $('restart-panel').hidden = false;
+    $('message').hidden = false;
+    $('message').className = 'notice error';
+    $('message').textContent = message;
+  }
+  $('restart-button').addEventListener('click', () => location.replace(REDIRECT_URI));
+  if (location.origin !== EXPECTED_ORIGIN || location.pathname !== '/ads-callback.html') {
+    fail('请将本文件发布到 https://www.gogoleleh.com/ads-callback.html 后再开始授权。');
+    return;
+  }
+  const isReturn = params.has('code') || params.has('state') || params.has('error');
+  if (isReturn) {
+    let pending;
+    try { pending = JSON.parse(sessionStorage.getItem(KEY) || 'null'); sessionStorage.removeItem(KEY); }
+    catch (_) { fail('无法读取本次请求，请在同一个浏览器标签页重新开始授权。'); return; }
+    const age = pending ? Date.now() - pending.createdAt : NaN;
+    if (!pending || pending.redirectUri !== REDIRECT_URI || !Number.isFinite(age) || age < 0 || age > MAX_AGE || params.getAll('state').length !== 1 || params.get('state') !== pending.state) {
+      fail('本次授权请求无法验证或已超时。请在本页面重新发起授权，不要使用他人发来的回调链接。');
+      return;
+    }
+    if (params.has('error')) { fail('Amazon 未完成本次授权。请重新开始并核对登录账户和应用权限。'); return; }
+    const code = params.get('code');
+    if (params.getAll('code').length !== 1 || !code || code.length > 8192 || /[\u0000-\u001f\u007f]/.test(code)) {
+      fail('没有收到有效的授权码，请重新授权。'); return;
+    }
+    $('heading').textContent = '账户授权已返回';
+    $('start-panel').hidden = true;
+    $('result-panel').hidden = false;
+    $('auth-code').value = code;
+    $('copy-button').addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText($('auth-code').value); $('copy-status').textContent = '已复制，请立即粘贴到服务器终端。'; }
+      catch (_) { $('auth-code').focus(); $('auth-code').select(); $('copy-status').textContent = '请手动复制选中的授权码。'; }
+    });
+    $('clear-button').addEventListener('click', () => { $('auth-code').value = ''; location.replace(REDIRECT_URI); });
+    window.addEventListener('pagehide', () => { $('auth-code').value = ''; });
+    setTimeout(() => { $('auth-code').value = ''; fail('授权码已从页面清除。如未及时使用，请重新授权。'); }, 5 * 60 * 1000);
+    return;
+  }
+  $('auth-form').addEventListener('submit', event => {
+    event.preventDefault();
+    const clientId = $('client-id').value.trim();
+    if (!/^amzn1\.application-oa2-client\.[A-Za-z0-9_-]+$/.test(clientId)) { $('client-id').setCustomValidity('请填写完整的 LWA Client ID。'); $('client-id').reportValidity(); return; }
+    $('client-id').setCustomValidity('');
+    const bytes = new Uint8Array(32); crypto.getRandomValues(bytes);
+    const state = Array.from(bytes, x => x.toString(16).padStart(2, '0')).join('');
+    try { sessionStorage.setItem(KEY, JSON.stringify({state, clientId, redirectUri: REDIRECT_URI, createdAt: Date.now()})); }
+    catch (_) { fail('浏览器禁用了会话存储，无法安全核对本次授权，请允许会话存储后重试。'); return; }
+    const url = new URL('https://www.amazon.com/ap/oa');
+    url.search = new URLSearchParams({client_id: clientId, scope: 'advertising::campaign_management', response_type: 'code', redirect_uri: REDIRECT_URI, state}).toString();
+    $('start-button').disabled = true;
+    location.assign(url.href);
+  });
+  $('client-id').addEventListener('input', () => $('client-id').setCustomValidity(''));
+})();
+</script>
+</body>
+</html>
