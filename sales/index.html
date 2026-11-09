@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>销量观察｜首页｜关键词作战工具</title>
   <link rel="stylesheet" href="../assets/styles.css">
-  <link rel="stylesheet" href="../assets/sales.css?v=20261010-pacific1">
+  <link rel="stylesheet" href="../assets/sales.css?v=20261109-sp-spend1">
 </head>
 <body>
 <div class="shell" id="appShell" hidden>
@@ -104,11 +104,12 @@
         </div>
         <div class="sales-comparison-legend"><span class="sales-today">斜杠前：今日 <strong id="todayDate">—</strong></span><span class="sales-legend-slash" aria-hidden="true">/</span><span class="sales-yesterday">斜杠后：昨日 <strong id="yesterdayDate">—</strong></span><span class="sales-comparison-partial">今日为截至数据发布时间的累计值</span></div>
         <div class="sales-comparison-status" id="todayStatus" role="status"></div>
+        <p class="sales-ads-status" id="todayAdsStatus" role="status">SP 广告花费：正在加载…</p>
         <div class="sales-detail-summary" id="todayCount">正在加载明细…</div>
         <div class="table-scroll">
           <table class="sales-today-table">
-            <thead><tr><th scope="col" id="todayAsinHeading">商品 / 子 ASIN</th><th scope="col" class="sales-number">销量（件）<small>今日 / 昨日</small></th><th scope="col" class="sales-number">销售额<small>今日 / 昨日</small></th><th scope="col" class="sales-number">订单量<small>今日 / 昨日</small></th></tr></thead>
-            <tbody id="todayRows"><tr><td class="empty" colspan="4">正在加载…</td></tr></tbody>
+            <thead><tr><th scope="col" id="todayAsinHeading">商品 / 子 ASIN</th><th scope="col" class="sales-number">销量（件）<small>今日 / 昨日</small></th><th scope="col" class="sales-number">销售额<small>今日 / 昨日</small></th><th scope="col" class="sales-number">订单量<small>今日 / 昨日</small></th><th scope="col" class="sales-number sales-sp-ad-cost">SP 广告花费（USD）<small>今日 / 昨日</small></th></tr></thead>
+            <tbody id="todayRows"><tr><td class="empty" colspan="5">正在加载…</td></tr></tbody>
           </table>
         </div>
         <div class="sales-detail-pager"><span id="todayPageInfo">—</span><div><button class="btn btn-secondary btn-sm" id="todayPrevBtn" disabled>上一页</button><button class="btn btn-secondary btn-sm" id="todayNextBtn" disabled>下一页</button></div></div>
@@ -144,12 +145,12 @@
         <div class="sales-detail-summary" id="dailyCount">正在加载明细…</div>
         <div class="table-scroll">
           <table class="sales-detail-table">
-            <thead><tr><th scope="col" id="historyDateHeading">日期</th><th scope="col" id="dailyAsinHeading">商品 / 子 ASIN</th><th scope="col" class="sales-number">销量（件）</th><th scope="col" class="sales-number">销售额</th><th scope="col" class="sales-number">订单量</th></tr></thead>
-            <tbody id="dailyRows"><tr><td class="empty" colspan="5">正在加载…</td></tr></tbody>
+            <thead><tr><th scope="col" id="historyDateHeading">日期</th><th scope="col" id="dailyAsinHeading">商品 / 子 ASIN</th><th scope="col" class="sales-number">销量（件）</th><th scope="col" class="sales-number">销售额</th><th scope="col" class="sales-number">订单量</th><th scope="col" class="sales-number sales-sp-ad-cost">SP 广告花费（USD）</th></tr></thead>
+            <tbody id="dailyRows"><tr><td class="empty" colspan="6">正在加载…</td></tr></tbody>
           </table>
         </div>
         <div class="sales-detail-pager"><span id="dailyPageInfo">—</span><div><button class="btn btn-secondary btn-sm" id="dailyPrevBtn" disabled>上一页</button><button class="btn btn-secondary btn-sm" id="dailyNextBtn" disabled>下一页</button></div></div>
-        <div class="sales-note">销售额优先采用订单商品实际金额；缺价时按自家售价 × 订购数量估算。取消订单不计入销量、销售额和订单量。“有缺价”的金额尚未补齐。</div>
+        <div class="sales-note">销售额优先采用订单商品实际金额；缺价时按自家售价 × 订购数量估算。取消订单不计入销量、销售额和订单量。“有缺价”的金额尚未补齐。SP 广告花费按报表更新，待同步显示“—”。</div>
       </section>
     </div>
   </main>
@@ -159,7 +160,7 @@
 <script src="../assets/auth-client.js"></script>
 <script src="../assets/app.js"></script>
 <script src="../assets/sales-client.js"></script>
-<script src="../assets/sales-model.js?v=20261010-pacific1"></script>
-<script src="../assets/sales-page.js?v=20261010-pacific1"></script>
+<script src="../assets/sales-model.js?v=20261109-sp-spend1"></script>
+<script src="../assets/sales-page.js?v=20261109-sp-spend1"></script>
 </body>
 </html>

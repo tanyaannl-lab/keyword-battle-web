@@ -135,3 +135,9 @@
 .sales-export-btn{align-self:end;white-space:nowrap}
 #historyRangeGroup[hidden],#dailyDateControl[hidden]{display:none}
 @media(max-width:600px){.sales-summary-head{gap:12px}.sales-history-controls{width:100%;gap:10px}.sales-range-controls{width:100%}.sales-range-controls button{flex:1;min-width:48px;padding:8px}.sales-summary-kpis .sales-kpi-value{font-size:21px}.sales-summary-kpis .sales-pair{gap:6px}.sales-export-btn{align-self:end}}
+.sales-ads-status{margin:0;padding:9px 20px;background:#f7fafc;border-bottom:1px solid var(--line);color:var(--muted);font-size:12px;line-height:1.55}
+.sales-sp-ad-cost{white-space:nowrap}
+.sales-today-table{min-width:860px}
+.sales-detail-table{min-width:760px}
+.sales-child-table.sales-today-table{min-width:790px}
+@media(max-width:600px){.sales-ads-status{padding:8px 14px}}

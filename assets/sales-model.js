@@ -4,7 +4,10 @@
   const REPORT_TIMEZONE = 'America/Los_Angeles';
   const reportTimezoneMatches = snapshot => snapshot?.payload?.report_timezone === REPORT_TIMEZONE;
   const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+  const ASIN_PATTERN = /^[A-Z0-9]{10}$/;
   const count = value => Number.isSafeInteger(Number(value)) && Number(value) >= 0 ? Number(value) : null;
+  const spendCache = new WeakMap();
+  const record = value => value && typeof value === 'object' && !Array.isArray(value);
 
   function pacificDate(value = new Date()) {
     const date = value instanceof Date ? value : new Date(value);
@@ -62,14 +65,16 @@
       data.period.start_date <= date && date <= data.period.end_date && !!publishedDay && date <= publishedDay;
   }
 
-  function parentChildren(snapshot, parentAsin) {
+  function parentChildren(snapshot, parentAsin, includeAds = false) {
     const data = snapshot?.payload || {};
     const key = String(parentAsin || '').trim().toUpperCase();
     const mapping = data.parent_child_asins;
     const available = reportTimezoneMatches(snapshot) && data.parent_children_available === true && mapping && typeof mapping === 'object' &&
       !Array.isArray(mapping) && Object.hasOwn(mapping, key) && Array.isArray(mapping[key]);
+    const adsChildren = includeAds ? spAdsContext(snapshot)?.children.get(key) : null;
+    if (adsChildren?.length) return { available: true, asins: adsChildren };
     return { available: !!available, asins: available ? [...new Set(mapping[key].filter(asin =>
-      typeof asin === 'string' && /^[A-Z0-9]{10}$/.test(asin) && asin !== key))].sort() : [] };
+      typeof asin === 'string' && ASIN_PATTERN.test(asin) && asin !== key))].sort() : [] };
   }
 
   function zeroRow(date, asin) {
@@ -77,20 +82,129 @@
       estimated_rows: 0, missing_price_rows: 0, legacy_unknown_price_rows: 0 };
   }
 
-  function childRowsForDate(snapshot, parentAsin, date) {
-    const children = parentChildren(snapshot, parentAsin);
+  function unknownRow(date, asin) {
+    return { date, asin, units: null, orders_count: null, sales_amount: null, currency: 'USD',
+      estimated_rows: null, missing_price_rows: null, legacy_unknown_price_rows: null };
+  }
+
+  function spAdsContext(snapshot) {
+    if (!record(snapshot)) return null;
+    if (spendCache.has(snapshot)) return spendCache.get(snapshot);
+    const data = snapshot.payload;
+    const source = data?.sp_ads_spend;
+    if (!reportTimezoneMatches(snapshot) || source?.schema_version !== 1 || source.store !== 'MC' ||
+        source.marketplace !== 'US' || source.currency !== 'USD' || source.timezone !== REPORT_TIMEZONE ||
+        !record(source.days)) {
+      spendCache.set(snapshot, null);
+      return null;
+    }
+    const days = new Map();
+    for (const [date, day] of Object.entries(source.days)) {
+      if (!DATE_PATTERN.test(date) || day?.status !== 'complete' || !record(day.asin_cents) ||
+          !Object.entries(day.asin_cents).every(([asin, cents]) =>
+            ASIN_PATTERN.test(asin) && Number.isSafeInteger(cents) && cents >= 0)) continue;
+      days.set(date, day);
+    }
+    const parents = new Map();
+    const conflicts = new Set();
+    const add = (child, parent) => {
+      if (typeof child !== 'string' || typeof parent !== 'string' || !ASIN_PATTERN.test(child) ||
+          !ASIN_PATTERN.test(parent) || child === parent || conflicts.has(child)) return;
+      if (parents.has(child) && parents.get(child) !== parent) {
+        parents.delete(child);
+        conflicts.add(child);
+      } else parents.set(child, parent);
+    };
+    if (data.parent_children_available === true && record(data.parent_child_asins)) {
+      for (const [parent, asins] of Object.entries(data.parent_child_asins)) {
+        if (Array.isArray(asins)) for (const asin of asins) add(asin, parent);
+      }
+    }
+    if (record(source.parent_asins)) for (const [child, parent] of Object.entries(source.parent_asins)) add(child, parent);
+    const children = new Map();
+    for (const [child, parent] of parents) {
+      if (!children.has(parent)) children.set(parent, []);
+      children.get(parent).push(child);
+    }
+    for (const asins of children.values()) asins.sort();
+    const context = { days, parents, children };
+    spendCache.set(snapshot, context);
+    return context;
+  }
+
+  function spAdsDay(snapshot, date) {
+    return spAdsContext(snapshot)?.days.get(date) || null;
+  }
+
+  function spAdsCents(snapshot, date, asin, groupType = 'child', today = pacificDate()) {
+    const context = spAdsContext(snapshot);
+    const day = context?.days.get(date);
+    if (!day || typeof asin !== 'string' || !ASIN_PATTERN.test(asin)) return null;
+    const finalDay = day.provisional === false && date < today;
+    const children = groupType === 'parent' ? context.children.get(asin) : [asin];
+    if (!children?.length) return null;
+    let sum = 0;
+    let found = false;
+    for (const child of children) {
+      if (!Object.hasOwn(day.asin_cents, child)) continue;
+      found = true;
+      sum += day.asin_cents[child];
+      if (!Number.isSafeInteger(sum)) return null;
+    }
+    return found || finalDay ? sum : null;
+  }
+
+  const spAdsAmount = cents => Number.isSafeInteger(cents) && cents >= 0
+    ? `${Math.floor(cents / 100)}.${String(cents % 100).padStart(2, '0')}` : null;
+
+  function dailyRowsWithSpend(snapshot, dimension = 'child', today = pacificDate()) {
+    const data = snapshot?.payload || {};
+    const source = dimensionRows(snapshot, dimension);
+    const context = spAdsContext(snapshot);
+    if (!context?.days.size) return source.daily;
+    const key = (date, asin, group) => `${date}:${group}:${asin}`;
+    const rows = new Map(source.daily.filter(row => row && typeof row.asin === 'string').map(row => {
+      const group = row.group_type === 'parent' ? 'parent' : 'child';
+      return [key(row.date, row.asin, group), { ...row,
+        sp_ads_spend_cents: spAdsCents(snapshot, row.date, row.asin, group, today) }];
+    }));
+    for (const [date, day] of context.days) {
+      if (!DATE_PATTERN.test(String(data.period?.start_date)) || !DATE_PATTERN.test(String(data.period?.end_date)) ||
+          date < data.period.start_date || date > data.period.end_date || date > today) continue;
+      for (const [child, cents] of Object.entries(day.asin_cents)) {
+        if (!cents) continue;
+        const parent = dimension === 'parent' ? context.parents.get(child) : null;
+        const asin = parent || child;
+        const group = parent ? 'parent' : 'child';
+        const id = key(date, asin, group);
+        if (rows.has(id)) continue;
+        const row = source.available && coveredDate(snapshot, date) ? zeroRow(date, asin) : unknownRow(date, asin);
+        rows.set(id, { ...row, group_type: group, parent_asin: parent || null, image_asin: child,
+          child_asins_count: parent ? context.children.get(parent)?.length : null,
+          sp_ads_spend_cents: spAdsCents(snapshot, date, asin, group, today) });
+      }
+    }
+    return [...rows.values()];
+  }
+
+  function childRowsForDate(snapshot, parentAsin, date, today = pacificDate()) {
+    const children = parentChildren(snapshot, parentAsin, true);
     if (!children.available) return [];
     const available = coveredDate(snapshot, date);
     const daily = snapshot?.payload?.daily_rows || [];
     const byAsin = new Map(daily.filter(row => row && row.date === date).map(row => [row.asin, row]));
-    return children.asins.map(asin => ({ asin, data: available ? byAsin.get(asin) || zeroRow(date, asin) : null }));
+    return children.asins.map(asin => {
+      const cents = spAdsCents(snapshot, date, asin, 'child', today);
+      const row = available ? byAsin.get(asin) || zeroRow(date, asin) : cents === null ? null : unknownRow(date, asin);
+      return { asin, data: row ? { ...row, sp_ads_spend_cents: cents } : null };
+    });
   }
 
   function childrenTodayComparison(snapshot, parentAsin, now = new Date()) {
     const today = pacificDate(now);
     const yesterday = previousDate(today);
-    const yesterdayRows = new Map(childRowsForDate(snapshot, parentAsin, yesterday).map(row => [row.asin, row.data]));
-    return childRowsForDate(snapshot, parentAsin, today).map(row => ({ asin: row.asin,
+    const yesterdayRows = new Map(childRowsForDate(snapshot, parentAsin, yesterday, today).map(row => [row.asin, row.data]));
+    return childRowsForDate(snapshot, parentAsin, today, today).map(row => ({ asin: row.asin,
       today: row.data, yesterday: yesterdayRows.get(row.asin) || null })).sort((a, b) =>
       (count(b.today?.units) || 0) - (count(a.today?.units) || 0) || a.asin.localeCompare(b.asin));
   }
@@ -144,10 +258,10 @@
     const yesterdayAvailable = available(yesterday);
     const index = new Map();
     const zero = () => ({ units: 0, orders_count: 0, sales_amount: '0', currency: 'USD', estimated_rows: 0, missing_price_rows: 0, legacy_unknown_price_rows: 0 });
-    for (const row of source.daily) {
+    for (const row of dailyRowsWithSpend(snapshot, dimension, today)) {
       if (!row || typeof row.asin !== 'string' || !row.asin.trim()) continue;
       if (row.date !== today && row.date !== yesterday) continue;
-      if (!available(row.date)) continue;
+      if (!available(row.date) && row.sp_ads_spend_cents == null) continue;
       const asin = row.asin.trim().toUpperCase();
       const key = dimension === 'parent' ? `${row.group_type === 'parent' ? 'parent' : 'child'}:${asin}` : asin;
       if (!index.has(key)) index.set(key, { asin, group_type: row.group_type, parent_asin: row.parent_asin,
@@ -161,8 +275,15 @@
         entry.child_asins_count = row.child_asins_count;
       }
     }
+    for (const entry of index.values()) {
+      for (const [side, date] of [['today', today], ['yesterday', yesterday]]) {
+        const cents = spAdsCents(snapshot, date, entry.asin, entry.group_type, today);
+        if (entry[side] || cents !== null) entry[side] = { ...entry[side], sp_ads_spend_cents: cents };
+      }
+    }
     const rows = [...index.values()].sort((a, b) => (count(b.today?.units) || 0) - (count(a.today?.units) || 0) || a.asin.localeCompare(b.asin));
-    return { today, yesterday, todayAvailable, yesterdayAvailable, rows };
+    return { today, yesterday, todayAvailable, yesterdayAvailable, todayAds: spAdsDay(snapshot, today),
+      yesterdayAds: spAdsDay(snapshot, yesterday), rows };
   }
 
   const HISTORY_DAYS = [7, 30, 90, 150, 240, 360];
@@ -263,12 +384,14 @@
   const priceBasis = row => !row ? '' : priceFlags(row).map(flag => flag.label).join('；') || '实际金额';
   function historyCsv(rows, period, dimension, mode = 'daily') {
     return csvDocument(['开始日期', '结束日期', '统计时区', '统计方式', '统计维度', '分组类型', 'ASIN', '父ASIN', '商品标题',
-      '销量', '销售额', '币种', '订单量', '子ASIN数', '估算明细数', '缺价明细数', '待核价明细数', '金额口径'], rows.map(row => [
+      '销量', '销售额', '币种', '订单量', '子ASIN数', '估算明细数', '缺价明细数', '待核价明细数', '金额口径',
+      ...(mode === 'daily' ? ['SP广告花费（USD）'] : [])], rows.map(row => [
       mode === 'daily' ? row.date : period?.start_date, mode === 'daily' ? row.date : period?.end_date, REPORT_TIMEZONE,
       mode === 'daily' ? '每日明细' : '期间汇总', dimension === 'parent' ? '父ASIN' : '子ASIN',
       row.group_type === 'parent' ? '父ASIN' : dimension === 'parent' ? '未匹配子ASIN' : '子ASIN',
       row.asin, row.parent_asin, row.title, row.units, row.sales_amount, row.currency, row.orders_count,
-      row.child_asins_count, row.estimated_rows, row.missing_price_rows, row.legacy_unknown_price_rows, priceBasis(row)
+      row.child_asins_count, row.estimated_rows, row.missing_price_rows, row.legacy_unknown_price_rows, priceBasis(row),
+      ...(mode === 'daily' ? [spAdsAmount(row.sp_ads_spend_cents)] : [])
     ]));
   }
   function todayCsv(rows, dates, dimension) {
@@ -276,14 +399,17 @@
     const values = row => row ? [row.units, row.sales_amount, row.currency, row.orders_count, row.estimated_rows,
       row.missing_price_rows, row.legacy_unknown_price_rows, priceBasis(row)] : Array(metrics.length).fill(null);
     return csvDocument(['今日日期', '昨日日期', '统计时区', '统计维度', '分组类型', 'ASIN', '父ASIN',
-      ...metrics.map(label => `今日${label}`), ...metrics.map(label => `昨日${label}`)], rows.map(row => [
+      ...metrics.map(label => `今日${label}`), ...metrics.map(label => `昨日${label}`),
+      '今日SP广告花费（USD）', '昨日SP广告花费（USD）'], rows.map(row => [
       dates?.today, dates?.yesterday, REPORT_TIMEZONE, dimension === 'parent' ? '父ASIN' : '子ASIN',
       row.group_type === 'parent' ? '父ASIN' : dimension === 'parent' ? '未匹配子ASIN' : '子ASIN',
-      row.asin, row.parent_asin, ...values(row.today), ...values(row.yesterday)
+      row.asin, row.parent_asin, ...values(row.today), ...values(row.yesterday),
+      spAdsAmount(row.today?.sp_ads_spend_cents), spAdsAmount(row.yesterday?.sp_ads_spend_cents)
     ]));
   }
 
   const model = { REPORT_TIMEZONE, reportTimezoneMatches, pacificDate, previousDate, imageUrl, priceFlags, dimensionRows, todayComparison,
+    spAdsDay, spAdsCents, spAdsAmount, dailyRowsWithSpend,
     parentChildren, childRowsForDate, childrenTodayComparison, childrenPeriodRows,
     HISTORY_DAYS, historyWindow, historyParentChildren, historyChildrenRows, dailySummary,
     sumSummaries, dailyScopeSummary, csvCell, csvDocument, historyCsv, todayCsv };

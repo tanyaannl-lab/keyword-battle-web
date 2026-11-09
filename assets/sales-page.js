@@ -18,7 +18,7 @@
   };
   const descriptions = {
     home: '近 15 天订单与已识别商品的汇总。',
-    today: '逐个 ASIN 对比今日与昨日的销量、销售额和订单量。',
+    today: '逐个 ASIN 对比今日与昨日的销量、销售额、订单量和 SP 广告花费。',
     history: '上方看板可选择 7 至 360 天汇总；下方保留近 15 天每日销售明细与导出。'
   };
   const viewLabels = { home: '首页', today: '今日数据', history: '历史数据' };
@@ -125,7 +125,7 @@
 
   function addChildrenExpansion(body, tr, entry, view) {
     if (dimension !== 'parent' || entry.group_type !== 'parent') return;
-    const children = model.parentChildren(currentSnapshot, entry.asin);
+    const children = model.parentChildren(currentSnapshot, entry.asin, view !== 'home');
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'sales-child-toggle';
@@ -175,7 +175,7 @@
     heading.textContent = `近 15 天有记录的子 ASIN · ${fmt(childCount)} 个${view === 'history' ? ` · ${entry.date}` : ''}`;
     const note = document.createElement('p');
     note.className = 'sales-child-note';
-    note.textContent = view === 'today' ? '蓝色为今日，橙色为昨日；无记录且已覆盖的日期显示 0。'
+    note.textContent = view === 'today' ? '蓝色为今日，橙色为昨日。广告花费按已同步报表显示。'
       : view === 'history' ? '仅展示该父 ASIN 本行日期的子商品数据。'
       : '按子 ASIN 汇总近 15 天；同一订单含多个子 ASIN 时，子级订单量相加可能高于父级去重订单量。';
     const table = document.createElement('table');
@@ -183,7 +183,9 @@
     const head = document.createElement('thead');
     const header = document.createElement('tr');
     const suffix = view === 'today' ? '（今日 / 昨日）' : '';
-    for (const [index, label] of ['商品 / 子 ASIN', `销量（件）${suffix}`, `销售额${suffix}`, `订单量${suffix}`].entries()) {
+    const labels = ['商品 / 子 ASIN', `销量（件）${suffix}`, `销售额${suffix}`, `订单量${suffix}`];
+    if (view !== 'home') labels.push(`SP 广告花费（USD）${suffix}`);
+    for (const [index, label] of labels.entries()) {
       const th = document.createElement('th');
       th.scope = 'col';
       th.textContent = label;
@@ -201,11 +203,12 @@
       const childTr = document.createElement('tr');
       productCell(childTr, row, true);
       if (view === 'today') {
-        for (const metric of ['units', 'sales_amount', 'orders_count']) pairCell(childTr, row, metric);
+        for (const metric of ['units', 'sales_amount', 'orders_count', 'sp_ads_spend_cents']) pairCell(childTr, row, metric);
       } else {
         addCell(childTr, fmt(row.units), 'sales-number');
         amountCell(childTr, row);
         addCell(childTr, fmt(row.orders_count), 'sales-number');
+        if (view === 'history') spendCell(childTr, row, entry.date);
       }
       childBody.appendChild(childTr);
     }
@@ -245,6 +248,18 @@
     cell.appendChild(amount);
     appendPriceFlags(cell, row);
   }
+  function spendTip(date, cents) {
+    const day = model.spAdsDay(currentSnapshot, date);
+    if (!day) return '该日期的 SP 广告报表尚未同步。';
+    if (cents == null) return '该 ASIN 的 SP 广告花费尚无可用数据。';
+    const stamp = time(day.fetched_at);
+    return `${stamp === '—' ? 'SP 广告报表已同步' : `报表获取时间：${stamp}`}。${day.provisional !== false ? '当日数据仍可能补齐。' : ''}`;
+  }
+  function spendCell(tr, row, date = row.date) {
+    const cents = row.sp_ads_spend_cents;
+    const cell = addCell(tr, money(model.spAdsAmount(cents), 'USD'), 'sales-number sales-sp-ad-cost');
+    cell.title = spendTip(date, cents);
+  }
   function pairCell(tr, entry, metric) {
     const cell = addCell(tr, '', 'sales-number');
     const pair = document.createElement('div');
@@ -261,8 +276,13 @@
       column.className = `sales-pair-side sales-${side}`;
       const value = document.createElement('span');
       const data = entry[side];
-      const formatted = !data ? '—' : metric === 'sales_amount' ? money(data.sales_amount, data.currency) : fmt(data[metric]);
+      const formatted = !data ? '—' : metric === 'sales_amount' ? money(data.sales_amount, data.currency)
+        : metric === 'sp_ads_spend_cents' ? money(model.spAdsAmount(data[metric]), 'USD') : fmt(data[metric]);
       value.textContent = formatted;
+      if (metric === 'sp_ads_spend_cents') {
+        column.title = spendTip(comparison?.[side], data?.[metric]);
+        column.classList.add('sales-sp-ad-cost');
+      }
       const accessibleLabel = document.createElement('span');
       accessibleLabel.className = 'sales-sr-only';
       accessibleLabel.textContent = side === 'today' ? '今日：' : '昨日：';
@@ -358,10 +378,10 @@
     const filtered = historyFilteredRows();
     const message = dailyMessage;
     $('dailyHeading').textContent = `每日${dimensionLabel()}销售明细`;
-    $('dailyDescription').textContent = '近 15 天，按美国太平洋日期和 ASIN 汇总；多个 SKU 合并显示。';
+    $('dailyDescription').textContent = '近 15 天，按美国太平洋日期和 ASIN 汇总销售与 SP 广告花费；多个 SKU 合并显示。';
     dailyPage = Math.min(dailyPage, Math.max(0, Math.ceil(filtered.length / PAGE_SIZE) - 1));
     const visible = filtered.slice(dailyPage * PAGE_SIZE, (dailyPage + 1) * PAGE_SIZE);
-    if (message || !visible.length) emptyRow(body, message || '当前筛选条件下没有明细记录', 5);
+    if (message || !visible.length) emptyRow(body, message || '当前筛选条件下没有明细记录', 6);
     else for (const row of visible) {
       const tr = document.createElement('tr');
       addCell(tr, row.date || '—');
@@ -369,6 +389,7 @@
       addCell(tr, fmt(row.units), 'sales-number');
       amountCell(tr, row);
       addCell(tr, fmt(row.orders_count), 'sales-number');
+      spendCell(tr, row);
       body.appendChild(tr);
       addChildrenExpansion(body, tr, row, 'history');
     }
@@ -409,13 +430,17 @@
     if (comparison && !comparison.yesterdayAvailable) missingDates.push(`昨日（${comparison.yesterday}）`);
     $('todayStatus').textContent = missingDates.length ? `${missingDates.join('、')}尚无可用发布数据，对应数值显示“—”。` : '';
     $('todayStatus').hidden = !missingDates.length;
-    const message = dailyMessage || (!comparison ? '正在加载明细…' : !comparison.todayAvailable && !comparison.yesterdayAvailable ? '今日与昨日尚无可用发布数据，请稍后刷新' : '');
+    const adsStatus = (label, day) => !day ? `${label}待同步` :
+      `${label}${day.provisional !== false ? '暂计' : '已同步'}${time(day.fetched_at) === '—' ? '' : `（报表获取时间：${time(day.fetched_at)}）`}`;
+    $('todayAdsStatus').textContent = `SP 广告花费：${adsStatus('今日', comparison?.todayAds)}；${adsStatus('昨日', comparison?.yesterdayAds)}。广告报表可能延迟。`;
+    const message = !comparison?.rows.length && (dailyMessage || (!comparison ? '正在加载明细…' :
+      !comparison.todayAvailable && !comparison.yesterdayAvailable ? '今日与昨日尚无可用发布数据，请稍后刷新' : '')) || '';
     const visible = rows.slice(todayPage * PAGE_SIZE, (todayPage + 1) * PAGE_SIZE);
-    if (message || !visible.length) emptyRow(body, message || (query ? '当前 ASIN 筛选条件下没有销售记录' : '今日与昨日暂无已识别商品销售记录'), 4);
+    if (message || !visible.length) emptyRow(body, message || (query ? '当前 ASIN 筛选条件下没有记录' : '今日与昨日暂无销售或广告花费记录'), 5);
     else for (const entry of visible) {
       const tr = document.createElement('tr');
       productCell(tr, entry);
-      for (const metric of ['units', 'sales_amount', 'orders_count']) pairCell(tr, entry, metric);
+      for (const metric of ['units', 'sales_amount', 'orders_count', 'sp_ads_spend_cents']) pairCell(tr, entry, metric);
       body.appendChild(tr);
       addChildrenExpansion(body, tr, entry, 'today');
     }
@@ -494,8 +519,8 @@
       : '排行按商品 SKU 展示；同一子 ASIN 如有多个 SKU，可能出现多行。今日数据与历史数据按子 ASIN 合并。';
     $('todayHeading').textContent = `今日 / 昨日${label}数据`;
     $('todayDescription').textContent = dimension === 'parent'
-      ? '同一父 ASIN 下的变体合并显示；按今日销量排序。未识别父 ASIN 的商品单独显示。'
-      : '同一子 ASIN 的多个 SKU 合并显示；按今日销量排序。';
+      ? '同一父 ASIN 下的变体合并显示；按今日销量排序。有花费但未售出的商品也会列出。'
+      : '同一子 ASIN 的多个 SKU 合并显示；按今日销量排序。有花费但未售出的商品也会列出。';
     $('dailyHeading').textContent = `每日${label}销售明细`;
     $('dailyDescription').textContent = dimension === 'parent'
       ? '近 15 天，按日期和父 ASIN 汇总；未识别父 ASIN 的子 ASIN 单独显示。'
@@ -504,13 +529,14 @@
       $(`${prefix}FilterLabel`).textContent = dimension === 'parent' ? '父 / 未识别子 ASIN' : label;
       $(`${prefix}AsinFilter`).placeholder = dimension === 'parent' ? '搜索父 / 未识别子 ASIN' : '搜索子 ASIN';
     }
-    $('todayNote').textContent = `“—”表示该日期尚无可用发布数据；已覆盖日期中某${label}没有销售记录时显示 0。同一日期、同一${label}的订单按订单号去重。${dimension === 'parent' ? '图片展示代表变体；未识别父 ASIN 的商品单独显示。' : ''}`;
+    $('todayNote').textContent = `已覆盖日期没有销售记录时，销售指标显示 0；订单按订单号去重。SP 花费为商品推广报表的广告花费，尚无可用记录时显示“—”。${dimension === 'parent' ? '父 ASIN 花费合计已识别的子 ASIN；未识别父 ASIN 的商品单独显示。' : ''}`;
     renderRanking(source.ranking);
     const message = !model.reportTimezoneMatches(currentSnapshot) ? '后台时区待迁移：尚无美国太平洋时间统计数据。' : source.available ? '' : dimension === 'parent'
       ? '父 ASIN 关系尚未同步，请先查看子 ASIN 数据。'
       : '本次发布尚未提供每日明细，请等待数据更新。';
-    setDailyRows(source.daily, message);
     comparison = model.todayComparison(currentSnapshot, new Date(), dimension);
+    const dailyRows = model.dailyRowsWithSpend(currentSnapshot, dimension, comparison.today);
+    setDailyRows(dailyRows, dailyRows.length ? '' : message);
     renderToday();
     renderHistorySummary();
   }
