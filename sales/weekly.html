@@ -4,10 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <title>销量观察｜每周报表｜关键词作战工具</title>
+  <title>销量观察｜每周报表导出｜关键词作战工具</title>
   <link rel="stylesheet" href="../assets/styles.css">
   <link rel="stylesheet" href="../assets/workspace-nav.css?v=20261110">
-  <link rel="stylesheet" href="../assets/mc-weekly-sales.css?v=1">
+  <link rel="stylesheet" href="../assets/mc-weekly-sales.css?v=export2">
 </head>
 <body>
 <div class="shell workspace-shell workspace-sales" id="appShell" hidden>
@@ -48,63 +48,22 @@
     </header>
 
     <main id="main" class="main sales-main mc-weekly">
-    <section class="hero" aria-labelledby="page-title">
-      <div>
-        <p class="eyebrow">AMAZON · US MARKET</p>
-        <h1 id="page-title">每周报表</h1>
-        <p class="description">查看每周的销售流量与订单汇总。报表日期按美国太平洋时间。</p>
-      </div>
-      <button type="button" id="refresh" class="button primary" disabled>刷新数据</button>
-    </section>
-    <noscript><p class="notice" role="status">此页面需要启用 JavaScript 才能读取报表。</p></noscript>
-    <div id="status" class="notice" role="status" aria-live="polite">正在读取已发布的周报…</div>
-    <div id="workspace" hidden>
-      <section class="week-bar" aria-label="报表周次">
-        <label class="field" for="week"><span>选择周次</span><select id="week"></select></label>
-        <p id="saved-at" class="saved-at" hidden></p>
+      <p class="eyebrow">AMAZON · US MARKET</p>
+      <h1>每周报表导出</h1>
+      <p class="description">选择周次和报表，下载 CSV。日期按美国太平洋时间。</p>
+      <noscript><p class="notice">请启用 JavaScript 后下载报表。</p></noscript>
+      <section id="workspace" class="export-card" aria-label="下载每周报表" hidden>
+        <label class="field" for="week"><span>周次</span><select id="week"></select></label>
+        <label class="field" for="report"><span>报表</span><select id="report"></select></label>
+        <button type="button" id="export" class="download-btn" disabled>下载 CSV</button>
       </section>
-      <dl id="metrics" class="metrics" aria-label="本周报表概览">
-        <div><dt>已发布报表</dt><dd id="metric-files">—</dd></div>
-        <div><dt>销售流量行数</dt><dd id="metric-traffic">—</dd></div>
-        <div><dt>订单汇总行数</dt><dd id="metric-orders">—</dd></div>
-      </dl>
-      <div class="workspace-grid">
-        <section class="panel reports-panel" aria-labelledby="reports-title">
-          <div class="panel-head"><h2 id="reports-title">报表列表</h2><p>选择要查看的报表。</p></div>
-          <p id="reports-status" class="inline-status" role="status" hidden></p>
-          <ul id="reports" class="reports" aria-label="本周报表"></ul>
-        </section>
-        <section id="preview" class="panel preview" aria-labelledby="report-title" hidden>
-          <div class="panel-head preview-head">
-            <div><h2 id="report-title">报表预览</h2><p id="report-meta"></p></div>
-            <button type="button" id="export" class="button secondary" disabled hidden>下载全表 CSV</button>
-          </div>
-          <p id="export-status" class="inline-status" role="status" hidden></p>
-          <form id="search-form" class="search" role="search" hidden>
-            <label class="field search-field" for="search"><span>在此报表中查找</span><input id="search" type="search" maxlength="100" placeholder="输入 ASIN、标题或其他内容" autocomplete="off"></label>
-            <button type="submit" class="button primary">搜索</button>
-            <button type="button" id="clear-search" class="button text-button" hidden>清除</button>
-          </form>
-          <p id="report-status" class="inline-status" role="status" hidden></p>
-          <div id="table-wrap" class="table-wrap" role="region" aria-label="报表数据，可横向滚动" tabindex="0" hidden>
-            <table id="table" aria-labelledby="report-title"><thead id="table-head"></thead><tbody id="table-body"></tbody></table>
-          </div>
-          <nav id="pagination" class="pagination" aria-label="表格分页" hidden>
-            <p id="page-info" role="status"></p>
-            <div class="page-actions">
-              <button type="button" id="previous" class="button secondary" disabled>上一页</button>
-              <button type="button" id="next" class="button secondary" disabled>下一页</button>
-            </div>
-          </nav>
-        </section>
-      </div>
-    </div>
+      <p id="status" class="notice" role="status" aria-live="polite">正在加载报表列表…</p>
     </main>
   </div>
 </div>
 <div class="auth-loading" id="loading" role="status">正在验证登录状态…</div>
 <script src="../assets/config.js"></script>
 <script src="../assets/auth-client.js"></script>
-<script src="../assets/mc-weekly-sales.js?v=1"></script>
+<script src="../assets/mc-weekly-sales.js?v=export2"></script>
 </body>
 </html>
