@@ -7,7 +7,7 @@
   <title>销量观察｜每周报表｜关键词作战工具</title>
   <link rel="stylesheet" href="../assets/styles.css">
   <link rel="stylesheet" href="../assets/workspace-nav.css?v=20261110">
-  <link rel="stylesheet" href="../assets/mc-weekly-local.css?v=1">
+  <link rel="stylesheet" href="../assets/mc-weekly-sales.css?v=1">
 </head>
 <body>
 <div class="shell workspace-shell workspace-sales" id="appShell" hidden>
@@ -54,17 +54,17 @@
         <h1 id="page-title">每周报表</h1>
         <p class="description">查看每周的销售流量与订单汇总。报表日期按美国太平洋时间。</p>
       </div>
-      <button type="button" id="refresh" class="button primary" disabled>连接 MC 周报</button>
+      <button type="button" id="refresh" class="button primary" disabled>刷新数据</button>
     </section>
     <noscript><p class="notice" role="status">此页面需要启用 JavaScript 才能读取报表。</p></noscript>
-    <div id="status" class="notice" role="status" aria-live="polite">打开 MC 的 SSH 隧道，再点「连接 MC 周报」。如果浏览器询问是否允许访问本机，请点「允许」。</div>
+    <div id="status" class="notice" role="status" aria-live="polite">正在读取已发布的周报…</div>
     <div id="workspace" hidden>
       <section class="week-bar" aria-label="报表周次">
         <label class="field" for="week"><span>选择周次</span><select id="week"></select></label>
         <p id="saved-at" class="saved-at" hidden></p>
       </section>
       <dl id="metrics" class="metrics" aria-label="本周报表概览">
-        <div><dt>已入库报表</dt><dd id="metric-files">—</dd></div>
+        <div><dt>已发布报表</dt><dd id="metric-files">—</dd></div>
         <div><dt>销售流量行数</dt><dd id="metric-traffic">—</dd></div>
         <div><dt>订单汇总行数</dt><dd id="metric-orders">—</dd></div>
       </dl>
@@ -105,6 +105,6 @@
 <div class="auth-loading" id="loading" role="status">正在验证登录状态…</div>
 <script src="../assets/config.js"></script>
 <script src="../assets/auth-client.js"></script>
-<script src="../assets/mc-weekly-local.js?v=1"></script>
+<script src="../assets/mc-weekly-sales.js?v=1"></script>
 </body>
 </html>
