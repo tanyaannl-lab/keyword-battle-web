@@ -4,10 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <title>销量观察｜每周报表导出｜关键词作战工具</title>
+  <title>详情页面销售和流量｜利润表｜每周报表</title>
   <link rel="stylesheet" href="../assets/styles.css">
   <link rel="stylesheet" href="../assets/workspace-nav.css?v=20261110">
-  <link rel="stylesheet" href="../assets/mc-weekly-sales.css?v=export2">
+  <link rel="stylesheet" href="../assets/mc-weekly-sales.css?v=profit-nav1">
 </head>
 <body>
 <div class="shell workspace-shell workspace-sales" id="appShell" hidden>
@@ -33,7 +33,18 @@
         <a href="./index.html#home">首页</a>
         <a href="./index.html#today">今日数据</a>
         <a href="./index.html#history">历史数据</a>
-        <a href="./weekly.html" aria-current="page">每周报表</a>
+        <details class="weekly-tree" open>
+          <summary>每周报表</summary>
+          <ul>
+            <li>
+              <span class="weekly-category">利润表</span>
+              <ul>
+                <li><a href="#sales-and-traffic" aria-current="location">详情页面销售和流量</a></li>
+              </ul>
+            </li>
+          </ul>
+        </details>
+        <a class="weekly-mobile-link" href="./weekly.html" aria-current="page">每周报表</a>
       </nav>
     </div>
   </aside>
@@ -49,10 +60,11 @@
 
     <main id="main" class="main sales-main mc-weekly">
       <p class="eyebrow">AMAZON · US MARKET</p>
-      <h1>每周报表导出</h1>
+      <p class="weekly-path">每周报表 <span aria-hidden="true">›</span> 利润表</p>
+      <h1 id="sales-and-traffic">详情页面销售和流量</h1>
       <p class="description">选择周次和报表，下载 CSV。日期按美国太平洋时间。</p>
       <noscript><p class="notice">请启用 JavaScript 后下载报表。</p></noscript>
-      <section id="workspace" class="export-card" aria-label="下载每周报表" hidden>
+      <section id="workspace" class="export-card" aria-label="下载详情页面销售和流量报表" hidden>
         <label class="field" for="week"><span>周次</span><select id="week"></select></label>
         <label class="field" for="report"><span>报表</span><select id="report"></select></label>
         <button type="button" id="export" class="download-btn" disabled>下载 CSV</button>
