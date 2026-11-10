@@ -23,6 +23,10 @@
 .mc-weekly :focus-visible { outline: 2px solid #126f94; outline-offset: 2px; }
 .mc-weekly .notice { margin: .85rem 0 0; color: #526873; font-size: .88rem; overflow-wrap: anywhere; }
 .mc-weekly .notice[data-state='error'] { color: #912e2b; }
+.mc-weekly .order-file-help { margin-top: 1rem; padding: .9rem 1.15rem; border: 1px solid #d7e3e8; border-radius: 12px; background: #fff; }
+.mc-weekly .order-file-help summary { color: #075a60; font-size: .9rem; font-weight: 700; cursor: pointer; }
+.mc-weekly .order-file-help p, .mc-weekly #copy-status { color: #526873; font-size: .85rem; }
+.mc-weekly .order-file-help pre { padding: .7rem; border-radius: 6px; background: #f4f8f9; white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (max-width: 720px) {
   .workspace-content > .mc-weekly { width: calc(100% - 28px); }
   .mc-weekly .export-card { grid-template-columns: 1fr; }

@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>订单｜利润表｜每周报表</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+  <link rel="stylesheet" href="../assets/workspace-nav.css?v=20261110">
+  <link rel="stylesheet" href="../assets/mc-weekly-sales.css?v=order-nav1">
+</head>
+<body>
+<div class="shell workspace-shell workspace-sales" id="appShell" hidden>
+  <aside class="workspace-sidebar">
+    <nav class="workspace-rail" aria-label="工作台模块">
+      <a class="workspace-mark" href="../tool/index.html" aria-label="关键词作战工具">K</a>
+      <a class="workspace-module" href="./index.html#home">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16h16M8 15v-3m5 3V8m5 7V5"/></svg>
+        <span>销量观察</span>
+      </a>
+      <a class="workspace-module" href="../tool/index.html">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M3 6h1M3 12h1M3 18h1"/></svg>
+        <span>关键词任务</span>
+      </a>
+      <a class="workspace-module" href="./weekly.html" aria-current="true">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H5v18h14V3h-3M8 2h8v4H8zM8 10h8m-8 4h8m-8 4h5"/></svg>
+        <span>每周报表</span>
+      </a>
+    </nav>
+    <div class="workspace-pane">
+      <div class="workspace-pane-head">
+        <span class="workspace-pane-title">每周报表</span>
+        <span class="workspace-pane-caption">AMAZON · US MARKET</span>
+      </div>
+      <nav class="workspace-subnav weekly-subnav" aria-label="每周报表子导航">
+        <span class="workspace-subnav-label">利润表</span>
+        <a href="./weekly.html#sales-and-traffic">详情页面销售和流量</a>
+        <a href="#orders" aria-current="location">订单</a>
+      </nav>
+    </div>
+  </aside>
+
+  <div class="workspace-content">
+    <header class="topbar">
+      <a class="brand" href="../tool/index.html"><span class="brand-mark">K</span><span>关键词作战工具</span></a>
+      <div class="top-actions">
+        <span class="desktop-only" id="userEmail">—</span>
+        <button class="btn btn-ghost btn-sm" id="logoutBtn" type="button">退出</button>
+      </div>
+    </header>
+
+    <main id="main" class="main sales-main mc-weekly">
+      <p class="eyebrow">AMAZON · US MARKET</p>
+      <p class="weekly-path">每周报表 <span aria-hidden="true">›</span> 利润表</p>
+      <h1 id="orders">订单</h1>
+      <p class="description">选择周次，下载订单汇总 CSV。日期按美国太平洋时间。</p>
+      <noscript><p class="notice">请启用 JavaScript 后下载报表。</p></noscript>
+      <section id="workspace" data-report-kind="order_summary" class="export-card" aria-label="下载订单汇总" hidden>
+        <label class="field" for="week"><span>周次</span><select id="week"></select></label>
+        <label class="field" for="report"><span>报表</span><select id="report"></select></label>
+        <button type="button" id="export" class="download-btn" disabled>下载汇总 CSV</button>
+      </section>
+      <p id="status" class="notice" role="status" aria-live="polite">正在加载报表列表…</p>
+      <details id="raw-export" class="order-file-help" hidden>
+        <summary>导出 MC订单列表.txt（37 列明细）</summary>
+        <p>在 MC 服务器运行下方命令，生成所选周次的加密 ZIP，内含订单列表 TXT。</p>
+        <pre><code id="raw-command"></code></pre>
+        <button type="button" class="btn btn-ghost btn-sm" id="copy-command">复制命令</button>
+        <span id="copy-status" role="status"></span>
+      </details>
+    </main>
+  </div>
+</div>
+<div class="auth-loading" id="loading" role="status">正在验证登录状态…</div>
+<script src="../assets/config.js"></script>
+<script src="../assets/auth-client.js"></script>
+<script src="../assets/mc-weekly-sales.js?v=order-nav1"></script>
+</body>
+</html>

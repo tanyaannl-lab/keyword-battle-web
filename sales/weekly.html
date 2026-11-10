@@ -7,7 +7,7 @@
   <title>详情页面销售和流量｜利润表｜每周报表</title>
   <link rel="stylesheet" href="../assets/styles.css">
   <link rel="stylesheet" href="../assets/workspace-nav.css?v=20261110">
-  <link rel="stylesheet" href="../assets/mc-weekly-sales.css?v=weekly-module1">
+  <link rel="stylesheet" href="../assets/mc-weekly-sales.css?v=order-nav1">
 </head>
 <body>
 <div class="shell workspace-shell workspace-sales" id="appShell" hidden>
@@ -35,6 +35,7 @@
       <nav class="workspace-subnav weekly-subnav" aria-label="每周报表子导航">
         <span class="workspace-subnav-label">利润表</span>
         <a href="#sales-and-traffic" aria-current="location">详情页面销售和流量</a>
+        <a href="./weekly-orders.html">订单</a>
       </nav>
     </div>
   </aside>
@@ -54,7 +55,7 @@
       <h1 id="sales-and-traffic">详情页面销售和流量</h1>
       <p class="description">选择周次和报表，下载 CSV。日期按美国太平洋时间。</p>
       <noscript><p class="notice">请启用 JavaScript 后下载报表。</p></noscript>
-      <section id="workspace" class="export-card" aria-label="下载详情页面销售和流量报表" hidden>
+      <section id="workspace" data-report-kind="traffic" class="export-card" aria-label="下载详情页面销售和流量报表" hidden>
         <label class="field" for="week"><span>周次</span><select id="week"></select></label>
         <label class="field" for="report"><span>报表</span><select id="report"></select></label>
         <button type="button" id="export" class="download-btn" disabled>下载 CSV</button>
@@ -66,6 +67,6 @@
 <div class="auth-loading" id="loading" role="status">正在验证登录状态…</div>
 <script src="../assets/config.js"></script>
 <script src="../assets/auth-client.js"></script>
-<script src="../assets/mc-weekly-sales.js?v=export2"></script>
+<script src="../assets/mc-weekly-sales.js?v=order-nav1"></script>
 </body>
 </html>

@@ -3,7 +3,10 @@
 (() => {
   const ui = Object.fromEntries([
     'status', 'workspace', 'week', 'report', 'export', 'appShell', 'loading', 'userEmail', 'logoutBtn',
+    'raw-export', 'raw-command', 'copy-command', 'copy-status',
   ].map(id => [id, document.getElementById(id)]));
+  const reportKind = ui.workspace.dataset.reportKind === 'order_summary' ? 'order_summary' : 'traffic';
+  const downloadLabel = reportKind === 'order_summary' ? '下载汇总 CSV' : '下载 CSV';
   const ORIGIN = 'https://peykqsnlistkhrqsiulx.supabase.co';
   const CONFIG = window.KB_CONFIG;
   const LOGIN = '../index.html';
@@ -118,22 +121,31 @@
     ui.week.disabled = busy;
     ui.report.disabled = busy;
     ui.export.disabled = busy || !ui.report.value;
-    ui.export.textContent = busy ? '准备下载…' : '下载 CSV';
+    ui.export.textContent = busy ? '准备下载…' : downloadLabel;
   }
 
   function setReports() {
-    const files = weeks.get(ui.week.value)?.reports || [];
+    const group = weeks.get(ui.week.value);
+    const files = group?.reports || [];
     ui.report.replaceChildren(...files.map(file => option(file.file_id,
       file.kind === 'traffic' ? `${file.report_date} 销售流量` : '订单汇总')));
     ui.report.value = files[0]?.file_id || '';
     setDownloadBusy(false);
     notice(ui.status);
+    if (ui['raw-export']) {
+      ui['raw-export'].hidden = !group;
+      ui['raw-command'].textContent = group
+        ? `node ~/mc-order-list-export/orders.cjs --start ${ui.week.value} --end ${group.end}`
+        : '';
+      ui['copy-status'].textContent = '';
+    }
   }
 
   function assembleWeeks(records) {
     const groups = new Map();
     for (const file of records) {
-      if (!DAY.test(file?.week_start || '') || !DAY.test(file?.week_end || '') || file.week_start > file.week_end ||
+      if (file?.kind !== reportKind || typeof file.week_start !== 'string' || typeof file.week_end !== 'string' ||
+          !DAY.test(file.week_start) || !DAY.test(file.week_end) || file.week_start > file.week_end ||
           !(file.kind === 'traffic' && DAY.test(file.report_date || '') && file.report_date >= file.week_start &&
             file.report_date <= file.week_end && file.file_id === `traffic-${file.report_date}` ||
             file.kind === 'order_summary' && file.report_date === null && file.file_id === 'order-summary')) {
@@ -169,7 +181,7 @@
       for (let offset = 0; ; offset += size) {
         if (offset > 5120) throw new Error('报表列表过长，请联系管理员。');
         const batch = await get(REPORTS_TABLE, {
-          select: META, order: 'week_start.desc,file_id.asc', limit: size, offset,
+          select: META, kind: `eq.${reportKind}`, order: 'week_start.desc,file_id.asc', limit: size, offset,
         }, controller.signal);
         if (listRequest !== controller) return;
         records.push(...batch);
@@ -202,7 +214,7 @@
     try {
       const found = await get(REPORTS_TABLE, {
         select: 'week_start,file_id,kind,columns,rows,row_count',
-        week_start: `eq.${file.week_start}`, file_id: `eq.${file.file_id}`, limit: 1,
+        week_start: `eq.${file.week_start}`, file_id: `eq.${file.file_id}`, kind: `eq.${reportKind}`, limit: 1,
       }, controller.signal);
       if (downloadRequest !== controller || !auth) return;
       const data = found[0];
@@ -244,6 +256,14 @@
     setDownloadBusy(false);
     notice(ui.status);
   });
+  ui['copy-command']?.addEventListener('click', async () => {
+    const command = ui['raw-command'].textContent;
+    if (!auth || ui['raw-export'].hidden || !command) return;
+    let message = '命令已复制。';
+    try { await navigator.clipboard.writeText(command); }
+    catch { message = '无法自动复制，请选中上方命令手动复制。'; }
+    if (auth && ui['raw-command'].textContent === command) ui['copy-status'].textContent = message;
+  });
 
   function hidePrivateData() {
     authGeneration++;
@@ -257,6 +277,12 @@
     ui.week.replaceChildren();
     ui.report.replaceChildren();
     ui.export.disabled = true;
+    if (ui['raw-export']) {
+      ui['raw-export'].hidden = true;
+      ui['raw-export'].open = false;
+      ui['raw-command'].textContent = '';
+      ui['copy-status'].textContent = '';
+    }
     ui.userEmail.textContent = '';
     notice(ui.status);
     weeks.clear();
