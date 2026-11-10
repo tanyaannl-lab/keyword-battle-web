@@ -7,14 +7,14 @@
   <title>详情页面销售和流量｜利润表｜每周报表</title>
   <link rel="stylesheet" href="../assets/styles.css">
   <link rel="stylesheet" href="../assets/workspace-nav.css?v=20261110">
-  <link rel="stylesheet" href="../assets/mc-weekly-sales.css?v=profit-nav1">
+  <link rel="stylesheet" href="../assets/mc-weekly-sales.css?v=weekly-module1">
 </head>
 <body>
 <div class="shell workspace-shell workspace-sales" id="appShell" hidden>
   <aside class="workspace-sidebar">
     <nav class="workspace-rail" aria-label="工作台模块">
       <a class="workspace-mark" href="../tool/index.html" aria-label="关键词作战工具">K</a>
-      <a class="workspace-module" href="./index.html#home" aria-current="true">
+      <a class="workspace-module" href="./index.html#home">
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16h16M8 15v-3m5 3V8m5 7V5"/></svg>
         <span>销量观察</span>
       </a>
@@ -22,29 +22,19 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M3 6h1M3 12h1M3 18h1"/></svg>
         <span>关键词任务</span>
       </a>
+      <a class="workspace-module" href="./weekly.html" aria-current="page">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H5v18h14V3h-3M8 2h8v4H8zM8 10h8m-8 4h8m-8 4h5"/></svg>
+        <span>每周报表</span>
+      </a>
     </nav>
     <div class="workspace-pane">
       <div class="workspace-pane-head">
-        <span class="workspace-pane-title">销量观察</span>
+        <span class="workspace-pane-title">每周报表</span>
         <span class="workspace-pane-caption">AMAZON · US MARKET</span>
       </div>
-      <nav class="workspace-subnav" aria-label="销量观察子导航">
-        <span class="workspace-subnav-label">销量数据</span>
-        <a href="./index.html#home">首页</a>
-        <a href="./index.html#today">今日数据</a>
-        <a href="./index.html#history">历史数据</a>
-        <details class="weekly-tree" open>
-          <summary>每周报表</summary>
-          <ul>
-            <li>
-              <span class="weekly-category">利润表</span>
-              <ul>
-                <li><a href="#sales-and-traffic" aria-current="location">详情页面销售和流量</a></li>
-              </ul>
-            </li>
-          </ul>
-        </details>
-        <a class="weekly-mobile-link" href="./weekly.html" aria-current="page">每周报表</a>
+      <nav class="workspace-subnav weekly-subnav" aria-label="每周报表子导航">
+        <span class="workspace-subnav-label">利润表</span>
+        <a href="#sales-and-traffic" aria-current="location">详情页面销售和流量</a>
       </nav>
     </div>
   </aside>
