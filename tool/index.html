@@ -3,11 +3,38 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>工具页｜关键词作战工具</title>
+  <title>关键词任务｜关键词作战工具</title>
   <link rel="stylesheet" href="../assets/styles.css">
+  <link rel="stylesheet" href="../assets/workspace-nav.css?v=20261110">
 </head>
 <body>
-<div class="shell" id="appShell" hidden>
+<div class="shell workspace-shell workspace-keywords" id="appShell" hidden>
+  <aside class="workspace-sidebar">
+    <nav class="workspace-rail" aria-label="工作台模块">
+      <a class="workspace-mark" href="../tool/index.html" aria-label="关键词作战工具">K</a>
+      <a class="workspace-module" href="../sales/index.html#home">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16h16M8 15v-3m5 3V8m5 7V5"/></svg>
+        <span>销量观察</span>
+      </a>
+      <a class="workspace-module" href="../tool/index.html" aria-current="page">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M3 6h1M3 12h1M3 18h1"/></svg>
+        <span>关键词任务</span>
+      </a>
+    </nav>
+    <div class="workspace-pane">
+      <div class="workspace-pane-head">
+        <span class="workspace-pane-title">关键词任务</span>
+        <span class="workspace-pane-caption">KEYWORD TASKS</span>
+      </div>
+      <nav class="workspace-subnav" aria-label="关键词任务子导航">
+        <span class="workspace-subnav-label">任务管理</span>
+        <a href="#task-create" aria-current="location">新建任务</a>
+        <a href="#task-list">我的任务</a>
+      </nav>
+    </div>
+  </aside>
+
+  <div class="workspace-content">
   <header class="topbar">
     <a class="brand" href="./index.html"><span class="brand-mark">K</span><span>关键词作战工具</span></a>
     <div class="top-actions"><span id="userEmail">—</span><button class="btn btn-ghost btn-sm" id="logoutBtn">退出</button></div>
@@ -18,8 +45,8 @@
       <div><h1>关键词任务</h1><p>输入 ASIN 并上传 Amazon 商品推广搜索词报表。</p></div>
     </div>
 
-    <section class="card">
-      <div class="card-head"><h2>新建任务</h2><p>支持 .xlsx / .csv，最大 20 MB。文件上传成功后才会创建待处理任务。</p></div>
+    <section class="card" id="task-create" tabindex="-1" aria-labelledby="task-create-heading">
+      <div class="card-head"><h2 id="task-create-heading">新建任务</h2><p>支持 .xlsx / .csv，最大 20 MB。文件上传成功后才会创建待处理任务。</p></div>
       <div class="card-body">
         <form class="submit-grid" id="taskForm">
           <div class="field">
@@ -46,9 +73,9 @@
 
     <div class="section-gap"></div>
 
-    <section class="card table-card">
+    <section class="card table-card" id="task-list" tabindex="-1" aria-labelledby="task-list-heading">
       <div class="card-head task-head">
-        <div><h2>我的任务</h2><p>显示最近 20 条；每 30 秒自动刷新，也可以手动刷新。</p></div>
+        <div><h2 id="task-list-heading">我的任务</h2><p>显示最近 20 条；每 30 秒自动刷新，也可以手动刷新。</p></div>
         <div class="task-head-actions"><span class="refresh-note" id="refreshNote">—</span><button class="btn btn-secondary btn-sm" id="refreshBtn">刷新</button></div>
       </div>
       <div class="table-scroll">
@@ -59,6 +86,7 @@
       </div>
     </section>
   </main>
+  </div>
 </div>
 
 <div class="auth-loading" id="loading">正在验证登录状态…</div>
@@ -89,6 +117,24 @@
   userEmail.textContent = auth.user?.email || '已登录用户';
   loading.remove();
   appShell.hidden = false;
+
+  const taskNav = appShell.querySelector('.workspace-subnav');
+  function updateTaskNav(){
+    const hash = location.hash === '#task-list' ? '#task-list' : '#task-create';
+    for (const link of taskNav.querySelectorAll('a')) {
+      if (link.hash === hash) link.setAttribute('aria-current','location');
+      else link.removeAttribute('aria-current');
+    }
+  }
+  window.addEventListener('hashchange',updateTaskNav);
+  updateTaskNav();
+  if (location.hash === '#task-create' || location.hash === '#task-list') {
+    const section = document.getElementById(location.hash.slice(1));
+    requestAnimationFrame(() => {
+      section.scrollIntoView();
+      section.focus({preventScroll:true});
+    });
+  }
 
   function showMessage(text, type=''){
     formMessage.textContent = text || '';
