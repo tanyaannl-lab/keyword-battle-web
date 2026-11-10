@@ -3,9 +3,11 @@
 (() => {
   const ui = Object.fromEntries([
     'status', 'workspace', 'week', 'report', 'export', 'appShell', 'loading', 'userEmail', 'logoutBtn',
-    'raw-export', 'raw-command', 'copy-command', 'copy-status',
+    'raw-export', 'raw-command', 'copy-command', 'copy-status', 'ads-output',
   ].map(id => [id, document.getElementById(id)]));
-  const reportKind = ui.workspace.dataset.reportKind === 'order_summary' ? 'order_summary' : 'traffic';
+  const adsExport = ui.workspace.dataset.reportKind === 'ads_export';
+  // The orders summary catalogue contains exactly one record per published MC week.
+  const reportKind = adsExport || ui.workspace.dataset.reportKind === 'order_summary' ? 'order_summary' : 'traffic';
   const downloadLabel = reportKind === 'order_summary' ? '下载汇总 CSV' : '下载 CSV';
   const ORIGIN = 'https://peykqsnlistkhrqsiulx.supabase.co';
   const CONFIG = window.KB_CONFIG;
@@ -118,6 +120,7 @@
   }
 
   function setDownloadBusy(busy) {
+    if (!ui.export) return;
     ui.week.disabled = busy;
     ui.report.disabled = busy;
     ui.export.disabled = busy || !ui.report.value;
@@ -126,17 +129,21 @@
 
   function setReports() {
     const group = weeks.get(ui.week.value);
-    const files = group?.reports || [];
-    ui.report.replaceChildren(...files.map(file => option(file.file_id,
-      file.kind === 'traffic' ? `${file.report_date} 销售流量` : '订单汇总')));
-    ui.report.value = files[0]?.file_id || '';
+    if (ui.report) {
+      const files = group?.reports || [];
+      ui.report.replaceChildren(...files.map(file => option(file.file_id,
+        file.kind === 'traffic' ? `${file.report_date} 销售流量` : '订单汇总')));
+      ui.report.value = files[0]?.file_id || '';
+    }
     setDownloadBusy(false);
     notice(ui.status);
     if (ui['raw-export']) {
       ui['raw-export'].hidden = !group;
-      ui['raw-command'].textContent = group
-        ? `node ~/mc-order-list-export/orders.cjs --start ${ui.week.value} --end ${group.end}`
-        : '';
+      const command = adsExport ? 'python3 -u ~/mc-ads-weekly-export/export.py' : 'node ~/mc-order-list-export/orders.cjs';
+      ui['raw-command'].textContent = group ? `${command} --start ${ui.week.value} --end ${group.end}` : '';
+      if (ui['ads-output']) {
+        ui['ads-output'].textContent = group ? `~/mc-ads-weekly-reports/MC-ads-${ui.week.value}-to-${group.end}.xlsx` : '';
+      }
       ui['copy-status'].textContent = '';
     }
   }
@@ -169,7 +176,7 @@
     const controller = new AbortController();
     listRequest = controller;
     ui.workspace.hidden = true;
-    notice(ui.status, '正在读取已发布的周报…');
+    notice(ui.status, adsExport ? '正在读取 MC 周次…' : '正在读取已发布的周报…');
     try {
       const allowed = await get(ACCESS_TABLE, { select: 'user_id', limit: 1 }, controller.signal);
       if (listRequest !== controller || !auth) return;
@@ -189,7 +196,7 @@
       }
       weeks = assembleWeeks(records);
       if (!weeks.size) {
-        notice(ui.status, '暂无可下载的周报。报表发布后，刷新页面即可下载。');
+        notice(ui.status, adsExport ? '暂无已发布的 MC 周次。周报发布后，可刷新页面选取周次。' : '暂无可下载的周报。报表发布后，刷新页面即可下载。');
         return;
       }
       ui.week.replaceChildren(...[...weeks].map(([start, group]) => option(start, `${start} 至 ${group.end}`)));
@@ -249,9 +256,9 @@
     }
   }
 
-  ui.export.addEventListener('click', () => void downloadReport());
+  ui.export?.addEventListener('click', () => void downloadReport());
   ui.week.addEventListener('change', () => { if (!downloadRequest) setReports(); });
-  ui.report.addEventListener('change', () => {
+  ui.report?.addEventListener('change', () => {
     if (downloadRequest) return;
     setDownloadBusy(false);
     notice(ui.status);
@@ -275,13 +282,14 @@
     downloadRequest = null;
     ui.workspace.hidden = true;
     ui.week.replaceChildren();
-    ui.report.replaceChildren();
-    ui.export.disabled = true;
+    ui.report?.replaceChildren();
+    if (ui.export) ui.export.disabled = true;
     if (ui['raw-export']) {
       ui['raw-export'].hidden = true;
       ui['raw-export'].open = false;
       ui['raw-command'].textContent = '';
       ui['copy-status'].textContent = '';
+      if (ui['ads-output']) ui['ads-output'].textContent = '';
     }
     ui.userEmail.textContent = '';
     notice(ui.status);
