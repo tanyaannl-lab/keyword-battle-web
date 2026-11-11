@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>产品目录｜利润表｜每周报表</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+  <link rel="stylesheet" href="../assets/workspace-nav.css?v=20261110">
+  <link rel="stylesheet" href="../assets/mc-product-catalog.css?v=20261111">
+</head>
+<body>
+<div class="shell workspace-shell workspace-sales" id="appShell" hidden>
+  <aside class="workspace-sidebar">
+    <nav class="workspace-rail" aria-label="工作台模块">
+      <a class="workspace-mark" href="../tool/index.html" aria-label="关键词作战工具">K</a>
+      <a class="workspace-module" href="./index.html#home">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16h16M8 15v-3m5 3V8m5 7V5"/></svg>
+        <span>销量观察</span>
+      </a>
+      <a class="workspace-module" href="../tool/index.html">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M3 6h1M3 12h1M3 18h1"/></svg>
+        <span>关键词任务</span>
+      </a>
+      <a class="workspace-module" href="./weekly.html" aria-current="true">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H5v18h14V3h-3M8 2h8v4H8zM8 10h8m-8 4h8m-8 4h5"/></svg>
+        <span>每周报表</span>
+      </a>
+    </nav>
+    <div class="workspace-pane">
+      <div class="workspace-pane-head">
+        <span class="workspace-pane-title">每周报表</span>
+        <span class="workspace-pane-caption">AMAZON · US MARKET</span>
+      </div>
+      <nav class="workspace-subnav catalog-subnav" aria-label="每周报表子导航">
+        <span class="workspace-subnav-label">利润表</span>
+        <a href="#product-catalog" aria-current="page">产品目录</a>
+        <a href="./weekly.html#sales-and-traffic">详情页面销售和流量</a>
+        <a href="./weekly-orders.html#orders">订单</a>
+        <a href="./weekly-ads.html#ads-report">广告报告</a>
+        <a href="./weekly-transactions.html#transactions">交易表</a>
+      </nav>
+    </div>
+  </aside>
+
+  <div class="workspace-content">
+    <header class="topbar">
+      <a class="brand" href="../tool/index.html"><span class="brand-mark">K</span><span>关键词作战工具</span></a>
+      <div class="top-actions">
+        <span class="desktop-only" id="userEmail">—</span>
+        <button class="btn btn-ghost btn-sm" id="logoutBtn" type="button">退出</button>
+      </div>
+    </header>
+
+    <main id="main" class="main sales-main mc-product-catalog">
+      <header class="catalog-heading">
+        <p class="catalog-market">MC · AMAZON US</p>
+        <p class="catalog-path">每周报表 <span aria-hidden="true">›</span> 利润表</p>
+        <h1 id="product-catalog">产品目录</h1>
+        <p class="catalog-intro">按父 ASIN 浏览 MC 美国站产品，展开查看子 ASIN、SKU 和负责人。</p>
+      </header>
+
+      <section id="catalog" aria-label="产品目录" hidden>
+        <div class="catalog-controls" role="group" aria-label="筛选产品">
+          <label class="catalog-field" for="search">
+            <span>搜索产品</span>
+            <input id="search" type="search" maxlength="200" autocomplete="off" placeholder="中文名、ASIN、SKU 或负责人">
+          </label>
+          <label class="catalog-field" for="owner">
+            <span>负责人</span>
+            <select id="owner"><option value="">全部负责人</option></select>
+          </label>
+          <button class="catalog-button" id="clearFilters" type="button">清除筛选</button>
+        </div>
+
+        <div class="catalog-overview">
+          <p class="catalog-summary" id="summary" aria-live="polite" aria-atomic="true"></p>
+          <p class="catalog-snapshot">目录日期 <time id="snapshotDate">—</time></p>
+        </div>
+
+        <div id="catalogList" class="catalog-list"></div>
+      </section>
+      <p id="catalogStatus" class="catalog-status" role="status">正在读取产品目录…</p>
+      <button class="catalog-button catalog-retry" id="retry" type="button" hidden>重新加载</button>
+    </main>
+  </div>
+</div>
+<div class="auth-loading" id="loading" role="status">正在验证登录状态…</div>
+<noscript><style>#loading{display:none}</style><p class="auth-loading">请启用 JavaScript 后查看产品目录。</p></noscript>
+<script src="../assets/config.js"></script>
+<script src="../assets/auth-client.js"></script>
+<script src="../assets/mc-product-catalog.js?v=20261111"></script>
+</body>
+</html>
