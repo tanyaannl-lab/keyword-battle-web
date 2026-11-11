@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>周结果｜利润表｜每周报表</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+  <link rel="stylesheet" href="../assets/workspace-nav.css?v=20261110">
+  <link rel="stylesheet" href="../assets/mc-weekly-results.css?v=20261111-1">
+</head>
+<body>
+<div class="shell workspace-shell workspace-sales" id="appShell" hidden>
+  <aside class="workspace-sidebar">
+    <nav class="workspace-rail" aria-label="工作台模块">
+      <a class="workspace-mark" href="../tool/index.html" aria-label="关键词作战工具">K</a>
+      <a class="workspace-module" href="./index.html#home">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16h16M8 15v-3m5 3V8m5 7V5"/></svg>
+        <span>销量观察</span>
+      </a>
+      <a class="workspace-module" href="../tool/index.html">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M3 6h1M3 12h1M3 18h1"/></svg>
+        <span>关键词任务</span>
+      </a>
+      <a class="workspace-module" href="./weekly.html" aria-current="true">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H5v18h14V3h-3M8 2h8v4H8zM8 10h8m-8 4h8m-8 4h5"/></svg>
+        <span>每周报表</span>
+      </a>
+    </nav>
+    <div class="workspace-pane">
+      <div class="workspace-pane-head">
+        <span class="workspace-pane-title">每周报表</span>
+        <span class="workspace-pane-caption">AMAZON · US MARKET</span>
+      </div>
+      <nav class="workspace-subnav weekly-results-subnav" aria-label="每周报表子导航">
+        <span class="workspace-subnav-label">利润表</span>
+        <a href="./weekly-products.html#product-catalog">产品目录</a>
+        <a href="#weekly-results" aria-current="page">周结果</a>
+        <a href="./weekly.html#sales-and-traffic">详情页面销售和流量</a>
+        <a href="./weekly-orders.html#orders">订单</a>
+        <a href="./weekly-ads.html#ads-report">广告报告</a>
+        <a href="./weekly-transactions.html#transactions">交易表</a>
+      </nav>
+    </div>
+  </aside>
+
+  <div class="workspace-content">
+    <header class="topbar">
+      <a class="brand" href="../tool/index.html"><span class="brand-mark">K</span><span>关键词作战工具</span></a>
+      <div class="top-actions">
+        <span class="desktop-only" id="userEmail">—</span>
+        <button class="btn btn-ghost btn-sm" id="logoutBtn" type="button">退出</button>
+      </div>
+    </header>
+
+    <main id="main" class="main sales-main mc-weekly-results">
+      <header class="results-heading">
+        <p class="results-market">MC · AMAZON US</p>
+        <p class="results-path">每周报表 <span aria-hidden="true">›</span> 利润表</p>
+        <h1 id="weekly-results">周结果</h1>
+        <p class="results-intro">选周后查看所有父款，点开一个父 ASIN 查看复盘和广告分析。</p>
+      </header>
+
+      <section id="results" aria-label="MC 美国站周结果" hidden>
+        <div class="results-controls" role="group" aria-label="筛选周结果">
+          <label class="results-field" for="resultWeek">
+            <span>选择周次</span>
+            <select id="resultWeek" aria-describedby="weekTimeZone"></select>
+          </label>
+          <div id="resultProductFilters" class="results-product-filters">
+            <label class="results-field" for="resultSearch">
+              <span>搜索产品</span>
+              <input id="resultSearch" type="search" maxlength="200" autocomplete="off" placeholder="父 ASIN、子 ASIN 或 SKU">
+            </label>
+            <label class="results-field" for="resultOwner">
+              <span>负责人</span>
+              <select id="resultOwner"><option value="">全部负责人</option></select>
+            </label>
+            <button id="clearResultFilters" class="results-button" type="button">清除筛选</button>
+          </div>
+        </div>
+        <p class="results-timezone" id="weekTimeZone">周次按美国太平洋时间计算，周一至周日。</p>
+
+        <section id="productList" class="results-list" aria-label="该周父款">
+          <div class="results-overview">
+            <p id="resultsCount" class="results-count" aria-live="polite" aria-atomic="true"></p>
+            <p class="results-catalog-date">目录日期 <time id="resultsCatalogDate">—</time></p>
+          </div>
+          <div class="results-table-wrap" id="parentTable" tabindex="0" role="region" aria-label="父款结果表">
+            <table class="results-table" aria-label="父款结果">
+              <thead>
+                <tr>
+                  <th scope="col">父 ASIN</th><th scope="col">负责人</th>
+                  <th scope="col" class="results-num">销售额</th><th scope="col" class="results-num">订单商品数</th>
+                  <th scope="col" class="results-num">SP 广告花费</th><th scope="col" class="results-num">SP 归因订单</th>
+                  <th scope="col" class="results-num">SP ACOS</th><th scope="col" class="results-num">利润</th>
+                  <th scope="col">本周记录</th>
+                </tr>
+              </thead>
+              <tbody id="parentResults"></tbody>
+            </table>
+          </div>
+          <p class="results-table-note">按当前产品目录列出父款。销售指标在七天报表齐全后展示；SP 指商品推广，需导入对应周的广告商品报告。利润尚缺成本数据。</p>
+          <p id="parentEmpty" class="results-empty" hidden>没有符合条件的父款，请调整筛选。</p>
+        </section>
+
+        <article id="productResults" class="results-detail" aria-labelledby="selectedParent" hidden>
+          <header class="results-detail-head">
+            <div class="results-product-identity">
+              <p class="results-label">父 ASIN</p>
+              <h2 id="selectedParent" tabindex="-1">—</h2>
+              <p id="selectedOwner" class="results-owner"></p>
+            </div>
+            <div class="results-detail-actions">
+              <span id="selectedWeek" class="results-week-tag"></span>
+              <button id="backToProducts" class="results-button" type="button">返回父款列表</button>
+            </div>
+          </header>
+          <p id="productStatus" class="results-state" role="status" hidden></p>
+
+          <div class="results-tabs" role="tablist" aria-label="产品结果表">
+            <button id="resultTabSummary" type="button" role="tab" data-result-tab="summary" aria-selected="true" aria-controls="resultSummary">周总结</button>
+            <button id="resultTabAds" type="button" role="tab" data-result-tab="ads" aria-selected="false" aria-controls="resultAds" tabindex="-1">产品广告结构</button>
+            <button id="resultTabKeywords" type="button" role="tab" data-result-tab="keywords" aria-selected="false" aria-controls="resultKeywords" tabindex="-1">关键词分析</button>
+            <button id="resultTabAttributes" type="button" role="tab" data-result-tab="attributes" aria-selected="false" aria-controls="resultAttributes" tabindex="-1">属性分析</button>
+          </div>
+
+          <section id="resultSummary" class="results-panel" role="tabpanel" aria-labelledby="resultTabSummary" tabindex="0">
+            <header class="results-panel-head">
+              <h3>每周复盘</h3>
+              <p>选中的周高亮。「—」表示缺少数据，<span class="results-tabular">0</span> 表示实际为零。</p>
+            </header>
+            <div id="summaryResults" class="results-data"></div>
+
+            <form id="weeklyNotesForm" class="results-notes" aria-labelledby="weeklyNotesTitle" autocomplete="off">
+              <header class="results-panel-head">
+                <h3 id="weeklyNotesTitle">本周运营记录</h3>
+                <p id="weeklyNotesHint">记录和费用按父 ASIN、周次保存。费用原币为 USD，留空表示未填，填 0 表示没有该项费用。</p>
+              </header>
+              <label class="results-field" for="operation">
+                <span>运营操作记录</span>
+                <textarea id="operation" maxlength="3000" rows="4" placeholder="填写本周的操作、变更或跟进事项" disabled></textarea>
+              </label>
+              <div class="results-note-fees">
+                <label class="results-field" for="reviewFee">
+                  <span>测评费用原币（USD）</span>
+                  <input id="reviewFee" type="number" inputmode="decimal" min="0" step="0.01" placeholder="未填写" aria-describedby="weeklyNotesHint" disabled>
+                </label>
+                <label class="results-field" for="offsiteFee">
+                  <span>站外费用原币（USD）</span>
+                  <input id="offsiteFee" type="number" inputmode="decimal" min="0" step="0.01" placeholder="未填写" aria-describedby="weeklyNotesHint" disabled>
+                </label>
+                <label class="results-field" for="otherFee">
+                  <span>其他费用原币（USD）</span>
+                  <input id="otherFee" type="number" inputmode="decimal" min="0" step="0.01" placeholder="未填写" aria-describedby="weeklyNotesHint" disabled>
+                </label>
+              </div>
+              <div class="results-notes-actions">
+                <button id="saveWeeklyNotes" class="results-button results-button-primary" type="submit" disabled>保存本周记录</button>
+                <p id="notesStatus" class="results-state" role="status" aria-live="polite"></p>
+              </div>
+            </form>
+          </section>
+
+          <section id="resultAds" class="results-panel" role="tabpanel" aria-labelledby="resultTabAds" tabindex="0" hidden>
+            <header class="results-panel-head"><h3>产品广告结构</h3><p>按周对比广告销售、广告花费和广告结构。</p></header>
+            <div id="adsResults" class="results-data"></div>
+          </section>
+          <section id="resultKeywords" class="results-panel" role="tabpanel" aria-labelledby="resultTabKeywords" tabindex="0" hidden>
+            <header class="results-panel-head"><h3>关键词分析</h3><p>所选周，每个完整搜索词一行。</p></header>
+            <div id="keywordResults" class="results-data"></div>
+          </section>
+          <section id="resultAttributes" class="results-panel" role="tabpanel" aria-labelledby="resultTabAttributes" tabindex="0" hidden>
+            <header class="results-panel-head"><h3>属性分析</h3><p>所选周，每个词元一行。同一搜索词可归入多个词元，属性行不能相加算总额。</p></header>
+            <div id="attributeResults" class="results-data"></div>
+          </section>
+        </article>
+      </section>
+
+      <p id="resultsStatus" class="results-state" role="status">正在读取周结果…</p>
+      <button id="retryResults" class="results-button" type="button" hidden>重新加载</button>
+    </main>
+  </div>
+</div>
+<div class="auth-loading" id="loading" role="status">正在验证登录状态…</div>
+<noscript><style>#loading{display:none}</style><p class="auth-loading">请启用 JavaScript 后查看周结果。</p></noscript>
+<script src="../assets/config.js"></script>
+<script src="../assets/auth-client.js"></script>
+<script src="../assets/mc-weekly-results-tables.js?v=20261111-1"></script>
+<script src="../assets/mc-weekly-results.js?v=20261111-1"></script>
+</body>
+</html>
+
