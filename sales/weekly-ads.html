@@ -8,7 +8,6 @@
   <link rel="stylesheet" href="../assets/styles.css">
   <link rel="stylesheet" href="../assets/workspace-nav.css?v=20261110">
   <link rel="stylesheet" href="../assets/mc-weekly-sales.css?v=ads-nav1">
-  <link rel="stylesheet" href="../assets/mc-weekly-ads.css?v=direct-download1">
 </head>
 <body>
 <div class="shell workspace-shell workspace-sales" id="appShell" hidden>
@@ -56,9 +55,19 @@
       <p class="eyebrow">AMAZON · US MARKET</p>
       <p class="weekly-path">每周报表 <span aria-hidden="true">›</span> 利润表</p>
       <h1 id="ads-report">广告报告</h1>
-      <p class="description">选择周次，下载广告报告 XLSX。报告包含 22 列，按日统计美国站 SP 商品推广，转化指标采用 7 天归因。</p>
-      <noscript><p class="notice">请启用 JavaScript 后选择报表周次。</p></noscript>
-      <section id="workspace" class="export-card ads-download-card" aria-label="选择广告报告周次" hidden>
+      <p id="reportDescription" class="description">商品推广 · 推广的商品报告，包含 22 列，按日统计，转化指标采用 7 天归因。</p>
+      <noscript><p class="notice">请启用 JavaScript 后选择报告和周次。</p></noscript>
+      <section id="workspace" class="export-card" aria-label="选择广告报告和周次" hidden>
+        <label class="field" for="report">
+          <span>报告</span>
+          <select id="report" aria-describedby="reportDescription" disabled>
+            <option value="sp_advertised">商品推广 · 推广的商品</option>
+            <option value="sp_placement">商品推广 · 广告位</option>
+            <option value="sp_sis">商品推广 · 搜索词展示量份额</option>
+            <option value="sb_campaign">品牌推广 · 广告活动</option>
+            <option value="sd_campaign">展示型推广 · 广告活动</option>
+          </select>
+        </label>
         <label class="field" for="week"><span>周次</span><select id="week" disabled></select></label>
         <button type="button" class="download-btn" id="export" disabled>导出 Excel</button>
       </section>
@@ -69,6 +78,6 @@
 <div class="auth-loading" id="loading" role="status">正在验证登录状态…</div>
 <script src="../assets/config.js"></script>
 <script src="../assets/auth-client.js"></script>
-<script src="../assets/mc-weekly-ads.js?v=direct-download1"></script>
+<script src="../assets/mc-weekly-ads-extra.js?v=20261111"></script>
 </body>
 </html>
