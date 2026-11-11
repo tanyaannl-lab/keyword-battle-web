@@ -2,7 +2,8 @@
 
 (() => {
   const ids = ['appShell', 'loading', 'userEmail', 'logoutBtn', 'catalog', 'search', 'owner',
-    'clearFilters', 'summary', 'snapshotDate', 'catalogStatus', 'catalogList', 'retry'];
+    'clearFilters', 'summary', 'snapshotDate', 'catalogStatus', 'catalogList', 'catalogTable',
+    'catalogPager', 'prevPage', 'nextPage', 'pageInfo', 'retry'];
   const ui = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
   const config = window.KB_CONFIG;
   const origin = 'https://peykqsnlistkhrqsiulx.supabase.co';
@@ -12,11 +13,13 @@
   const normalize = text => text.normalize('NFKC').toLowerCase();
   const asinPattern = /^[A-Z0-9]{10}$/;
   const empty = '—';
+  const pageSize = 25;
   let auth = null;
   let request = null;
   let generation = 0;
-  let groups = [];
-  let total = 0;
+  let products = [];
+  let parentCount = 0;
+  let page = 0;
   let searchTimer = 0;
 
   function node(tag, className, content) {
@@ -36,10 +39,16 @@
 
   function clearCatalog() {
     clearTimeout(searchTimer);
-    groups = [];
-    total = 0;
+    products = [];
+    parentCount = 0;
+    page = 0;
     ui.catalog.hidden = true;
+    ui.catalogTable.hidden = true;
+    ui.catalogPager.hidden = true;
     ui.catalogList.replaceChildren();
+    ui.pageInfo.textContent = '';
+    ui.prevPage.disabled = true;
+    ui.nextPage.disabled = true;
     ui.owner.replaceChildren(new Option('全部负责人', ''));
     ui.search.value = '';
     ui.clearFilters.disabled = true;
@@ -66,8 +75,8 @@
     return value;
   }
 
-  function checkedList(values, required = false) {
-    if (!Array.isArray(values) || values.length > 30 || (required && !values.length)) {
+  function checkedOwners(values) {
+    if (!Array.isArray(values) || values.length > 30) {
       throw new Error('产品目录数据格式有误，请联系管理员。');
     }
     return [...new Set(values.map(value => checkedText(value)))].sort(sort);
@@ -81,36 +90,27 @@
         !Array.isArray(data.products) || !data.products.length || data.products.length > 20000) {
       throw new Error('产品目录数据格式有误，请联系管理员。');
     }
-    const result = new Map();
+    const rows = [];
     const keys = new Set();
     const owners = new Set();
+    const parents = new Set();
     for (const item of data.products) {
       if (!item || typeof item.parent_asin !== 'string' || !asinPattern.test(item.parent_asin) ||
-          typeof item.asin !== 'string' || !asinPattern.test(item.asin) || typeof item.review_required !== 'boolean') {
+          typeof item.asin !== 'string' || !asinPattern.test(item.asin)) {
         throw new Error('产品目录数据格式有误，请联系管理员。');
       }
       const sku = checkedText(item.sku);
       const key = `${item.asin}\0${sku}`;
       if (keys.has(key)) throw new Error('产品目录存在重复商品，请联系管理员。');
       keys.add(key);
-      const row = { asin: item.asin, sku, names: checkedList(item.names, true),
-        companySkus: checkedList(item.company_skus), owners: checkedList(item.owners), review: item.review_required };
-      row.searchText = normalize([item.parent_asin, row.asin, row.sku, ...row.names, ...row.companySkus, ...row.owners].join(' '));
+      const row = { asin: item.asin, parent: item.parent_asin, sku, owners: checkedOwners(item.owners) };
+      row.searchText = normalize([row.asin, row.parent, ...row.owners, row.sku].join(' '));
       row.owners.forEach(owner => owners.add(owner));
-      if (!result.has(item.parent_asin)) result.set(item.parent_asin, []);
-      result.get(item.parent_asin).push(row);
+      parents.add(row.parent);
+      rows.push(row);
     }
-    const products = [...result].map(([parent, rows]) => {
-      const names = new Map();
-      for (const row of rows) for (const name of row.names) names.set(name, (names.get(name) ?? 0) + 1);
-      const labels = [...names].sort(([a, countA], [b, countB]) => countB - countA || sort(a, b)).map(([name]) => name);
-      const name = labels.length === 1 ? labels[0]
-        : labels.length === 2 ? labels.join(' / ')
-        : `${labels[0]} 等 ${labels.length} 个名称`;
-      return { parent, name, rows: rows.sort((a, b) => sort(a.names[0], b.names[0]) || sort(a.sku, b.sku)),
-      };
-    }).sort((a, b) => sort(a.name, b.name) || sort(a.parent, b.parent));
-    return { products, owners: [...owners].sort(sort) };
+    rows.sort((a, b) => sort(a.parent, b.parent) || sort(a.asin, b.asin) || sort(a.sku, b.sku));
+    return { rows, parentCount: parents.size, owners: [...owners].sort(sort) };
   }
 
   function cell(values, className) {
@@ -120,69 +120,30 @@
     return td;
   }
 
-  function renderItems(rows) {
-    const table = node('table', 'catalog-table');
-    const header = node('tr');
-    for (const column of ['产品中文名', '子 ASIN', 'SKU', '公司 SKU', '负责人']) {
-      const th = node('th', '', column);
-      th.scope = 'col';
-      header.append(th);
-    }
-    const head = node('thead');
-    head.append(header);
-    const body = node('tbody');
-    for (const row of rows) {
-      const tr = node('tr');
-      const name = cell(row.names, 'catalog-aliases');
-      if (row.review) name.append(node('span', 'catalog-review', '待核对'));
-      tr.append(name, cell(row.asin, 'catalog-asin'), cell(row.sku, 'catalog-asin'),
-        cell(row.companySkus, 'catalog-aliases'), cell(row.owners, 'catalog-aliases'));
-      body.append(tr);
-    }
-    table.append(head, body);
-    return table;
-  }
-
-  function renderGroup(group, rows, open) {
-    const card = node('details', 'catalog-group');
-    card.dataset.parentAsin = group.parent;
-    const title = node('summary', 'catalog-group-title');
-    const meta = node('span', 'catalog-group-meta');
-    meta.append(node('span', 'catalog-group-name', group.name), node('span', 'catalog-group-asin', `父 ASIN ${group.parent}`));
-    title.append(meta);
-    title.append(node('span', 'catalog-count', rows.length === group.rows.length
-      ? `${rows.length} 个子商品` : `${rows.length} / ${group.rows.length} 个子商品`));
-    if (rows.some(row => row.review)) title.append(node('span', 'catalog-review', '待核对'));
-    const items = node('div', 'catalog-items');
-    const addItems = () => { if (!items.firstChild) items.append(renderItems(rows)); };
-    card.append(title, items);
-    card.addEventListener('toggle', () => { if (card.open) addItems(); });
-    if (open) { card.open = true; addItems(); }
-    return card;
-  }
-
   function render() {
     if (ui.catalog.hidden || !auth) return;
     const tokens = normalize(ui.search.value.trim()).split(/\s+/).filter(Boolean);
     const owner = ui.owner.value;
-    const opened = new Set([...ui.catalogList.querySelectorAll('details[open]')].map(detail => detail.dataset.parentAsin));
-    const visible = [];
-    let visibleCount = 0;
-    for (const group of groups) {
-      const rows = group.rows.filter(row => (!owner || row.owners.includes(owner)) && tokens.every(token => row.searchText.includes(token)));
-      if (!rows.length) continue;
-      visible.push({ group, rows });
-      visibleCount += rows.length;
-    }
+    const visible = products.filter(row => (!owner || row.owners.includes(owner)) && tokens.every(token => row.searchText.includes(token)));
+    const pageCount = Math.ceil(visible.length / pageSize);
+    page = Math.min(Math.max(page, 0), Math.max(pageCount - 1, 0));
     ui.clearFilters.disabled = !ui.search.value && !owner;
     ui.summary.textContent = tokens.length || owner
-      ? `找到 ${visible.length} / ${groups.length} 个父款 · ${visibleCount} / ${total} 个子商品`
-      : `${groups.length} 个父款 · ${total} 个子商品`;
+      ? `找到 ${visible.length} / ${products.length} 个子商品`
+      : `${parentCount} 个父款 · ${products.length} 个子商品`;
     const result = document.createDocumentFragment();
-    for (const { group, rows } of visible) {
-      result.append(renderGroup(group, rows, opened.has(group.parent) || Boolean(tokens.length && visible.length <= 3)));
+    for (const row of visible.slice(page * pageSize, (page + 1) * pageSize)) {
+      const tr = node('tr');
+      tr.append(cell(row.asin, 'catalog-asin'), cell(row.parent, 'catalog-asin'),
+        cell(row.owners, 'catalog-owner'), cell(row.sku, 'catalog-sku'));
+      result.append(tr);
     }
     ui.catalogList.replaceChildren(result);
+    ui.catalogTable.hidden = !visible.length;
+    ui.catalogPager.hidden = pageCount <= 1;
+    ui.prevPage.disabled = page === 0;
+    ui.nextPage.disabled = page + 1 >= pageCount;
+    ui.pageInfo.textContent = pageCount > 1 ? `第 ${page + 1} / ${pageCount} 页` : '';
     status(visible.length ? '' : '没有找到匹配的产品。试试其他关键词，或清除筛选。');
   }
 
@@ -208,8 +169,8 @@
       if (request !== controller || !auth) return;
       if (data === null) { status('还没有导入产品目录。'); return; }
       const parsed = parseCatalog(data);
-      groups = parsed.products;
-      total = data.products.length;
+      products = parsed.rows;
+      parentCount = parsed.parentCount;
       ui.owner.append(...parsed.owners.map(owner => new Option(owner, owner)));
       ui.snapshotDate.textContent = data.snapshot_date;
       ui.snapshotDate.dateTime = data.snapshot_date;
@@ -249,18 +210,25 @@
     }
   }
 
+  function resetPage() {
+    page = 0;
+    render();
+  }
+
   ui.search.addEventListener('input', () => {
     clearTimeout(searchTimer);
-    searchTimer = setTimeout(render, 100);
+    searchTimer = setTimeout(resetPage, 100);
   });
-  ui.owner.addEventListener('change', render);
+  ui.owner.addEventListener('change', resetPage);
   ui.clearFilters.addEventListener('click', () => {
     clearTimeout(searchTimer);
     ui.search.value = '';
     ui.owner.value = '';
-    render();
+    resetPage();
     ui.search.focus();
   });
+  ui.prevPage.addEventListener('click', () => { page--; render(); });
+  ui.nextPage.addEventListener('click', () => { page++; render(); });
   ui.retry.addEventListener('click', () => {
     hidePrivateData();
     void initialize();

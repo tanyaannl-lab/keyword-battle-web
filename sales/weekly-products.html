@@ -7,7 +7,7 @@
   <title>产品目录｜利润表｜每周报表</title>
   <link rel="stylesheet" href="../assets/styles.css">
   <link rel="stylesheet" href="../assets/workspace-nav.css?v=20261110">
-  <link rel="stylesheet" href="../assets/mc-product-catalog.css?v=20261111">
+  <link rel="stylesheet" href="../assets/mc-product-catalog.css?v=20261111-2">
 </head>
 <body>
 <div class="shell workspace-shell workspace-sales" id="appShell" hidden>
@@ -57,14 +57,14 @@
         <p class="catalog-market">MC · AMAZON US</p>
         <p class="catalog-path">每周报表 <span aria-hidden="true">›</span> 利润表</p>
         <h1 id="product-catalog">产品目录</h1>
-        <p class="catalog-intro">按父 ASIN 浏览 MC 美国站产品，展开查看子 ASIN、SKU 和负责人。</p>
+        <p class="catalog-intro">查看 MC 美国站产品的父子 ASIN、负责人和 SKU。</p>
       </header>
 
       <section id="catalog" aria-label="产品目录" hidden>
         <div class="catalog-controls" role="group" aria-label="筛选产品">
           <label class="catalog-field" for="search">
             <span>搜索产品</span>
-            <input id="search" type="search" maxlength="200" autocomplete="off" placeholder="中文名、ASIN、SKU 或负责人">
+            <input id="search" type="search" maxlength="200" autocomplete="off" placeholder="子 ASIN、父 ASIN、负责人或 SKU">
           </label>
           <label class="catalog-field" for="owner">
             <span>负责人</span>
@@ -78,7 +78,17 @@
           <p class="catalog-snapshot">目录日期 <time id="snapshotDate">—</time></p>
         </div>
 
-        <div id="catalogList" class="catalog-list"></div>
+        <div id="catalogTable" class="catalog-items" hidden>
+          <table class="catalog-table" aria-label="MC 美国站产品目录">
+            <thead><tr><th scope="col">子 ASIN</th><th scope="col">父 ASIN</th><th scope="col">负责人</th><th scope="col">SKU</th></tr></thead>
+            <tbody id="catalogList"></tbody>
+          </table>
+        </div>
+        <nav id="catalogPager" class="catalog-pager" aria-label="目录分页" hidden>
+          <button id="prevPage" class="catalog-button" type="button" disabled>上一页</button>
+          <span id="pageInfo" aria-live="polite"></span>
+          <button id="nextPage" class="catalog-button" type="button" disabled>下一页</button>
+        </nav>
       </section>
       <p id="catalogStatus" class="catalog-status" role="status">正在读取产品目录…</p>
       <button class="catalog-button catalog-retry" id="retry" type="button" hidden>重新加载</button>
@@ -89,6 +99,6 @@
 <noscript><style>#loading{display:none}</style><p class="auth-loading">请启用 JavaScript 后查看产品目录。</p></noscript>
 <script src="../assets/config.js"></script>
 <script src="../assets/auth-client.js"></script>
-<script src="../assets/mc-product-catalog.js?v=20261111"></script>
+<script src="../assets/mc-product-catalog.js?v=20261111-2"></script>
 </body>
 </html>
