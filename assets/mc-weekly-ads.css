@@ -1,0 +1,6 @@
+.mc-weekly .ads-download-card {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+@media (max-width: 720px) {
+  .mc-weekly .ads-download-card { grid-template-columns: 1fr; }
+}

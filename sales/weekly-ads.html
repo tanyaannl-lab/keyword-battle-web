@@ -8,6 +8,7 @@
   <link rel="stylesheet" href="../assets/styles.css">
   <link rel="stylesheet" href="../assets/workspace-nav.css?v=20261110">
   <link rel="stylesheet" href="../assets/mc-weekly-sales.css?v=ads-nav1">
+  <link rel="stylesheet" href="../assets/mc-weekly-ads.css?v=direct-download1">
 </head>
 <body>
 <div class="shell workspace-shell workspace-sales" id="appShell" hidden>
@@ -54,27 +55,19 @@
       <p class="eyebrow">AMAZON · US MARKET</p>
       <p class="weekly-path">每周报表 <span aria-hidden="true">›</span> 利润表</p>
       <h1 id="ads-report">广告报告</h1>
-      <p class="description">选择周次，在 MC 服务器生成广告报告 XLSX。报告包含 22 列，按日统计美国站 SP 商品推广，转化指标采用 7 天归因。</p>
+      <p class="description">选择周次，下载广告报告 XLSX。报告包含 22 列，按日统计美国站 SP 商品推广，转化指标采用 7 天归因。</p>
       <noscript><p class="notice">请启用 JavaScript 后选择报表周次。</p></noscript>
-      <section id="workspace" data-report-kind="ads_export" class="export-card ads-week-card" aria-label="选择广告报告周次" hidden>
-        <label class="field" for="week"><span>周次</span><select id="week"></select></label>
+      <section id="workspace" class="export-card ads-download-card" aria-label="选择广告报告周次" hidden>
+        <label class="field" for="week"><span>周次</span><select id="week" disabled></select></label>
+        <button type="button" class="download-btn" id="export" disabled>导出 Excel</button>
       </section>
-      <p id="status" class="notice" role="status" aria-live="polite">正在读取 MC 周次…</p>
-      <section id="raw-export" class="order-file-help" aria-labelledby="ads-export-title" hidden>
-        <h2 id="ads-export-title">生成并下载 XLSX</h2>
-        <p>在 MC 服务器运行下方命令。若报表正在处理，稍后重跑同一条命令即可继续。</p>
-        <pre><code id="raw-command"></code></pre>
-        <button type="button" class="btn btn-ghost btn-sm" id="copy-command">复制命令</button>
-        <span id="copy-status" role="status"></span>
-        <p>生成成功后，从 MC 服务器下载：</p>
-        <pre><code id="ads-output"></code></pre>
-      </section>
+      <p id="status" class="notice" role="status" aria-live="polite">正在读取已发布的广告报告…</p>
     </main>
   </div>
 </div>
 <div class="auth-loading" id="loading" role="status">正在验证登录状态…</div>
 <script src="../assets/config.js"></script>
 <script src="../assets/auth-client.js"></script>
-<script src="../assets/mc-weekly-sales.js?v=ads-nav1"></script>
+<script src="../assets/mc-weekly-ads.js?v=direct-download1"></script>
 </body>
 </html>
