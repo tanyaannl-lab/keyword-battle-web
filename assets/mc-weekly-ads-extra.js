@@ -16,6 +16,7 @@
   const REPORTS = Object.freeze({
     sp_advertised: '商品推广 · 推广的商品报告，包含 22 列，按日统计，转化指标采用 7 天归因。',
     sp_placement: '商品推广 · 广告位报告（API 版）。未返回的字段和无法计算的比率留空。',
+    sp_search_terms: '商品推广 · 搜索词日报（API 版）。包含曝光、点击、花费和 7 天归因指标，不含展示量份额和排名。',
     sp_sis: '商品推广 · 搜索词展示量份额（后台报表）。周次内有数据的日期以报表为准。',
     sb_campaign: '品牌推广 · 广告活动报告（API 版）。未返回的字段和无法计算的比率留空。',
     sd_campaign: '展示型推广 · 广告活动报告（API 版）。若该周无记录，导出文件仅含表头。',
@@ -179,7 +180,9 @@
       }
       files = new Map([...records].sort(([a], [b]) => b.localeCompare(a)));
       if (!files.size) {
-        notice('暂无已发布的广告报告。服务器发布完成后，刷新页面即可下载。');
+        notice(key === 'sp_sis'
+          ? '暂无已发布的展示量份额报告。要查看曝光、点击、花费和归因指标，请选择「商品推广 · 搜索词日报」。'
+          : '暂无已发布的广告报告。服务器发布完成后，刷新页面即可下载。');
         return;
       }
       ui.week.replaceChildren(...[...files].map(([start, file]) => {
