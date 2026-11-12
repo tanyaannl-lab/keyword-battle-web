@@ -285,7 +285,7 @@
     return [...weeks.values()].sort((a, b) => b.week_start.localeCompare(a.week_start));
   }
 
-  function render(targets, { rows, week, adRows, keywordRows, attributeRows } = {}) {
+  function render(targets, { rows, week, adRows } = {}) {
     const weeklyRows = buildWeeklyRows(rows, adRows, week);
     const spNote = Array.isArray(adRows) && adRows.length ? spNotice : '此父 ASIN 暂无已导入的商品推广结果。';
     renderTable(targets.summary, {
@@ -296,17 +296,21 @@
       columns: adsColumns, rows: weeklyRows, week, label: '产品广告结构',
       note: `${spNote} 全部广告、活动分类及流量词数据接入前显示为 —。`, emptyText: '没有可展示的周期。',
     });
+  }
+
+  function renderSearch(targets, { keyword_rows: keywordRows, attribute_rows: attributeRows } = {}) {
+    const scope = '仅展示明确归属当前父 ASIN 的数据。订单和销售额采用 7 天归因。搜索份额、排名和全站展现缺少源数据，显示为 —。';
     renderTable(targets.keywords, {
       columns: keywordColumns, rows: Array.isArray(keywordRows) ? keywordRows : [], label: '关键词分析',
-      note: '每行一个完整客户搜索词。搜索份额和份额排名需要展示量份额报表。',
-      emptyText: Array.isArray(keywordRows) ? '所选周没有关键词记录。' : '数据待接入：需要可归属到当前父 ASIN 的搜索词报表。',
+      note: scope,
+      emptyText: '此父 ASIN 在所选周暂无关键词分析。',
     });
     renderTable(targets.attributes, {
       columns: attributeColumns, rows: Array.isArray(attributeRows) ? attributeRows : [], label: '属性分析',
-      note: '属性由搜索词拆分；同一搜索词可归入多个属性，不能把属性行相加作为总额。',
-      emptyText: Array.isArray(attributeRows) ? '所选周没有属性记录。' : '数据待接入：等待当前父 ASIN 的搜索词报表。',
+      note: scope,
+      emptyText: '此父 ASIN 在所选周暂无属性分析。',
     });
   }
 
-  window.MCWeeklyResultTables = Object.freeze({ render, weekLabel, keywordColumns, attributeColumns });
+  window.MCWeeklyResultTables = Object.freeze({ render, renderSearch, weekLabel, keywordColumns, attributeColumns });
 })();

@@ -16,7 +16,7 @@
   const origin = 'https://peykqsnlistkhrqsiulx.supabase.co';
   const login = '../index.html';
   const allowedRpc = new Set(['mc_product_catalog_read','mc_weekly_results_weeks','mc_weekly_results_read',
-    'mc_weekly_results_notes_save','mc_weekly_results_sp_read']);
+    'mc_weekly_results_notes_save','mc_weekly_results_sp_read','mc_weekly_results_search']);
   const asin = /^[A-Z0-9]{10}$/;
   const normalize = text => text.normalize('NFKC').toLowerCase();
   const collator = new Intl.Collator('zh-Hans', { numeric: true, sensitivity: 'base' });
@@ -165,6 +165,7 @@
       if (active && focus) tab.focus();
     }
     for (const [name,panel] of Object.entries(panels)) panel.hidden = key !== name;
+    if ((key === 'keywords' || key === 'attributes') && detail?.search.state === 'idle') void loadSearchAnalysis();
   }
 
   function makeCell(row, value, numeric = false) {
@@ -264,9 +265,60 @@
 
   function renderDetail() {
     if (!detail) return;
-    window.MCWeeklyResultTables.render(tables, { rows: detail.rows, week, adRows: detail.ads,
-      keywordRows: null, attributeRows: null });
+    window.MCWeeklyResultTables.render(tables, { rows: detail.rows, week, adRows: detail.ads });
     selectTab(selectedTab);
+  }
+
+  function renderSearchState(search) {
+    if (search.state === 'ready') {
+      window.MCWeeklyResultTables.renderSearch(tables, search.data ?? {});
+      return;
+    }
+    const loading = search.state === 'loading';
+    const message = loading ? '正在读取本周搜索词分析…' : search.message;
+    for (const target of [tables.keywords, tables.attributes]) {
+      const status = document.createElement('p');
+      status.className = 'results-state';
+      status.setAttribute('role', 'status');
+      status.textContent = message;
+      target.replaceChildren(status);
+      if (!loading) {
+        status.dataset.state = 'error';
+        const retry = document.createElement('button');
+        retry.type = 'button';
+        retry.className = 'results-button';
+        retry.textContent = '重新加载分析';
+        retry.addEventListener('click', () => { if (detail?.search === search) void loadSearchAnalysis(); });
+        target.append(retry);
+      }
+    }
+  }
+
+  async function loadSearchAnalysis() {
+    const controller = context;
+    const current = detail;
+    if (!auth || !controller || controller.signal.aborted || !current || !parent || !week ||
+        !['idle','error'].includes(current.search.state)) return;
+    const args = { p_week_start: week, p_parent_asin: parent };
+    const stillCurrent = () => context === controller && detail === current && !!auth && !controller.signal.aborted;
+    current.search = { state: 'loading' };
+    renderSearchState(current.search);
+    try {
+      const data = await rpc('mc_weekly_results_search', args, controller.signal);
+      if (!stillCurrent()) return;
+      const validRows = (rows, key) => Array.isArray(rows) && rows.length <= 100000 && rows.every(row =>
+        row && !Array.isArray(row) && typeof row[key] === 'string' && row[key].trim());
+      if (data !== null && (!validRows(data?.keyword_rows, 'term') || !validRows(data?.attribute_rows, 'attribute') ||
+          data.keyword_rows.length + data.attribute_rows.length > 100000)) {
+        throw new Error('搜索词分析数据格式有误，请联系管理员。');
+      }
+      current.search = { state: 'ready', data };
+    } catch (error) {
+      if (!stillCurrent()) return;
+      const message = error.status === 404 || error.code === 'PGRST202' ? '搜索词分析尚未启用。' : explain(error);
+      current.search = { state: 'error', message };
+    }
+    renderSearchState(current.search);
   }
 
   function rowsFrom(payload, weekStart, parentAsin) {
@@ -347,7 +399,7 @@
           returnParent = '';
         }
       } else {
-        detail = { rows, ads: ad.rows };
+        detail = { rows, ads: ad.rows, search: { state: 'idle' } };
         renderDetail();
         renderNotes(line);
         if (focusDetail) {
@@ -503,7 +555,8 @@
     ui.loading.textContent = '正在验证登录状态…';
     if (![origin,`${origin}/`].includes(config?.SUPABASE_URL) ||
         !/^sb_publishable_[A-Za-z0-9_-]+$/.test(config?.SUPABASE_PUBLISHABLE_KEY ?? '') ||
-        typeof window.KBAuth?.requireAuth !== 'function' || typeof window.MCWeeklyResultTables?.render !== 'function') {
+        typeof window.KBAuth?.requireAuth !== 'function' || typeof window.MCWeeklyResultTables?.render !== 'function' ||
+        typeof window.MCWeeklyResultTables?.renderSearch !== 'function') {
       ui.loading.textContent = '周结果页面配置未加载，请刷新或联系管理员。';
       return;
     }
