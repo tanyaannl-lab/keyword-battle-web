@@ -9,6 +9,15 @@
   const percent = new Intl.NumberFormat('en-US', { style: 'percent', maximumFractionDigits: 2 });
   const sourceNotice = '同一父 ASIN 的周数据。销售额为已订购商品销售额，订单商品数不等于独立订单数；会话数为各子 ASIN 会话数之和。周报未齐时暂不汇总。';
   const spNotice = 'SP 指商品推广，订单和销售额采用 7 天归因，可能包含其他 SKU。仅展示明确归属当前父 ASIN 的数据。';
+  const compactHeadings = Object.freeze({
+    '出现次数(多个日期与活动)': ['出现次数', '多日/多活动'],
+    '平均:份额排名': ['份额排名', '平均'],
+    '开始点击日期': ['首次点击'],
+    '最后点击日期': ['末次点击'],
+    '运营操作记录': ['运营记录'],
+    '已订购商品数量': ['订购件数'],
+    '总广告单占比': ['广告单占比'],
+  });
 
   function col(key, label, kind = 'text', aliases = [], rule = null) {
     return Object.freeze({ key, label, kind, aliases: Object.freeze(aliases), rule: rule && Object.freeze(rule) });
@@ -174,21 +183,34 @@
     else if (low !== undefined && (direction === 'lower' ? number > low : number < low)) cell.classList.add('results-rate-low');
   }
 
+  function renderColumnHeading(column) {
+    const heading = element('th');
+    heading.scope = 'col';
+    heading.dataset.column = column.key;
+    heading.dataset.kind = column.kind;
+    const threshold = /^(.*?)\[([^\]]+)\]$/.exec(column.label);
+    const [label, hint] = compactHeadings[column.label] ||
+      (threshold ? [threshold[1].replace(/^计算:/, ''), `[${threshold[2]}]`] : [column.label]);
+    heading.append(element('span', 'results-column-label', label));
+    if (hint) heading.append(element('span', 'results-column-hint', hint));
+    if (label !== column.label || hint) {
+      heading.title = column.label;
+      heading.setAttribute('aria-label', column.label);
+    }
+    return heading;
+  }
+
   function renderTable(target, { columns, rows, week, label, note, emptyText }) {
     if (!target) return;
     const wrapper = element('div', 'results-table-scroll');
     wrapper.tabIndex = 0;
     wrapper.setAttribute('role', 'region');
     wrapper.setAttribute('aria-label', `${label}数据表，可横向滚动`);
-    const table = element('table', 'results-table');
+    const table = element('table', 'results-table results-table-compact');
     table.setAttribute('aria-label', label);
     const head = element('thead');
     const headings = element('tr');
-    for (const column of columns) {
-      const heading = element('th', '', column.label);
-      heading.scope = 'col';
-      headings.append(heading);
-    }
+    for (const column of columns) headings.append(renderColumnHeading(column));
     head.append(headings);
     const body = element('tbody');
     table.append(head, body);
@@ -219,6 +241,13 @@
         columns.forEach((column, index) => {
           const formatted = format(sheetValue(row, column), column.kind);
           const cell = element(index === 0 ? 'th' : 'td', '', formatted.text);
+          cell.dataset.column = column.key;
+          cell.dataset.kind = column.kind;
+          if (column.kind === 'week' && formatted.text !== missing) {
+            const [first, last] = formatted.text.split(' 至 ');
+            cell.replaceChildren(element('span', 'results-week-part', first), document.createTextNode(' 至 '),
+              element('span', 'results-week-part', last));
+          }
           if (index === 0) {
             cell.scope = 'row';
             if (current) cell.setAttribute('aria-current', 'date');
