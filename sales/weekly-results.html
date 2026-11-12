@@ -7,7 +7,7 @@
   <title>周结果｜利润表｜每周报表</title>
   <link rel="stylesheet" href="../assets/styles.css">
   <link rel="stylesheet" href="../assets/workspace-nav.css?v=20261110">
-  <link rel="stylesheet" href="../assets/mc-weekly-results.css?v=20261112-2">
+  <link rel="stylesheet" href="../assets/mc-weekly-results.css?v=20261112-3">
 </head>
 <body>
 <div class="shell workspace-shell workspace-sales" id="appShell" hidden>
@@ -94,7 +94,7 @@
                   <th scope="col" class="results-num">销售额</th><th scope="col" class="results-num">订单商品数</th>
                   <th scope="col" class="results-num">SP 广告花费</th><th scope="col" class="results-num">SP 归因订单</th>
                   <th scope="col" class="results-num">SP ACOS</th><th scope="col" class="results-num">利润</th>
-                  <th scope="col">本周记录</th>
+                  <th scope="col">本周费用</th>
                 </tr>
               </thead>
               <tbody id="parentResults"></tbody>
@@ -128,35 +128,31 @@
           <section id="resultSummary" class="results-panel" role="tabpanel" aria-labelledby="resultTabSummary" tabindex="0">
             <header class="results-panel-head">
               <h3>每周复盘</h3>
-              <p>选中的周高亮。「—」表示缺少数据，<span class="results-tabular">0</span> 表示实际为零。</p>
+              <p>选中的周高亮。「—」表示缺少数据。未填写的三项手动费用按 0 显示。</p>
             </header>
             <div id="summaryResults" class="results-data"></div>
 
             <form id="weeklyNotesForm" class="results-notes" aria-labelledby="weeklyNotesTitle" autocomplete="off">
               <header class="results-panel-head">
-                <h3 id="weeklyNotesTitle">本周运营记录</h3>
-                <p id="weeklyNotesHint">记录和费用按父 ASIN、周次保存。费用原币为 USD，留空表示未填，填 0 表示没有该项费用。</p>
+                <h3 id="weeklyNotesTitle">本周费用</h3>
+                <p id="weeklyNotesHint">按父 ASIN 和周次保存，单位为 USD。默认 0，有费用时直接修改。</p>
               </header>
-              <label class="results-field" for="operation">
-                <span>运营操作记录</span>
-                <textarea id="operation" maxlength="3000" rows="4" placeholder="填写本周的操作、变更或跟进事项" disabled></textarea>
-              </label>
               <div class="results-note-fees">
                 <label class="results-field" for="reviewFee">
                   <span>测评费用原币（USD）</span>
-                  <input id="reviewFee" type="number" inputmode="decimal" min="0" step="0.01" placeholder="未填写" aria-describedby="weeklyNotesHint" disabled>
+                  <input id="reviewFee" type="number" inputmode="decimal" min="0" max="9999999999.99" step="0.01" value="0" aria-describedby="weeklyNotesHint" disabled>
                 </label>
                 <label class="results-field" for="offsiteFee">
                   <span>站外费用原币（USD）</span>
-                  <input id="offsiteFee" type="number" inputmode="decimal" min="0" step="0.01" placeholder="未填写" aria-describedby="weeklyNotesHint" disabled>
+                  <input id="offsiteFee" type="number" inputmode="decimal" min="0" max="9999999999.99" step="0.01" value="0" aria-describedby="weeklyNotesHint" disabled>
                 </label>
                 <label class="results-field" for="otherFee">
                   <span>其他费用原币（USD）</span>
-                  <input id="otherFee" type="number" inputmode="decimal" min="0" step="0.01" placeholder="未填写" aria-describedby="weeklyNotesHint" disabled>
+                  <input id="otherFee" type="number" inputmode="decimal" min="0" max="9999999999.99" step="0.01" value="0" aria-describedby="weeklyNotesHint" disabled>
                 </label>
               </div>
               <div class="results-notes-actions">
-                <button id="saveWeeklyNotes" class="results-button results-button-primary" type="submit" disabled>保存本周记录</button>
+                <button id="saveWeeklyNotes" class="results-button results-button-primary" type="submit" disabled>保存本周费用</button>
                 <p id="notesStatus" class="results-state" role="status" aria-live="polite"></p>
               </div>
             </form>
@@ -186,8 +182,8 @@
 <noscript><style>#loading{display:none}</style><p class="auth-loading">请启用 JavaScript 后查看周结果。</p></noscript>
 <script src="../assets/config.js"></script>
 <script src="../assets/auth-client.js"></script>
-<script src="../assets/mc-weekly-results-tables.js?v=20261112-2"></script>
-<script src="../assets/mc-weekly-results.js?v=20261112-1"></script>
+<script src="../assets/mc-weekly-results-tables.js?v=20261112-3"></script>
+<script src="../assets/mc-weekly-results.js?v=20261112-3"></script>
 </body>
 </html>
 

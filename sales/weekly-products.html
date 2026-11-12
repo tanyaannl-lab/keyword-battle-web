@@ -7,7 +7,7 @@
   <title>产品目录｜利润表｜每周报表</title>
   <link rel="stylesheet" href="../assets/styles.css">
   <link rel="stylesheet" href="../assets/workspace-nav.css?v=20261110">
-  <link rel="stylesheet" href="../assets/mc-product-catalog.css?v=20261111-2">
+  <link rel="stylesheet" href="../assets/mc-product-catalog.css?v=20261112-3">
 </head>
 <body>
 <div class="shell workspace-shell workspace-sales" id="appShell" hidden>
@@ -54,11 +54,11 @@
     </header>
 
     <main id="main" class="main sales-main mc-product-catalog">
-      <header class="catalog-heading">
+      <header class="catalog-heading" id="catalogHeading">
         <p class="catalog-market">MC · AMAZON US</p>
         <p class="catalog-path">每周报表 <span aria-hidden="true">›</span> 利润表</p>
-        <h1 id="product-catalog">产品目录</h1>
-        <p class="catalog-intro">查看 MC 美国站产品的父子 ASIN、负责人和 SKU。</p>
+        <h1 id="product-catalog" tabindex="-1">产品目录</h1>
+        <p class="catalog-intro">查看 MC 美国站产品的父子 ASIN、负责人和 SKU，或打开「成本参数」查看和修改当前费用设置。</p>
       </header>
 
       <section id="catalog" aria-label="产品目录" hidden>
@@ -81,7 +81,7 @@
 
         <div id="catalogTable" class="catalog-items" hidden>
           <table class="catalog-table" aria-label="MC 美国站产品目录">
-            <thead><tr><th scope="col">子 ASIN</th><th scope="col">父 ASIN</th><th scope="col">负责人</th><th scope="col">SKU</th></tr></thead>
+            <thead><tr><th scope="col">子 ASIN</th><th scope="col">父 ASIN</th><th scope="col">负责人</th><th scope="col">SKU</th><th scope="col">成本参数</th></tr></thead>
             <tbody id="catalogList"></tbody>
           </table>
         </div>
@@ -93,6 +93,37 @@
       </section>
       <p id="catalogStatus" class="catalog-status" role="status">正在读取产品目录…</p>
       <button class="catalog-button catalog-retry" id="retry" type="button" hidden>重新加载</button>
+
+      <section id="costDetail" aria-labelledby="costTitle" hidden>
+        <header class="catalog-heading">
+          <p class="catalog-market">MC · AMAZON US</p>
+          <p class="catalog-path">每周报表 <span aria-hidden="true">›</span> 利润表 <span aria-hidden="true">›</span> <a href="#product-catalog">产品目录</a></p>
+          <div class="catalog-cost-heading">
+            <h1 id="costTitle" tabindex="-1">成本参数</h1>
+            <a class="catalog-button catalog-back" href="#product-catalog">返回产品目录</a>
+          </div>
+          <p class="catalog-intro catalog-cost-product"><span>子 ASIN <strong id="costAsin"></strong></span><span id="costParentGroup" hidden>父 ASIN <strong id="costParent"></strong></span></p>
+        </header>
+        <div class="catalog-cost-panel">
+          <p id="costHelp" class="catalog-cost-help">参数按子 ASIN 保存，同一子 ASIN 下的 SKU 共用。未设置可留空；费用和税率可以填 0。</p>
+          <form id="costForm" aria-describedby="costHelp" hidden>
+            <fieldset class="catalog-cost-fields" id="costFields" aria-label="成本参数">
+              <label class="catalog-field" for="costExchange"><span>汇率</span><input id="costExchange" type="number" inputmode="decimal" min="0.000001" max="1000000" step="0.000001" autocomplete="off" aria-describedby="costExchangeHelp"><small id="costExchangeHelp">1 USD 折合多少人民币</small></label>
+              <label class="catalog-field" for="costProduct"><span>产品成本（RMB）</span><input id="costProduct" type="number" inputmode="decimal" min="0" max="100000000" step="0.000001" autocomplete="off"><small>每件商品的人民币成本</small></label>
+              <label class="catalog-field" for="costInbound"><span>头程（RMB）</span><input id="costInbound" type="number" inputmode="decimal" min="0" max="100000000" step="0.000001" autocomplete="off"><small>每件商品分摊的人民币头程费用</small></label>
+              <label class="catalog-field" for="costFba"><span>FBA 费用（原币）</span><input id="costFba" type="number" inputmode="decimal" min="0" max="100000000" step="0.000001" autocomplete="off"><small>每件商品的费用，美国站为 USD</small></label>
+              <label class="catalog-field" for="costCommission"><span>佣金率（%）</span><input id="costCommission" type="number" inputmode="decimal" min="0" max="100" step="0.0001" autocomplete="off"><small>例如 15% 填 15</small></label>
+              <label class="catalog-field" for="costVat"><span>VAT 税率（%）</span><input id="costVat" type="number" inputmode="decimal" min="0" max="100" step="0.0001" autocomplete="off"><small>例如 5% 填 5</small></label>
+            </fieldset>
+            <div class="catalog-cost-actions">
+              <button type="submit" class="catalog-button catalog-button-primary" id="costSave">保存成本参数</button>
+              <p id="costSavedAt" class="catalog-cost-saved"></p>
+            </div>
+          </form>
+          <p id="costStatus" class="catalog-status" role="status" aria-atomic="true" hidden></p>
+          <button class="catalog-button catalog-retry" id="costRetry" type="button" hidden>重新读取</button>
+        </div>
+      </section>
     </main>
   </div>
 </div>
@@ -100,6 +131,6 @@
 <noscript><style>#loading{display:none}</style><p class="auth-loading">请启用 JavaScript 后查看产品目录。</p></noscript>
 <script src="../assets/config.js"></script>
 <script src="../assets/auth-client.js"></script>
-<script src="../assets/mc-product-catalog.js?v=20261111-2"></script>
+<script src="../assets/mc-product-catalog.js?v=20261112-3"></script>
 </body>
 </html>

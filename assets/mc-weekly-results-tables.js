@@ -14,7 +14,6 @@
     '平均:份额排名': ['份额排名', '平均'],
     '开始点击日期': ['首次点击'],
     '最后点击日期': ['末次点击'],
-    '运营操作记录': ['运营记录'],
     '已订购商品数量': ['订购件数'],
     '总广告单占比': ['广告单占比'],
   });
@@ -88,7 +87,6 @@
     col('sb_cost', 'SB 广告费', 'usd'),
     col('sd_cost', 'SD 广告费', 'usd'),
     col('traffic_days', '周报到齐', 'coverage'),
-    col('operation', '运营操作记录', 'note'),
     col('review_fee', '测评费用原币', 'usd'),
     col('offsite_fee', '站外费用原币', 'usd'),
     col('other_fee', '其他费用原币', 'usd'),
@@ -166,7 +164,7 @@
   function format(value, kind) {
     if (kind === 'week') return { text: weekLabel(value) };
     if (kind === 'date') return { text: dateValue(value) ? value : missing };
-    if (kind === 'text' || kind === 'note') return { text: typeof value === 'string' && value.trim() ? value : missing };
+    if (kind === 'text') return { text: typeof value === 'string' && value.trim() ? value : missing };
     const percentString = kind === 'pct' && typeof value === 'string' && value.trim().endsWith('%');
     const parsed = numeric(percentString ? value.trim().slice(0, -1) : value);
     if (parsed === null || (kind === 'int' && !Number.isSafeInteger(parsed))) return { text: missing };
@@ -254,7 +252,6 @@
           }
           if (formatted.number !== undefined) cell.classList.add('results-number');
           if (formatted.text === missing) cell.classList.add('results-missing');
-          if (column.kind === 'note') cell.classList.add('results-note-cell');
           setHighlight(cell, formatted.number, column.rule);
           tr.append(cell);
         });
@@ -297,7 +294,6 @@
         visits: complete ? own(row, 'visits') : null,
         unit_session_rate: complete ? ratio(own(row, 'units'), own(row, 'visits')) : null,
         traffic_days: days,
-        operation: own(notes, 'operation'),
         review_fee: own(notes, 'review_fee'),
         offsite_fee: own(notes, 'offsite_fee'),
         other_fee: own(notes, 'other_fee'),
@@ -311,7 +307,9 @@
       base.sp_acos = ratio(base.sp_cost, base.sp_sales);
       weeks.set(week, base);
     }
-    return [...weeks.values()].sort((a, b) => b.week_start.localeCompare(a.week_start));
+    return [...weeks.values()]
+      .map(row => ({ ...row, review_fee: row.review_fee ?? 0, offsite_fee: row.offsite_fee ?? 0, other_fee: row.other_fee ?? 0 }))
+      .sort((a, b) => b.week_start.localeCompare(a.week_start));
   }
 
   function render(targets, { rows, week, adRows } = {}) {

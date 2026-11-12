@@ -3,7 +3,10 @@
 (() => {
   const ids = ['appShell', 'loading', 'userEmail', 'logoutBtn', 'catalog', 'search', 'owner',
     'clearFilters', 'summary', 'snapshotDate', 'catalogStatus', 'catalogList', 'catalogTable',
-    'catalogPager', 'prevPage', 'nextPage', 'pageInfo', 'retry'];
+    'catalogPager', 'prevPage', 'nextPage', 'pageInfo', 'retry', 'catalogHeading', 'product-catalog',
+    'costDetail', 'costTitle', 'costAsin', 'costParentGroup', 'costParent', 'costForm', 'costFields',
+    'costExchange', 'costProduct', 'costInbound', 'costFba', 'costCommission', 'costVat',
+    'costSave', 'costSavedAt', 'costStatus', 'costRetry'];
   const ui = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
   const config = window.KB_CONFIG;
   const origin = 'https://peykqsnlistkhrqsiulx.supabase.co';
@@ -14,8 +17,22 @@
   const asinPattern = /^[A-Z0-9]{10}$/;
   const empty = '—';
   const pageSize = 25;
+  const costInputs = [
+    { id: 'costExchange', key: 'exchange_rate', min: 0.000001, max: 1000000, decimals: 6 },
+    { id: 'costProduct', key: 'product_cost_rmb', min: 0, max: 100000000, decimals: 6 },
+    { id: 'costInbound', key: 'inbound_cost_rmb', min: 0, max: 100000000, decimals: 6 },
+    { id: 'costFba', key: 'fba_fee', min: 0, max: 100000000, decimals: 6 },
+    { id: 'costCommission', key: 'commission_rate', min: 0, max: 100, decimals: 4, percent: true },
+    { id: 'costVat', key: 'vat_rate', min: 0, max: 100, decimals: 4, percent: true },
+  ];
+  const costDateFormat = new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' });
+  const catalogTitle = document.title;
   let auth = null;
   let request = null;
+  let costRequest = null;
+  let catalogLoaded = false;
+  let activeCostAsin = null;
+  let costRevision = null;
   let generation = 0;
   let products = [];
   let parentCount = 0;
@@ -39,6 +56,7 @@
 
   function clearCatalog() {
     clearTimeout(searchTimer);
+    catalogLoaded = false;
     products = [];
     parentCount = 0;
     page = 0;
@@ -65,7 +83,36 @@
     ui.appShell.hidden = true;
     ui.userEmail.textContent = '';
     clearCatalog();
+    clearCostView();
     status();
+  }
+
+  function costStatus(message = '', state = '', retryLabel = '') {
+    ui.costStatus.textContent = message;
+    ui.costStatus.hidden = !message;
+    if (state) ui.costStatus.dataset.state = state;
+    else delete ui.costStatus.dataset.state;
+    ui.costRetry.hidden = !retryLabel;
+    if (retryLabel) ui.costRetry.textContent = retryLabel;
+  }
+
+  function clearCostView() {
+    costRequest?.abort();
+    costRequest = null;
+    activeCostAsin = null;
+    costRevision = null;
+    ui.catalogHeading.hidden = false;
+    ui.costDetail.hidden = true;
+    ui.costForm.hidden = true;
+    ui.costFields.disabled = true;
+    ui.costSave.disabled = true;
+    ui.costAsin.textContent = '';
+    ui.costParent.textContent = '';
+    ui.costParentGroup.hidden = true;
+    ui.costSavedAt.textContent = '';
+    for (const { id } of costInputs) ui[id].value = '';
+    costStatus();
+    document.title = catalogTitle;
   }
 
   function checkedText(value, max = 300) {
@@ -134,8 +181,14 @@
     const result = document.createDocumentFragment();
     for (const row of visible.slice(page * pageSize, (page + 1) * pageSize)) {
       const tr = node('tr');
+      const costCell = node('td');
+      const costLink = node('a', 'catalog-cost-link', '查看 / 修改');
+      costLink.href = `#cost-params=${row.asin}`;
+      costLink.dataset.costAsin = row.asin;
+      costLink.setAttribute('aria-label', `查看或修改 ${row.asin} 的成本参数`);
+      costCell.append(costLink);
       tr.append(cell(row.asin, 'catalog-asin'), cell(row.parent, 'catalog-asin'),
-        cell(row.owners, 'catalog-owner'), cell(row.sku, 'catalog-sku'));
+        cell(row.owners, 'catalog-owner'), cell(row.sku, 'catalog-sku'), costCell);
       result.append(tr);
     }
     ui.catalogList.replaceChildren(result);
@@ -174,8 +227,8 @@
       ui.owner.append(...parsed.owners.map(owner => new Option(owner, owner)));
       ui.snapshotDate.textContent = data.snapshot_date;
       ui.snapshotDate.dateTime = data.snapshot_date;
-      ui.catalog.hidden = false;
-      render();
+      catalogLoaded = true;
+      showRoute();
     } catch (error) {
       if (request !== controller || controller.signal.aborted) return;
       const message = error.name === 'TimeoutError' ? '读取产品目录超时，请重试。'
@@ -183,6 +236,125 @@
       status(message, 'error', true);
     } finally {
       if (request === controller) request = null;
+    }
+  }
+
+  function showRoute() {
+    if (!auth || !catalogLoaded) return;
+    const asin = /^#cost-params=([A-Z0-9]{10})$/.exec(location.hash)?.[1];
+    const previous = activeCostAsin;
+    if (asin && asin === previous) return;
+    clearCostView();
+    if (!asin) {
+      ui.catalog.hidden = false;
+      render();
+      if (previous) (ui.catalogList.querySelector(`[data-cost-asin="${previous}"]`) ?? ui['product-catalog']).focus();
+      return;
+    }
+
+    activeCostAsin = asin;
+    ui.catalog.hidden = true;
+    ui.catalogHeading.hidden = true;
+    ui.costAsin.textContent = asin;
+    ui.costDetail.hidden = false;
+    document.title = `成本参数｜${asin}｜产品目录`;
+    status();
+    ui.costTitle.focus();
+
+    const product = products.find(item => item.asin === asin);
+    if (!product) {
+      costStatus('该子 ASIN 不在当前 MC 产品目录中。', 'error');
+      return;
+    }
+    ui.costParent.textContent = product.parent;
+    ui.costParentGroup.hidden = false;
+    void fetchCost();
+  }
+
+  function showCost(data, asin) {
+    if (!data || data.asin !== asin || !Number.isInteger(data.revision) || data.revision < 0 ||
+        (data.revision === 0 ? data.updated_at !== null :
+          typeof data.updated_at !== 'string' || !Number.isFinite(Date.parse(data.updated_at)))) {
+      throw new Error('成本参数数据格式有误，请联系管理员。');
+    }
+    const values = costInputs.map(({ key, min, max, decimals, percent }) => {
+      if (data[key] === null) return '';
+      const value = typeof data[key] === 'number' ? data[key] * (percent ? 100 : 1) : NaN;
+      if (!Number.isFinite(value) || value < min || value > max) {
+        throw new Error('成本参数数据格式有误，请联系管理员。');
+      }
+      return value.toFixed(decimals).replace(/\.?0+$/, '');
+    });
+    costInputs.forEach(({ id }, index) => { ui[id].value = values[index]; });
+    costRevision = data.revision;
+    ui.costForm.hidden = false;
+    ui.costSavedAt.textContent = data.updated_at === null
+      ? '尚未设置成本参数' : `上次保存：${costDateFormat.format(new Date(data.updated_at))}`;
+  }
+
+  async function fetchCost(values) {
+    if (!auth || !activeCostAsin || costRequest) return;
+    const saving = values !== undefined;
+    const asin = activeCostAsin;
+    const userId = auth.user.id;
+    const controller = new AbortController();
+    const endpoint = saving ? 'mc_product_catalog_cost_save' : 'mc_product_catalog_cost_read';
+    const current = () => costRequest === controller && activeCostAsin === asin && auth?.user.id === userId;
+    costRequest = controller;
+    ui.costFields.disabled = true;
+    ui.costSave.disabled = true;
+    costStatus(saving ? '正在保存成本参数…' : '正在读取成本参数…');
+    try {
+      const session = typeof window.KBAuth.getValidSession === 'function'
+        ? await window.KBAuth.getValidSession() : auth;
+      if (!current()) return;
+      if (!session?.session?.access_token || session.user?.id !== userId) {
+        hidePrivateData(); location.replace(login); return;
+      }
+      auth = session;
+      const body = saving ? { p_asin: asin, p_revision: costRevision, ...values } : { p_asin: asin };
+      const response = await fetch(`${origin}/rest/v1/rpc/${endpoint}`, {
+        method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json',
+          apikey: config.SUPABASE_PUBLISHABLE_KEY, Authorization: `Bearer ${auth.session.access_token}` },
+        body: JSON.stringify(body), cache: 'no-store', credentials: 'omit', mode: 'cors', redirect: 'error',
+        referrerPolicy: 'no-referrer', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20_000)]),
+      });
+      if (!current()) return;
+      if (response.status === 401) { hidePrivateData(); location.replace(login); return; }
+      const data = await response.json().catch(() => undefined);
+      if (!current()) return;
+      if (response.status === 403 || data?.code === '42501') {
+        ui.costForm.hidden = true;
+        costRevision = null;
+        for (const { id } of costInputs) ui[id].value = '';
+        costStatus('当前账号没有管理 MC 产品成本参数的权限。', 'error');
+        return;
+      }
+      if (response.status === 404) { costStatus('成本参数尚未启用，请联系管理员。', 'error'); return; }
+      if (data?.code === '40001') {
+        costRevision = null;
+        costStatus('保存前已有其他人修改。请先载入最新值，核对后再保存。', 'error', '载入最新值');
+        return;
+      }
+      if (data?.code === '22023') {
+        costStatus(saving ? '请检查参数范围，或确认该子 ASIN 仍在产品目录中。' : '该子 ASIN 已不在当前 MC 产品目录中。', 'error');
+        return;
+      }
+      if (!response.ok) throw new Error(saving ? '暂时无法确认是否已保存，可先重新读取核对。' : '暂时无法读取成本参数，请重试。');
+      showCost(data, asin);
+      costStatus(saving ? '成本参数已保存。' : '', saving ? 'success' : '');
+    } catch (error) {
+      if (!current() || controller.signal.aborted) return;
+      let message = error.message;
+      if (error.name === 'TimeoutError') message = saving ? '保存请求超时，可先重新读取核对。' : '读取成本参数超时，请重试。';
+      if (error instanceof TypeError) message = saving ? '暂时无法确认是否已保存，可先重新读取核对。' : '暂时无法读取成本参数，请重试。';
+      costStatus(message, 'error', saving ? '重新读取' : '重试');
+    } finally {
+      if (costRequest === controller) {
+        costRequest = null;
+        ui.costFields.disabled = ui.costForm.hidden;
+        ui.costSave.disabled = ui.costForm.hidden || costRevision === null;
+      }
     }
   }
 
@@ -233,10 +405,30 @@
     hidePrivateData();
     void initialize();
   });
+  ui.costRetry.addEventListener('click', () => { void fetchCost(); });
+  ui.costForm.addEventListener('submit', event => {
+    event.preventDefault();
+    if (costRevision === null || costRequest) return;
+    const values = {};
+    for (const { id, key, min, max, decimals, percent } of costInputs) {
+      const input = ui[id];
+      const raw = input.value;
+      const number = Number(raw);
+      if (input.validity?.badInput || (raw !== '' &&
+          (!new RegExp(`^(?:\\d+(?:\\.\\d{0,${decimals}})?|\\.\\d{1,${decimals}})$`).test(raw) || number < min || number > max))) {
+        costStatus(`请输入范围内的数字，最多保留 ${decimals} 位小数；未设置可留空。`, 'error');
+        input.focus();
+        return;
+      }
+      values[`p_${key}`] = raw === '' ? null : percent ? Number((number / 100).toFixed(6)) : number;
+    }
+    void fetchCost(values);
+  });
   ui.logoutBtn.addEventListener('click', async () => {
     hidePrivateData();
     try { await window.KBAuth.logout(); } finally { location.replace(login); }
   });
+  window.addEventListener('hashchange', showRoute);
   window.addEventListener('pagehide', hidePrivateData);
   window.addEventListener('pageshow', event => { if (event.persisted) void initialize(); });
   window.addEventListener('storage', event => {

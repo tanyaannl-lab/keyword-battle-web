@@ -6,7 +6,7 @@
     'parentResults','parentTable','parentEmpty','productList','resultProductFilters','productStatus',
     'productResults','selectedParent','selectedOwner','selectedWeek','backToProducts',
     'resultSummary','resultAds','resultKeywords','resultAttributes','summaryResults','adsResults',
-    'keywordResults','attributeResults','weeklyNotesForm','operation','reviewFee','offsiteFee','otherFee',
+    'keywordResults','attributeResults','weeklyNotesForm','reviewFee','offsiteFee','otherFee',
     'saveWeeklyNotes','notesStatus'];
   const ui = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
   const tabs = [...document.querySelectorAll('[data-result-tab]')];
@@ -25,7 +25,6 @@
   const pct = new Intl.NumberFormat('en-US', { style: 'percent', maximumFractionDigits: 1 });
   const empty = '—';
   const feeFields = ['reviewFee','offsiteFee','otherFee'];
-  const formFields = ['operation', ...feeFields];
   let auth;
   let sessionGeneration = 0;
   let refreshSession;
@@ -214,26 +213,28 @@
       const adCost = number(ad?.sp_cost);
       makeCell(tr, adSales > 0 && adCost !== null ? pct.format(adCost / adSales) : empty, true);
       makeCell(tr, empty, true);
-      const filled = line?.notes && [line.notes.operation,line.notes.review_fee,line.notes.offsite_fee,line.notes.other_fee]
+      const filled = line?.notes && [line.notes.review_fee,line.notes.offsite_fee,line.notes.other_fee]
         .some(value => value !== null && value !== undefined && value !== '');
       const draft = drafts.has(`${week}/${group.parent}`);
-      makeCell(tr, '').append(productButton(group.parent, draft ? '未保存' : filled ? '已填写' : '填写'));
+      makeCell(tr, '').append(productButton(group.parent, draft ? '费用未保存' : filled ? '编辑费用' : '填写费用'));
       fragment.append(tr);
     }
     ui.parentResults.replaceChildren(fragment);
   }
 
   function formValues() {
-    return Object.fromEntries(formFields.map(id => [id, ui[id].value]));
+    return Object.fromEntries(feeFields.map(id => [id, ui[id].value]));
   }
 
   function sameForm(a, b) {
-    return !!a && !!b && formFields.every(id => a[id] === b[id]);
+    return !!a && !!b && feeFields.every(id => {
+      try { return readFee(a[id]) === readFee(b[id]); } catch { return a[id] === b[id]; }
+    });
   }
 
   function dbForm(notes) {
-    return { operation: notes?.operation ?? '', reviewFee: notes?.review_fee == null ? '' : String(notes.review_fee),
-      offsiteFee: notes?.offsite_fee == null ? '' : String(notes.offsite_fee), otherFee: notes?.other_fee == null ? '' : String(notes.other_fee) };
+    return { reviewFee: String(notes?.review_fee ?? 0), offsiteFee: String(notes?.offsite_fee ?? 0),
+      otherFee: String(notes?.other_fee ?? 0) };
   }
 
   function renderNotes(line) {
@@ -245,7 +246,7 @@
     const draft = drafts.get(key);
     if (draft) activeRevision = draft.revision;
     const values = draft?.values ?? noteBase;
-    for (const id of formFields) ui[id].value = values[id];
+    for (const id of feeFields) ui[id].value = values[id];
     ui.weeklyNotesForm.hidden = false;
     updateFormState();
     notice(ui.notesStatus, draft ? '已保留未保存的修改。' : '');
@@ -253,13 +254,13 @@
 
   function updateFormState() {
     const busy = !loadedContext || !parent || !!saveRequest || activeNoteKey !== noteKey();
-    for (const id of formFields) ui[id].disabled = busy;
+    for (const id of feeFields) ui[id].disabled = busy;
     ui.saveWeeklyNotes.disabled = busy || sameForm(formValues(), noteBase);
   }
 
   function trafficMessage(days) {
     if (days === 7) return '';
-    if (!days) return '这个周次还没有销售与流量数据，仍可填写本周记录。';
+    if (!days) return '这个周次还没有销售与流量数据，仍可填写本周费用。';
     return `销售与流量只到齐 ${days} / 7 天，销售指标暂以「—」显示。`;
   }
 
@@ -369,7 +370,7 @@
     ui.resultsCount.textContent = '';
     ui.weeklyNotesForm.hidden = true;
     for (const table of Object.values(tables)) table.replaceChildren();
-    for (const id of formFields) ui[id].value = '';
+    for (const id of feeFields) ui[id].value = '0';
     updateFormState();
     notice(ui.notesStatus);
     notice(ui.productStatus);
@@ -403,7 +404,7 @@
         renderDetail();
         renderNotes(line);
         if (focusDetail) {
-          (focusDetail === 'notes' ? ui.operation : ui.selectedParent).focus();
+          (focusDetail === 'notes' ? ui.reviewFee : ui.selectedParent).focus();
           focusDetail = false;
         }
       }
@@ -438,9 +439,9 @@
 
   function readFee(raw) {
     const value = raw.trim();
-    if (!value) return null;
+    if (!value) return 0;
     if (!/^(?:\d{1,10}(?:\.\d{1,2})?|\.\d{1,2})$/.test(value)) {
-      throw new Error('费用请填写非负金额，最多两位小数。留空表示未填写。');
+      throw new Error('费用请填写非负金额，最多两位小数。');
     }
     return Number(value);
   }
@@ -452,8 +453,10 @@
     const values = formValues();
     if (sameForm(values, noteBase)) return;
     let params;
+    const line = detail.rows.find(row => row.week_start === week);
     try {
-      params = { p_week_start: week, p_parent_asin: parent, p_operation: values.operation.trim() || null,
+      // The existing RPC writes all fields. Preserve the stored text while editing fees only.
+      params = { p_week_start: week, p_parent_asin: parent, p_operation: line?.notes?.operation ?? null,
         p_review_fee: readFee(values.reviewFee), p_offsite_fee: readFee(values.offsiteFee),
         p_other_fee: readFee(values.otherFee), p_revision: activeRevision };
     } catch (error) { notice(ui.notesStatus,error.message,'error'); return; }
@@ -467,14 +470,13 @@
       const saved = await rpc('mc_weekly_results_notes_save',params,controller.signal);
       if (saveRequest !== controller || !auth || activeNoteKey !== key) return;
       if (!saved || !Number.isInteger(saved.revision) || saved.revision <= activeRevision) throw new Error('保存结果无法确认，请重新读取。');
-      const line = detail.rows.find(row => row.week_start === week);
       if (line) line.notes = saved;
       drafts.delete(key);
       noteBase = dbForm(saved);
       activeRevision = saved.revision;
-      for (const id of formFields) ui[id].value = noteBase[id];
+      for (const id of feeFields) ui[id].value = noteBase[id];
       renderDetail();
-      notice(ui.notesStatus, '已保存本周记录。', 'success');
+      notice(ui.notesStatus, '已保存本周费用。', 'success');
     } catch (error) {
       if (saveRequest !== controller || controller.signal.aborted) return;
       if (error.code === '40001' || error.status === 409) {
@@ -510,7 +512,7 @@
     ui.resultWeek.replaceChildren();
     ui.parentResults.replaceChildren();
     for (const table of Object.values(tables)) table.replaceChildren();
-    for (const id of formFields) ui[id].value = '';
+    for (const id of feeFields) ui[id].value = '0';
     for (const id of ['selectedParent','selectedOwner','selectedWeek','resultsCount','resultsCatalogDate']) ui[id].textContent = '';
     notice(ui.notesStatus);
     notice(ui.productStatus);
@@ -608,7 +610,15 @@
     });
   });
   ui.weeklyNotesForm.addEventListener('submit',saveNotes);
-  for (const id of formFields) ui[id].addEventListener('input',captureDraft);
+  for (const id of feeFields) {
+    ui[id].addEventListener('input',captureDraft);
+    ui[id].addEventListener('blur',() => {
+      if (ui[id].value === '' && !ui[id].validity?.badInput) {
+        ui[id].value = '0';
+        captureDraft();
+      }
+    });
+  }
   ui.retryResults.addEventListener('click',() => { if (retryAction) void retryAction(); });
   ui.logoutBtn.addEventListener('click',async () => {
     clearPrivate();

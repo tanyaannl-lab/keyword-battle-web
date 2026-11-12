@@ -30,7 +30,7 @@
 }
 .results-product-filters { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr) auto; gap: .85rem; align-items: end; }
 .results-field { display: grid; gap: .35rem; min-width: 0; font-size: .86rem; font-weight: 700; }
-.results-field input, .results-field select, .results-field textarea, .results-button, .results-table-pagination button, .results-table-pager button {
+.results-field input, .results-field select, .results-button, .results-table-pagination button, .results-table-pager button {
   min-height: 44px;
   padding: .5rem .72rem;
   border: 1px solid #b8ccd4;
@@ -39,9 +39,8 @@
   color: var(--results-ink);
   font: inherit;
 }
-.results-field input, .results-field select, .results-field textarea { width: 100%; min-width: 0; font-size: 1rem; font-weight: 500; }
-.results-field textarea { min-height: 6rem; line-height: 1.5; resize: vertical; }
-.results-field input::placeholder, .results-field textarea::placeholder { color: var(--results-muted); }
+.results-field input, .results-field select { width: 100%; min-width: 0; font-size: 1rem; font-weight: 500; }
+.results-field input::placeholder { color: var(--results-muted); }
 .results-field :disabled { background: #f5f8f9; }
 .results-button, .results-table-pagination button, .results-table-pager button { color: var(--results-teal); font-size: .88rem; font-weight: 700; cursor: pointer; white-space: nowrap; }
 .results-button:hover:not(:disabled), .results-table-pagination button:hover:not(:disabled), .results-table-pager button:hover:not(:disabled) { border-color: var(--results-teal); background: var(--results-tint); }
@@ -77,7 +76,6 @@
 .results-table tbody tr:last-child td { border-bottom: 0; }
 .results-table .results-num, .results-table .results-number { text-align: right; }
 .results-tabular, .results-num, .results-number, .results-catalog-date time, .results-week-tag, .results-link-button { font-variant-numeric: tabular-nums; }
-.results-table .results-note-cell { min-width: 11rem; max-width: 26rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 .results-table tr[data-selected-week="true"] > * { background: #e7f4ee; }
 .results-table tr[data-selected-week="true"] > :first-child { box-shadow: inset 3px 0 0 #167a6c; font-weight: 750; }
 .results-table .results-missing { color: var(--results-muted); }
@@ -110,7 +108,6 @@
 .results-table-compact [data-column="week_start"] { width: 6.2rem; min-width: 5.65rem; white-space: normal; }
 .results-table-compact .results-week-part { white-space: nowrap; }
 .results-table-compact [data-column="order_label"] { white-space: normal; overflow-wrap: anywhere; }
-.results-table-compact .results-note-cell { min-width: 5.5rem; max-width: 14rem; }
 .results-table-note { margin: .55rem .05rem; color: var(--results-muted); font-size: .82rem; line-height: 1.5; }
 .results-table-pager, .results-table-pagination { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: .65rem; margin-top: .65rem; color: var(--results-muted); font-size: .85rem; }
 .results-link-button { display: inline-flex; align-items: center; min-height: 30px; margin: -.25rem 0; padding: .2rem .3rem; border: 0; border-radius: 5px; background: transparent; color: var(--results-teal); font: inherit; font-weight: 750; text-decoration: underline; text-underline-offset: .14em; cursor: pointer; }
@@ -138,7 +135,7 @@
 .results-empty { margin: 0; padding: 1rem; border: 1px dashed #c6d6dd; border-radius: 9px; background: #f9fbfc; color: var(--results-muted); font-size: .9rem; }
 
 .results-notes { margin-top: 1.3rem; padding: 1rem; border: 1px solid var(--results-line); border-radius: 12px; background: #f9fbfc; }
-.results-note-fees { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .8rem; margin-top: .85rem; }
+.results-note-fees { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .8rem; }
 .results-notes-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .65rem; margin-top: .85rem; }
 .results-notes-actions .results-state { margin: 0; }
 .results-state { margin: .85rem 0 .5rem; color: var(--results-muted); font-size: .9rem; overflow-wrap: anywhere; }
