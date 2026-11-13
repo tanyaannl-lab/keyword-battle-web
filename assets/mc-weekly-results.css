@@ -28,6 +28,13 @@
   border-radius: 14px;
   background: #fff;
 }
+.results-period-controls { display: grid; grid-template-columns: minmax(5.75rem, auto) minmax(0, 1fr); gap: .7rem; align-items: end; min-width: 0; }
+.results-day-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) auto; gap: .55rem; align-items: end; min-width: 0; }
+.results-day-filters input { padding-inline: .5rem; }
+.results-day-filters #resultDateFeedback { grid-column: 1 / -1; margin: 0; }
+.results-period-message + .results-button { margin-top: .6rem; }
+.results-controls:has(.results-day-filters:not([hidden])) { grid-template-columns: minmax(26rem, 1.15fr) minmax(0, 1fr); }
+.results-controls:has(.results-day-filters:not([hidden])):has(#resultProductFilters[hidden]) { grid-template-columns: minmax(26rem, 42rem); }
 .results-product-filters { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr) auto; gap: .85rem; align-items: end; }
 .results-field { display: grid; gap: .35rem; min-width: 0; font-size: .86rem; font-weight: 700; }
 .results-field input, .results-field select, .results-button, .results-table-pagination button, .results-table-pager button {
@@ -86,10 +93,11 @@
 .results-table-compact thead th {
   font-size: .75rem;
   line-height: 1.22;
-  text-align: center;
+  text-align: left;
   white-space: normal;
   overflow-wrap: anywhere;
 }
+.results-table-compact thead th.results-number { text-align: right; }
 .results-table-compact th:first-child { padding-inline-start: .52rem; text-align: left; }
 .results-table-compact .results-column-label, .results-table-compact .results-column-hint { display: block; }
 .results-table-compact .results-column-hint { font-size: .68rem; font-weight: 600; color: var(--results-muted); }
@@ -105,7 +113,8 @@
   white-space: normal;
   overflow-wrap: anywhere;
 }
-.results-table-compact [data-column="week_start"] { width: 6.2rem; min-width: 5.65rem; white-space: normal; }
+.results-table-compact [data-column="week_start"] { width: 7.05rem; min-width: 6.4rem; white-space: normal; }
+.results-table-compact [data-column="report_date"] { width: 7.25rem; min-width: 6.4rem; white-space: nowrap; }
 .results-table-compact .results-week-part { white-space: nowrap; }
 .results-table-compact [data-column="order_label"] { white-space: normal; overflow-wrap: anywhere; }
 .results-table-note { margin: .55rem .05rem; color: var(--results-muted); font-size: .82rem; line-height: 1.5; }
@@ -144,7 +153,8 @@
 .results-state[data-state="success"] { color: #14664a; }
 
 @container (max-width: 900px) {
-  .results-controls { grid-template-columns: minmax(0, 1fr); }
+  .results-controls, .results-controls:has(.results-day-filters:not([hidden])),
+  .results-controls:has(.results-day-filters:not([hidden])):has(#resultProductFilters[hidden]) { grid-template-columns: minmax(0, 1fr); }
   #resultWeek { max-width: 20rem; }
 }
 
@@ -152,6 +162,12 @@
   .results-product-filters { grid-template-columns: minmax(0, 1fr) auto; }
   .results-product-filters .results-field:first-child { grid-column: 1 / -1; }
   .results-note-fees { grid-template-columns: minmax(0, 1fr); }
+}
+
+@container (max-width: 490px) {
+  .results-period-controls { grid-template-columns: minmax(0, 1fr); }
+  .results-day-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .results-day-filters button { grid-column: 1 / -1; justify-self: start; }
 }
 
 @media (max-width: 760px) {

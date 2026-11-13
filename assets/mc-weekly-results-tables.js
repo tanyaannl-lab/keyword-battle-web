@@ -9,13 +9,20 @@
   const percent = new Intl.NumberFormat('en-US', { style: 'percent', maximumFractionDigits: 2 });
   const sourceNotice = '同一父 ASIN 的周数据。销售额为已订购商品销售额，订单商品数不等于独立订单数；会话数为各子 ASIN 会话数之和。周报未齐时暂不汇总。';
   const spNotice = 'SP 指商品推广，订单和销售额采用 7 天归因，可能包含其他 SKU。仅展示明确归属当前父 ASIN 的数据。';
+  const profitNotice = '利润尚未计算：产品目录目前只存当前成本，交易表的退款和平台费用还未按产品接入核算。';
+  const channelOrder = ['SP', 'SB', 'SD'];
+  const otherAdChannels = channelOrder.slice(1);
+  const channelMetrics = ['cost', 'sales', 'orders'];
+  const adShareNotice = '归因销售额占比 = 表内广告归因销售额 ÷ 同期销售额，仅供参考。各广告类型的归因窗口可能不同，归因订单合计未跨类型去重。';
+  const numberKinds = new Set(['usd', 'num', 'int', 'pct']);
   const compactHeadings = Object.freeze({
     '出现次数(多个日期与活动)': ['出现次数', '多日/多活动'],
     '平均:份额排名': ['份额排名', '平均'],
     '开始点击日期': ['首次点击'],
     '最后点击日期': ['末次点击'],
     '已订购商品数量': ['订购件数'],
-    '总广告单占比': ['广告单占比'],
+    'SP 归因销售额占比（参考）': ['SP 归因销售额占比', '参考'],
+    '广告归因销售额占比（参考）': ['广告归因销售额占比', '参考'],
   });
 
   function col(key, label, kind = 'text', aliases = [], rule = null) {
@@ -92,26 +99,41 @@
     col('other_fee', '其他费用原币', 'usd'),
   ];
 
-  const adsColumns = [
-    col('week_start', '周期', 'week'),
-    col('sales', '销售额', 'usd'),
-    col('total_ad_sales', '广告销售额', 'usd'),
-    col('ad_order_share', '总广告单占比', 'pct'),
-    col('total_ad_cost', '总广告花费', 'usd'),
-    col('sp_cost', 'SP 广告费', 'usd'),
+  const spMetricColumns = [
     col('sp_sales', 'SP 归因销售额', 'usd'),
+    col('sp_sales_share', 'SP 归因销售额占比（参考）', 'pct'),
+    col('sp_cost', 'SP 广告费', 'usd'),
     col('sp_orders', 'SP 归因订单', 'int'),
     col('sp_impressions', 'SP 展现', 'int'),
     col('sp_clicks', 'SP 点击', 'int'),
     col('sp_acos', 'SP ACOS', 'pct'),
+  ];
+
+  const combinedAdColumns = [
+    col('ad_sales', '已归属广告销售额', 'usd'),
+    col('ad_sales_share', '广告归因销售额占比（参考）', 'pct'),
+    col('ad_cost', '已归属广告花费', 'usd'),
+    col('ad_orders', '已归属广告订单', 'int'),
+    col('ad_acos', '已归属广告 ACOS', 'pct'),
+  ];
+
+  const weeklyAdExtraColumns = [
     col('base_ad_cost', '根基广告', 'usd'),
     col('expansion_ad_cost', '拓词广告', 'usd'),
     col('all_terms', '全部流量词', 'int'),
     col('organic_terms', '自然流量词', 'int'),
     col('sp_terms', 'SP 广告词', 'int'),
-    col('sb_terms', '品牌广告词', 'int'),
-    col('sbv_terms', '视频广告词', 'int'),
     col('ac_terms', 'AC 推荐词', 'int'),
+  ];
+
+  const dailyColumns = [
+    col('report_date', '日期', 'date'),
+    col('sales', '销售额', 'usd'),
+    col('orders', '订单商品数', 'int'),
+    col('units', '订购件数', 'int'),
+    col('visits', '会话数', 'int'),
+    col('unit_session_rate', '订购件数 / 会话数', 'pct'),
+    col('traffic_status', '销售流量报表'),
   ];
 
   function element(name, className, content) {
@@ -138,6 +160,118 @@
     if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
     const date = new Date(`${value}T00:00:00Z`);
     return Number.isFinite(+date) && date.toISOString().slice(0, 10) === value ? date : null;
+  }
+
+  function monday(value) {
+    const date = dateValue(value);
+    if (!date) return null;
+    date.setUTCDate(date.getUTCDate() - (date.getUTCDay() + 6) % 7);
+    return date.toISOString().slice(0, 10);
+  }
+
+  function channelNumbers(row, prefix = '') {
+    return Object.fromEntries(channelMetrics.map(key => [key, numeric(own(row, prefix + key))]));
+  }
+
+  function addKnown(values) {
+    if (!values.length || values.some(value => value === null)) return null;
+    const sum = values.reduce((total, value) => total + value, 0);
+    return Number.isFinite(sum) ? sum : null;
+  }
+
+  function aggregateOtherAds(rows, keyOf) {
+    const periods = new Map();
+    for (const row of Array.isArray(rows) ? rows : []) {
+      if (!otherAdChannels.includes(row?.channel) || !dateValue(row.report_date)) continue;
+      const key = keyOf(row.report_date);
+      const values = channelNumbers(row);
+      if (!channelMetrics.some(metric => values[metric] !== null)) continue;
+      const channels = periods.get(key) ?? new Map();
+      if (!channels.has(row.channel)) channels.set(row.channel, values);
+      else {
+        const prior = channels.get(row.channel);
+        for (const metric of channelMetrics) prior[metric] = addKnown([prior[metric], values[metric]]);
+      }
+      periods.set(key, channels);
+    }
+    return periods;
+  }
+
+  function advertisingRows(rows, dateKey, periods, coverage) {
+    const byWeek = new Map();
+    for (const entry of Array.isArray(coverage) ? coverage : []) {
+      if (!otherAdChannels.includes(entry?.channel) || !dateValue(entry.week_start)) continue;
+      const channels = byWeek.get(entry.week_start) ?? new Map();
+      channels.set(entry.channel, entry.status);
+      byWeek.set(entry.week_start, channels);
+    }
+    return rows.map(row => {
+      const period = own(row, dateKey);
+      const channels = new Map(periods.get(period));
+      const sp = channelNumbers(row, 'sp_');
+      if (channelMetrics.some(metric => sp[metric] !== null)) channels.set('SP', sp);
+      const names = channelOrder.filter(channel => channels.has(channel));
+      const statuses = byWeek.get(monday(period));
+      const scope = names.length === 1 ? `仅 ${names[0]}` : names.join(' + ') || missing;
+      const pending = otherAdChannels.filter(channel => ['unmapped', 'partial'].includes(statuses?.get(channel)));
+      const missingReports = otherAdChannels.filter(channel => statuses?.get(channel) === 'missing');
+      const noRows = otherAdChannels.filter(channel => statuses?.get(channel) === 'empty');
+      const result = {
+        ...row,
+        ad_scope: scope,
+        ad_channels: names,
+        ad_pending: pending,
+        ad_missing_reports: missingReports,
+        ad_empty: noRows,
+      };
+      for (const metric of channelMetrics) {
+        result[`ad_${metric}`] = addKnown(names.map(channel => channels.get(channel)[metric]));
+        for (const channel of otherAdChannels) result[`${channel.toLowerCase()}_${metric}`] = channels.get(channel)?.[metric] ?? null;
+      }
+      result.ad_sales_share = ratio(result.ad_sales, row.sales);
+      result.ad_acos = ratio(result.ad_cost, result.ad_sales);
+      return result;
+    });
+  }
+
+  function advertisingColumns(rows, daily) {
+    const seen = new Set(rows.flatMap(row => row.ad_channels));
+    const showCombined = otherAdChannels.some(channel => seen.has(channel));
+    const details = showCombined ? otherAdChannels.filter(channel => seen.has(channel)).flatMap(channel => {
+      const prefix = channel.toLowerCase();
+      return [col(`${prefix}_sales`, `${channel} 归因销售额`, 'usd'), col(`${prefix}_cost`, `${channel} 广告费`, 'usd'),
+        col(`${prefix}_orders`, `${channel} 归因订单`, 'int')];
+    }) : [];
+    return [
+      daily ? col('report_date', '日期', 'date') : col('week_start', '周期', 'week'),
+      col('ad_scope', '统计范围'),
+      col('sales', '销售额', 'usd'),
+      ...(showCombined ? combinedAdColumns : []),
+      ...(!showCombined || seen.has('SP') ? spMetricColumns : []),
+      ...details,
+      ...(daily ? [] : weeklyAdExtraColumns),
+    ];
+  }
+
+  function advertisingNotice(rows, daily, error, spError) {
+    const seen = new Set(rows.flatMap(row => row.ad_channels));
+    const names = channelOrder.filter(channel => seen.has(channel));
+    const pending = new Set(rows.flatMap(row => row.ad_pending));
+    const missingReports = new Set(rows.flatMap(row => row.ad_missing_reports));
+    const confirmedEmpty = otherAdChannels.filter(channel => rows.length && rows.every(row => row.ad_empty.includes(channel)));
+    const join = values => otherAdChannels.filter(channel => values.has(channel)).join('、');
+    const notices = [
+      names.length ? `统计范围：${names.length === 1 ? `仅 ${names[0]}` : names.join(' + ')}，只计入能归属当前父 ASIN 的数据。` : '暂无能归属当前父 ASIN 的广告数据。',
+      names.length ? adShareNotice : '',
+      seen.has('SP') ? spNotice : '',
+      pending.size ? `${join(pending)} 有广告报表，但部分或全部记录未能归属产品，未归属部分未计入。` : '',
+      missingReports.size ? `部分期间缺少 ${join(missingReports)} 报表，缺失未按 0 计。` : '',
+      confirmedEmpty.length ? `${confirmedEmpty.join('、')} 在本表期间的源报表无记录。` : '',
+      error ? '暂时无法核对 SB、SD，未把缺失数据按 0 计。' : '',
+      spError ? '暂时无法读取 SP，表内金额未包含缺失的 SP 数据。' : '',
+      daily ? `按报表实际日期展示；有可归属广告数据的日期：${rows.filter(row => row.ad_channels.length).length} / ${rows.length}。` : '',
+    ];
+    return notices.filter(Boolean).join(' ');
   }
 
   function weekLabel(value) {
@@ -186,6 +320,7 @@
     heading.scope = 'col';
     heading.dataset.column = column.key;
     heading.dataset.kind = column.kind;
+    if (numberKinds.has(column.kind)) heading.classList.add('results-number');
     const threshold = /^(.*?)\[([^\]]+)\]$/.exec(column.label);
     const [label, hint] = compactHeadings[column.label] ||
       (threshold ? [threshold[1].replace(/^计算:/, ''), `[${threshold[2]}]`] : [column.label]);
@@ -243,14 +378,14 @@
           cell.dataset.kind = column.kind;
           if (column.kind === 'week' && formatted.text !== missing) {
             const [first, last] = formatted.text.split(' 至 ');
-            cell.replaceChildren(element('span', 'results-week-part', first), document.createTextNode(' 至 '),
-              element('span', 'results-week-part', last));
+            cell.replaceChildren(element('span', 'results-week-part', first), document.createTextNode(' '),
+              element('span', 'results-week-part', `至 ${last}`));
           }
           if (index === 0) {
             cell.scope = 'row';
             if (current) cell.setAttribute('aria-current', 'date');
           }
-          if (formatted.number !== undefined) cell.classList.add('results-number');
+          if (numberKinds.has(column.kind)) cell.classList.add('results-number');
           if (formatted.text === missing) cell.classList.add('results-missing');
           setHighlight(cell, formatted.number, column.rule);
           tr.append(cell);
@@ -305,6 +440,7 @@
       const base = weeks.get(week) || { week_start: week };
       for (const key of ['sp_cost', 'sp_sales', 'sp_orders', 'sp_impressions', 'sp_clicks']) base[key] = own(row, key);
       base.sp_acos = ratio(base.sp_cost, base.sp_sales);
+      base.sp_sales_share = ratio(base.sp_sales, base.sales);
       weeks.set(week, base);
     }
     return [...weeks.values()]
@@ -312,32 +448,65 @@
       .sort((a, b) => b.week_start.localeCompare(a.week_start));
   }
 
-  function render(targets, { rows, week, adRows } = {}) {
+  function render(targets, { rows, week, adRows, otherAds, spError } = {}) {
     const weeklyRows = buildWeeklyRows(rows, adRows, week);
     const spNote = Array.isArray(adRows) && adRows.length ? spNotice : '此父 ASIN 暂无已导入的商品推广结果。';
     renderTable(targets.summary, {
       columns: summaryColumns, rows: weeklyRows, week, label: '周总结',
-      note: `${sourceNotice} ${spNote} 利润、退货率及未接入费用显示为 —。`, emptyText: '没有可展示的周期。',
+      note: `${sourceNotice} ${profitNotice} ${spNote}`, emptyText: '没有可展示的周期。',
     });
+    const byWeek = aggregateOtherAds(otherAds?.rows, monday);
+    const dates = new Set(weeklyRows.map(row => row.week_start));
+    const baseRows = [...weeklyRows, ...[...byWeek.keys()]
+      .filter(value => !dates.has(value) && (!week || value <= week))
+      .map(week_start => ({ week_start }))].sort((a, b) => b.week_start.localeCompare(a.week_start));
+    const scopedRows = advertisingRows(baseRows, 'week_start', byWeek, otherAds?.coverage ?? otherAds?.pending);
     renderTable(targets.ads, {
-      columns: adsColumns, rows: weeklyRows, week, label: '产品广告结构',
-      note: `${spNote} 全部广告、活动分类及流量词数据接入前显示为 —。`, emptyText: '没有可展示的周期。',
+      columns: advertisingColumns(scopedRows, false), rows: scopedRows, week, label: '产品广告结构',
+      note: advertisingNotice(scopedRows, false, otherAds?.error, spError), emptyText: '没有可展示的周期。',
     });
   }
 
-  function renderSearch(targets, { keyword_rows: keywordRows, attribute_rows: attributeRows } = {}) {
+  function renderSearch(targets, { keyword_rows: keywordRows, attribute_rows: attributeRows, rangeNotice = '' } = {}) {
     const scope = '仅展示明确归属当前父 ASIN 的数据。订单和销售额采用 7 天归因。搜索份额、排名和全站展现缺少源数据，显示为 —。';
     renderTable(targets.keywords, {
       columns: keywordColumns, rows: Array.isArray(keywordRows) ? keywordRows : [], label: '关键词分析',
-      note: scope,
-      emptyText: '此父 ASIN 在所选周暂无关键词分析。',
+      note: [rangeNotice, scope].filter(Boolean).join(' '),
+      emptyText: `此父 ASIN 在所选${rangeNotice ? '日期范围' : '周'}暂无关键词分析。`,
     });
     renderTable(targets.attributes, {
       columns: attributeColumns, rows: Array.isArray(attributeRows) ? attributeRows : [], label: '属性分析',
-      note: scope,
-      emptyText: '此父 ASIN 在所选周暂无属性分析。',
+      note: [rangeNotice, scope].filter(Boolean).join(' '),
+      emptyText: `此父 ASIN 在所选${rangeNotice ? '日期范围' : '周'}暂无属性分析。`,
     });
   }
 
-  window.MCWeeklyResultTables = Object.freeze({ render, renderSearch, weekLabel, keywordColumns, attributeColumns });
+  function renderDaily(target, { rows } = {}) {
+    const dailyRows = (Array.isArray(rows) ? rows : []).map(row => ({
+      ...row,
+      unit_session_rate: ratio(own(row, 'units'), own(row, 'visits')),
+      traffic_status: own(row, 'traffic_days') === 1 ? '已到齐' : '未到齐',
+    }));
+    renderTable(target, {
+      columns: dailyColumns, rows: dailyRows, label: '每日销售与流量',
+      note: '日期按美国太平洋时间。只展示对应日期的实际报表数据；「—」表示没有可确认的数据。',
+      emptyText: '所选日期范围暂无数据。',
+    });
+  }
+
+  function renderDailyAds(target, { rows, adRows, otherAds, spError } = {}) {
+    const byDay = new Map((adRows ?? []).map(row => [row.report_date, row]));
+    const dailyRows = (rows ?? []).map(row => {
+      const ad = byDay.get(row.report_date);
+      return { ...row, ...ad, sp_sales_share: ratio(ad?.sp_sales, row.sales), sp_acos: ratio(ad?.sp_cost, ad?.sp_sales) };
+    });
+    const scopedRows = advertisingRows(dailyRows, 'report_date', aggregateOtherAds(otherAds?.rows, date => date), otherAds?.coverage ?? otherAds?.pending);
+    renderTable(target, {
+      columns: advertisingColumns(scopedRows, true), rows: scopedRows, label: '每日广告结构',
+      note: advertisingNotice(scopedRows, true, otherAds?.error, spError),
+      emptyText: '所选日期范围暂无可展示的日报。',
+    });
+  }
+
+  window.MCWeeklyResultTables = Object.freeze({ render, renderDaily, renderDailyAds, renderSearch, weekLabel, keywordColumns, attributeColumns });
 })();

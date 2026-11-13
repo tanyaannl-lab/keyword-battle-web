@@ -7,7 +7,8 @@
   <title>周结果｜利润表｜每周报表</title>
   <link rel="stylesheet" href="../assets/styles.css">
   <link rel="stylesheet" href="../assets/workspace-nav.css?v=20261110">
-  <link rel="stylesheet" href="../assets/mc-weekly-results.css?v=20261112-3">
+  <link rel="stylesheet" href="../assets/mc-weekly-source-nav.css?v=20261113-1">
+  <link rel="stylesheet" href="../assets/mc-weekly-results.css?v=20261113-1">
 </head>
 <body>
 <div class="shell workspace-shell workspace-sales" id="appShell" hidden>
@@ -36,10 +37,15 @@
         <span class="workspace-subnav-label">利润表</span>
         <a href="./weekly-products.html#product-catalog">产品目录</a>
         <a href="#weekly-results" aria-current="page">周结果</a>
-        <a href="./weekly.html#sales-and-traffic">详情页面销售和流量</a>
-        <a href="./weekly-orders.html#orders">订单</a>
-        <a href="./weekly-ads.html#ads-report">广告报告</a>
-        <a href="./weekly-transactions.html#transactions">交易表</a>
+        <details class="weekly-source-downloads">
+          <summary>数据源下载</summary>
+          <div class="weekly-source-links">
+            <a href="./weekly.html#sales-and-traffic">详情页面销售和流量</a>
+            <a href="./weekly-orders.html#orders">订单</a>
+            <a href="./weekly-ads.html#ads-report">广告报告</a>
+            <a href="./weekly-transactions.html#transactions">交易表</a>
+          </div>
+        </details>
       </nav>
     </div>
   </aside>
@@ -58,15 +64,36 @@
         <p class="results-market">MC · AMAZON US</p>
         <p class="results-path">每周报表 <span aria-hidden="true">›</span> 利润表</p>
         <h1 id="weekly-results">周结果</h1>
-        <p class="results-intro">选周后查看所有父款，点开一个父 ASIN 查看复盘和广告分析。</p>
+        <p class="results-intro">可按周复盘，也可选择日期范围查看每日销售、流量和已发布的广告分析。</p>
       </header>
 
-      <section id="results" aria-label="MC 美国站周结果" hidden>
-        <div class="results-controls" role="group" aria-label="筛选周结果">
-          <label class="results-field" for="resultWeek">
-            <span>选择周次</span>
-            <select id="resultWeek" aria-describedby="weekTimeZone"></select>
-          </label>
+      <section id="results" aria-label="MC 美国站结果" hidden>
+        <div class="results-controls" role="group" aria-label="筛选结果">
+          <div class="results-period-controls">
+            <label class="results-field" for="resultView">
+              <span>时间维度</span>
+              <select id="resultView" aria-describedby="weekTimeZone">
+                <option value="day">按日 · 日期范围</option>
+                <option value="week">按周</option>
+              </select>
+            </label>
+            <label id="resultWeeklyFilter" class="results-field" for="resultWeek">
+              <span>选择周次</span>
+              <select id="resultWeek" aria-describedby="weekTimeZone"></select>
+            </label>
+            <form id="resultDateFilter" class="results-day-filters" aria-label="选择日期范围" hidden>
+              <label class="results-field" for="resultStartDate">
+                <span>开始日期</span>
+                <input id="resultStartDate" type="date" min="2000-01-01" required aria-describedby="weekTimeZone resultDateFeedback">
+              </label>
+              <label class="results-field" for="resultEndDate">
+                <span>结束日期</span>
+                <input id="resultEndDate" type="date" min="2000-01-01" required aria-describedby="weekTimeZone resultDateFeedback">
+              </label>
+              <button type="submit" class="results-button results-button-primary">查询</button>
+              <p id="resultDateFeedback" class="results-state" role="status" hidden></p>
+            </form>
+          </div>
           <div id="resultProductFilters" class="results-product-filters">
             <label class="results-field" for="resultSearch">
               <span>搜索产品</span>
@@ -81,7 +108,7 @@
         </div>
         <p class="results-timezone" id="weekTimeZone">周次按美国太平洋时间计算，周一至周日。</p>
 
-        <section id="productList" class="results-list" aria-label="该周父款">
+        <section id="productList" class="results-list" aria-label="筛选期间的父款">
           <div class="results-overview">
             <p id="resultsCount" class="results-count" aria-live="polite" aria-atomic="true"></p>
             <p class="results-catalog-date">目录日期 <time id="resultsCatalogDate">—</time></p>
@@ -92,15 +119,17 @@
                 <tr>
                   <th scope="col">父 ASIN</th><th scope="col">负责人</th>
                   <th scope="col" class="results-num">销售额</th><th scope="col" class="results-num">订单商品数</th>
-                  <th scope="col" class="results-num">SP 广告花费</th><th scope="col" class="results-num">SP 归因订单</th>
-                  <th scope="col" class="results-num">SP ACOS</th><th scope="col" class="results-num">利润</th>
-                  <th scope="col">本周费用</th>
+                  <th scope="col" class="results-num" data-day-only hidden>订购件数</th><th scope="col" class="results-num" data-day-only hidden>会话数</th>
+                  <th scope="col" class="results-num" data-week-only>SP 广告花费</th><th scope="col" class="results-num" data-week-only>SP 归因订单</th>
+                  <th scope="col" class="results-num" data-week-only>SP ACOS</th><th scope="col" class="results-num" data-week-only>利润</th>
+                  <th scope="col" data-week-only>本周费用</th>
                 </tr>
               </thead>
               <tbody id="parentResults"></tbody>
             </table>
           </div>
-          <p class="results-table-note">按当前产品目录列出父款。销售指标在七天报表齐全后展示；SP 指商品推广，需导入对应周的广告商品报告。利润尚缺成本数据。</p>
+          <p class="results-table-note" id="resultsWeeklyListHint">按当前产品目录列出父款。销售指标在七天报表齐全后展示。利润核算尚未接入交易费用和历史成本。</p>
+          <p class="results-table-note results-daily-note" id="resultsDailyListHint" hidden></p>
           <p id="parentEmpty" class="results-empty" hidden>没有符合条件的父款，请调整筛选。</p>
         </section>
 
@@ -127,8 +156,8 @@
 
           <section id="resultSummary" class="results-panel" role="tabpanel" aria-labelledby="resultTabSummary" tabindex="0">
             <header class="results-panel-head">
-              <h3>每周复盘</h3>
-              <p>选中的周高亮。「—」表示缺少数据。未填写的三项手动费用按 0 显示。</p>
+              <h3 id="resultsSummaryTitle">每周复盘</h3>
+              <p id="resultsSummaryHint">选中的周高亮。「—」表示缺少数据。未填写的三项手动费用按 0 显示。</p>
             </header>
             <div id="summaryResults" class="results-data"></div>
 
@@ -159,15 +188,15 @@
           </section>
 
           <section id="resultAds" class="results-panel" role="tabpanel" aria-labelledby="resultTabAds" tabindex="0" hidden>
-            <header class="results-panel-head"><h3>产品广告结构</h3><p>按周对比广告销售、广告花费和广告结构。</p></header>
+            <header class="results-panel-head"><h3 id="resultsAdsTitle">产品广告结构</h3><p data-week-only>按产品和周次汇总有明确归属的广告。只有 SP 数据时，只统计 SP。</p></header>
             <div id="adsResults" class="results-data"></div>
           </section>
           <section id="resultKeywords" class="results-panel" role="tabpanel" aria-labelledby="resultTabKeywords" tabindex="0" hidden>
-            <header class="results-panel-head"><h3>关键词分析</h3><p>所选周，每个完整搜索词一行。</p></header>
+            <header class="results-panel-head"><h3>关键词分析</h3><p data-week-only>所选周，每个完整搜索词一行。</p></header>
             <div id="keywordResults" class="results-data"></div>
           </section>
           <section id="resultAttributes" class="results-panel" role="tabpanel" aria-labelledby="resultTabAttributes" tabindex="0" hidden>
-            <header class="results-panel-head"><h3>属性分析</h3><p>所选周，每个词元一行。同一搜索词可归入多个词元，属性行不能相加算总额。</p></header>
+            <header class="results-panel-head"><h3>属性分析</h3><p data-week-only>所选周，每个词元一行。同一搜索词可归入多个词元，属性行不能相加算总额。</p></header>
             <div id="attributeResults" class="results-data"></div>
           </section>
         </article>
@@ -182,8 +211,8 @@
 <noscript><style>#loading{display:none}</style><p class="auth-loading">请启用 JavaScript 后查看周结果。</p></noscript>
 <script src="../assets/config.js"></script>
 <script src="../assets/auth-client.js"></script>
-<script src="../assets/mc-weekly-results-tables.js?v=20261112-3"></script>
-<script src="../assets/mc-weekly-results.js?v=20261112-3"></script>
+<script src="../assets/mc-weekly-results-tables.js?v=20261113-3"></script>
+<script src="../assets/mc-weekly-results.js?v=20261113-3"></script>
 </body>
 </html>
 
