@@ -21,7 +21,8 @@
   const login = '../index.html';
   const allowedRpc = new Set(['mc_product_catalog_read','mc_weekly_results_weeks','mc_weekly_results_read',
     'mc_weekly_results_notes_save','mc_weekly_results_sp_read','mc_weekly_results_search','mc_weekly_results_daily_read',
-    'mc_weekly_results_sp_daily_read','mc_weekly_results_search_daily_read','mc_weekly_results_other_ads_read']);
+    'mc_weekly_results_sp_daily_read','mc_weekly_results_search_daily_read','mc_weekly_results_other_ads_read',
+    'mc_weekly_results_daily_profit_read','mc_daily_fba_returns_read']);
   const asin = /^[A-Z0-9]{10}$/;
   const normalize = text => text.normalize('NFKC').toLowerCase();
   const collator = new Intl.Collator('zh-Hans', { numeric: true, sensitivity: 'base' });
@@ -399,9 +400,9 @@
     target.replaceChildren(message,button);
   }
 
-  function renderDailyPanels(rows, ads, otherAds) {
+  function renderDailyPanels(rows, ads, otherAds, profit, returns) {
     if (typeof window.MCWeeklyResultTables.renderDaily !== 'function') throw new Error('每日明细组件未加载，请刷新页面。');
-    window.MCWeeklyResultTables.renderDaily(tables.summary, { rows, adRows:ads.rows, otherAds, spError:ads.error });
+    window.MCWeeklyResultTables.renderDaily(tables.summary, { rows, adRows:ads.rows, otherAds, spError:ads.error, profit, returns });
     if (ads.rows?.length || otherAds.rows.length || otherAds.coverage.length || otherAds.error) {
       window.MCWeeklyResultTables.renderDailyAds(tables.ads,{ rows, adRows:ads.rows, otherAds, spError:ads.error });
     } else {
@@ -528,6 +529,29 @@
     }
   }
 
+  async function optionalDailyMetrics(source,start,end,parentAsin,signal) {
+    if (!parentAsin) return {rows:[],error:false};
+    const profit = source === 'profit';
+    const endpoint = profit ? 'mc_weekly_results_daily_profit_read' : 'mc_daily_fba_returns_read';
+    const validValue = (value, min, whole = false) => value === null ||
+      (typeof value === 'number' && Number.isFinite(value) && value >= min && Math.abs(value) <= Number.MAX_SAFE_INTEGER &&
+        (!whole || Number.isSafeInteger(value)));
+    try {
+      const rows = await rpc(endpoint,{p_start_date:start,p_end_date:end,p_parent_asin:parentAsin},signal);
+      if (!Array.isArray(rows) || rows.length !== dayCount(start,end) ||
+          new Set(rows.map(row=>row?.report_date)).size !== rows.length || rows.some(row=>
+            !validDay(row?.report_date) || row.report_date < start || row.report_date > end ||
+            (profit ? row.parent_asin !== parentAsin || !validValue(row.profit_before_ads,-Number.MAX_SAFE_INTEGER) ||
+              !validValue(row.sales_basis,0) || (row.sales_basis === null && row.profit_before_ads !== null) :
+              !validValue(row.return_units,0,true) || !validValue(row.shipped_units,0,true)))) {
+        throw new Error('每日补充指标格式有误。');
+      }
+      return {rows,error:false};
+    } catch (error) {
+      return {rows:[],error:!signal.aborted && error.status !== 404 && error.code !== 'PGRST202'};
+    }
+  }
+
   function blankOtherAds() {
     return {rows:[], coverage:[], pending:[], error:false};
   }
@@ -626,12 +650,14 @@
     pageStatus(daily ? '正在读取所选日期的结果…' : '正在读取所选周的结果…');
     try {
       if (daily) {
-        const [main,ads,otherAds] = await Promise.all([
+        const [main,ads,otherAds,profit,returns] = await Promise.all([
           rpc('mc_weekly_results_daily_read',{
             p_start_date: start, p_end_date: end, p_parent_asin: parentAsin,
           },controller.signal),
           optionalDailyAds(start,end,parentAsin,controller.signal),
           optionalOtherAds(start,end,parentAsin,controller.signal),
+          optionalDailyMetrics('profit',start,end,parentAsin,controller.signal),
+          optionalDailyMetrics('returns',start,end,parentAsin,controller.signal),
         ]);
         if (context !== controller || controller.signal.aborted || !auth) return;
         const rows = dailyRowsFrom(main,start,end,parentAsin);
@@ -648,7 +674,7 @@
           }
         } else {
           detail = { rows, ads:ads.rows, otherAds, search: { state:'idle' } };
-          renderDailyPanels(rows,ads,otherAds);
+          renderDailyPanels(rows,ads,otherAds,profit,returns);
           notice(ui.productStatus,coverage);
           if (focusDetail) {
             ui.selectedParent.focus();

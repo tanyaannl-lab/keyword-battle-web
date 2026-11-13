@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>FBA 退货表｜利润表｜每周报表</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+  <link rel="stylesheet" href="../assets/workspace-nav.css?v=20261110">
+  <link rel="stylesheet" href="../assets/mc-weekly-source-nav.css?v=20261113-1">
+  <link rel="stylesheet" href="../assets/mc-weekly-sales.css?v=ads-nav1">
+  <link rel="stylesheet" href="../assets/mc-weekly-ads.css?v=direct-download1">
+</head>
+<body>
+<div class="shell workspace-shell workspace-sales" id="appShell" hidden>
+  <aside class="workspace-sidebar">
+    <nav class="workspace-rail" aria-label="工作台模块">
+      <a class="workspace-mark" href="../tool/index.html" aria-label="关键词作战工具">K</a>
+      <a class="workspace-module" href="./index.html#home">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16h16M8 15v-3m5 3V8m5 7V5"/></svg>
+        <span>销量观察</span>
+      </a>
+      <a class="workspace-module" href="../tool/index.html">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M3 6h1M3 12h1M3 18h1"/></svg>
+        <span>关键词任务</span>
+      </a>
+      <a class="workspace-module" href="./weekly.html" aria-current="true">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H5v18h14V3h-3M8 2h8v4H8zM8 10h8m-8 4h8m-8 4h5"/></svg>
+        <span>每周报表</span>
+      </a>
+    </nav>
+    <div class="workspace-pane">
+      <div class="workspace-pane-head">
+        <span class="workspace-pane-title">每周报表</span>
+        <span class="workspace-pane-caption">AMAZON · US MARKET</span>
+      </div>
+      <nav class="workspace-subnav weekly-subnav" aria-label="每周报表子导航">
+        <span class="workspace-subnav-label">利润表</span>
+        <a href="./weekly-products.html#product-catalog">产品目录</a>
+        <a href="./weekly-results.html#weekly-results">周结果</a>
+        <details class="weekly-source-downloads" open>
+          <summary>数据源下载</summary>
+          <div class="weekly-source-links">
+            <a href="./weekly.html#sales-and-traffic">详情页面销售和流量</a>
+            <a href="./weekly-orders.html#orders">订单</a>
+            <a href="./weekly-ads.html#ads-report">广告报告</a>
+            <a href="./weekly-transactions.html#transactions">交易表</a>
+            <a href="#fba-returns" aria-current="page">FBA 退货表</a>
+          </div>
+        </details>
+      </nav>
+    </div>
+  </aside>
+
+  <div class="workspace-content">
+    <header class="topbar">
+      <a class="brand" href="../tool/index.html"><span class="brand-mark">K</span><span>关键词作战工具</span></a>
+      <div class="top-actions">
+        <span class="desktop-only" id="userEmail">—</span>
+        <button class="btn btn-ghost btn-sm" id="logoutBtn" type="button">退出</button>
+      </div>
+    </header>
+
+    <main id="main" class="main sales-main mc-weekly">
+      <p class="eyebrow">MC · AMAZON US</p>
+      <p class="weekly-path">每周报表 <span aria-hidden="true">›</span> 数据源下载</p>
+      <h1 id="fba-returns">FBA 退货表</h1>
+      <p class="description">按美国太平洋时间选择仓库收退日，导出 Amazon 美国站 FBA 退货件数。每个子 ASIN 汇总一行。数据通常晚两天发布。</p>
+      <form id="returnsForm" class="export-card" aria-label="查询 FBA 退货" hidden>
+        <label class="field" for="returnDate"><span>退货日期</span><input id="returnDate" class="input" type="date" min="2000-01-01" required aria-describedby="returnsStatus"></label>
+        <button type="submit" class="download-btn" id="queryReturns">查询</button>
+        <button type="button" class="download-btn" id="exportReturns" disabled>导出 CSV</button>
+      </form>
+      <p id="returnsStatus" class="notice" role="status" aria-live="polite" hidden></p>
+    </main>
+  </div>
+</div>
+<div class="auth-loading" id="loading" role="status">正在验证登录状态…</div>
+<noscript><p>请启用 JavaScript 后查看退货表。</p></noscript>
+<script src="../assets/config.js"></script>
+<script src="../assets/auth-client.js"></script>
+<script src="../assets/mc-weekly-fba-returns.js?v=20261113-1"></script>
+</body>
+</html>

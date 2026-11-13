@@ -22,6 +22,12 @@
     '最后点击日期': ['末次点击'],
     '已订购商品数量': ['订购件数'],
     '广告订单': ['广告订单', '归因'],
+    '自然订单（估算）': ['自然订单', '估算'],
+    '自然单占比（估算）': ['自然单占比', '估算'],
+    '广告单占比（估算）': ['广告单占比', '估算'],
+    '利润（估算）': ['利润', '估算'],
+    '毛利率（估算）': ['毛利率', '估算'],
+    'FBA 退货率': ['FBA 退货率', '当日收退 / 发货'],
     '广告费占总销售额': ['广告费占', '总销售额'],
     '总访客数': ['总访客数', '会话数'],
     'SP 归因销售额占比（参考）': ['SP 归因销售额占比', '参考'],
@@ -131,18 +137,18 @@
 
   const dailyColumns = [
     col('report_date', '日期', 'date'),
-    col('profit', '利润', 'usd'),
-    col('gross_margin', '毛利率', 'pct'),
+    col('profit', '利润（估算）', 'usd'),
+    col('gross_margin', '毛利率（估算）', 'pct'),
     col('sales', '销售额', 'usd'),
     col('ad_sales', '广告销售额', 'usd'),
     col('orders', '订单', 'int'),
-    col('organic_orders', '自然订单', 'int'),
+    col('organic_orders', '自然订单（估算）', 'int'),
     col('ad_orders', '广告订单', 'int'),
-    col('organic_order_share', '自然单占比', 'pct'),
-    col('ad_order_share', '广告单占比', 'pct'),
+    col('organic_order_share', '自然单占比（估算）', 'pct'),
+    col('ad_order_share', '广告单占比（估算）', 'pct'),
     col('ad_cost', '广告费', 'usd'),
     col('ad_cost_of_sales', '广告费占总销售额', 'pct'),
-    col('returns_rate', '退货率', 'pct'),
+    col('returns_rate', 'FBA 退货率', 'pct'),
     col('app_session_share', 'APP流量占比', 'pct'),
     col('visits', '总访客数', 'int'),
     col('unit_session_rate', '转化', 'pct'),
@@ -166,6 +172,19 @@
     const lhs = numeric(a);
     const rhs = numeric(b);
     return lhs !== null && rhs !== null && rhs > 0 ? lhs / rhs : null;
+  }
+
+  function estimateDailyOrderSplit(row) {
+    const orders = numeric(row.orders);
+    const adOrders = numeric(row.ad_orders);
+    const isCount = value => Number.isSafeInteger(value) && value >= 0;
+    const validCounts = isCount(orders) && isCount(adOrders);
+    const organicOrders = validCounts && adOrders <= orders ? orders - adOrders : null;
+    return {
+      organic_orders: organicOrders,
+      organic_order_share: ratio(organicOrders, orders),
+      ad_order_share: validCounts ? ratio(adOrders, orders) : null,
+    };
   }
 
   function dateValue(value) {
@@ -493,12 +512,26 @@
     });
   }
 
-  function renderDaily(target, { rows, adRows, otherAds, spError } = {}) {
+  function renderDaily(target, { rows, adRows, otherAds, spError, profit, returns } = {}) {
+    const byDate = source => new Map((Array.isArray(source?.rows) ? source.rows : []).map(row => [row.report_date, row]));
+    const profits = byDate(profit);
+    const returnsByDate = byDate(returns);
     const dailyRows = scopedDailyAds(rows, adRows, otherAds).map(row => {
       const appSessions = numeric(own(row, 'app_sessions'));
       const visits = numeric(own(row, 'visits'));
+      const dailyProfit = profits.get(row.report_date);
+      const profitBasis = numeric(dailyProfit?.profit_before_ads);
+      const salesBasis = numeric(dailyProfit?.sales_basis);
+      const adCost = numeric(row.ad_cost);
+      const estimate = !spError && !otherAds?.error && profitBasis !== null && adCost !== null && adCost >= 0 &&
+        salesBasis !== null && salesBasis === numeric(row.sales) ? profitBasis - adCost : null;
+      const movement = returnsByDate.get(row.report_date);
       return {
         ...row,
+        ...estimateDailyOrderSplit(row),
+        profit: estimate,
+        gross_margin: ratio(estimate, salesBasis),
+        returns_rate: ratio(movement?.return_units, movement?.shipped_units),
         ad_cost_of_sales: ratio(row.ad_cost, row.sales),
         app_session_share: appSessions !== null && visits !== null && appSessions >= 0 && appSessions <= visits
           ? ratio(appSessions, visits) : null,
@@ -506,11 +539,14 @@
       };
     });
     const trafficNote = '订单取销售流量报表的订单商品数，不等于独立订单数。总访客数取各子 ASIN 会话数之和，未去重。转化 = 订购件数 ÷ 会话数；APP 流量占比 = APP 会话数 ÷ 会话数。';
-    const limitsNote = '利润、毛利率、退货率缺少每日成本和交易数据；自然订单及两项订单占比缺少同口径的订单归因，暂显示「—」。';
+    const orderEstimateNote = '运营估算：自然订单 = 订单商品数 − 广告归因订单，两项占比均除以订单商品数。广告订单超过订单商品数时，广告占比按原值显示，自然订单及其占比留空。';
+    const profitNote = '预估利润按当前目录的商品成本、头程、FBA 配送费、佣金和税率，并扣除当日已归属广告费。未纳入独立促销、退款或结算调整。毛利率 = 预估利润 ÷ 销售额；所需数据缺失显示「—」。';
+    const returnsNote = 'FBA 退货率 = 当天仓库收到的 FBA 退货件数 ÷ 当天 FBA 发货件数。反映当日进出量，不是同一批订单的退货率；缺报表或当天无发货时显示「—」。';
     renderTable(target, {
       columns: dailyColumns, rows: dailyRows, label: '每日销售与流量',
       note: [trafficNote, '广告销售额和广告订单取归因数据。广告费占总销售额 = 已归属广告费 ÷ 同日销售额。',
-        advertisingNotice(dailyRows, false, otherAds?.error, spError, false), limitsNote].join(' '),
+        advertisingNotice(dailyRows, false, otherAds?.error, spError, false), orderEstimateNote, profitNote, returnsNote,
+        profit?.error ? '暂时无法读取预估利润。' : '', returns?.error ? '暂时无法读取 FBA 退货数据。' : ''].filter(Boolean).join(' '),
       emptyText: '所选日期范围暂无数据。',
     });
   }
