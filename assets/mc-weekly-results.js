@@ -304,7 +304,7 @@
     for (const element of dailyElements) element.hidden = !daily;
     ui.resultsWeeklyListHint.hidden = daily;
     ui.resultsDailyListHint.hidden = true;
-    ui.weekTimeZone.textContent = daily ? '日期按美国太平洋时间计算，最多可查 92 天。' : '周次按美国太平洋时间计算，周一至周日。';
+    ui.weekTimeZone.textContent = daily ? '默认显示美国太平洋时间的前一天，可查询最多 92 天。' : '周次按美国太平洋时间计算，周一至周日。';
     ui.resultTabSummary.textContent = daily ? '每日明细' : '周总结';
     ui.resultTabAds.textContent = daily ? '每日广告' : '产品广告结构';
     ui.resultsAdsTitle.textContent = daily ? '每日广告表现' : '产品广告结构';
@@ -328,9 +328,7 @@
   function setDateControls() {
     const latest = pacificToday();
     if (!dayStart) {
-      dayStart = week;
-      const last = shiftDay(week,6);
-      dayEnd = last > latest ? latest : last;
+      dayStart = dayEnd = shiftDay(latest,-1);
     }
     ui.resultStartDate.max = ui.resultEndDate.max = latest;
     ui.resultStartDate.value = dayStart;
