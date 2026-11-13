@@ -24,7 +24,8 @@
   const allowedRpc = new Set(['mc_product_catalog_read','mc_weekly_results_weeks','mc_weekly_results_read',
     'mc_weekly_results_notes_save','mc_weekly_results_sp_read','mc_weekly_results_search','mc_weekly_results_daily_read',
     'mc_weekly_results_sp_daily_read','mc_weekly_results_search_daily_read','mc_weekly_results_other_ads_read',
-    'mc_weekly_results_daily_profit_read','mc_daily_fba_returns_read','mc_daily_results_fees_read','mc_daily_results_fees_save']);
+    'mc_weekly_results_daily_profit_read','mc_daily_fba_returns_read','mc_daily_results_fees_read','mc_daily_results_fees_save',
+    'mc_weekly_results_weekly_metrics_read']);
   const asin = /^[A-Z0-9]{10}$/;
   const normalize = text => text.normalize('NFKC').toLowerCase();
   const collator = new Intl.Collator('zh-Hans', { numeric: true, sensitivity: 'base' });
@@ -35,6 +36,7 @@
   const feeFields = ['reviewFee','offsiteFee','otherFee'];
   const dailyFeeFields = {dailyReviewFee:'review_fee',dailyOffsiteFee:'offsite_fee',dailyOtherFee:'other_fee'};
   const dayLimit = 92;
+  const weekLimit = 26;
   const earliestDay = '2000-01-01';
   const dayMs = 86_400_000;
   const pacificCalendar = new Intl.DateTimeFormat('en-US', {
@@ -298,7 +300,8 @@
 
   function renderDetail() {
     if (!detail) return;
-    window.MCWeeklyResultTables.render(tables, { rows: detail.rows, week, adRows: detail.ads, otherAds: detail.otherAds, spError:detail.spError });
+    window.MCWeeklyResultTables.render(tables, { rows: detail.rows, week, adRows: detail.ads,
+      otherAds: detail.otherAds, spError:detail.spError, weeklyMetrics:detail.weeklyMetrics });
     selectTab(selectedTab);
   }
 
@@ -563,6 +566,30 @@
     }
   }
 
+  async function optionalWeeklyMetrics(weekStart,parentAsin,signal) {
+    if (!parentAsin || weekStart < '2000-01-03') return {rows:[],error:false};
+    const validAmount = (value, min) => value === null ||
+      (typeof value === 'number' && Number.isFinite(value) && value >= min && Math.abs(value) <= Number.MAX_SAFE_INTEGER);
+    const validMovement = (days,units) => Number.isInteger(days) && days >= 0 && days <= 7 &&
+      (days === 7 ? Number.isSafeInteger(units) && units >= 0 : units === null);
+    const expectedWeeks = Math.min(weekLimit,1+Math.floor((dayCount('2000-01-03',weekStart)-1)/7));
+    try {
+      const rows = await rpc('mc_weekly_results_weekly_metrics_read',{
+        p_week_start:weekStart,p_parent_asin:parentAsin,
+      },signal);
+      if (!Array.isArray(rows) || rows.length !== expectedWeeks || rows.some((row,index)=>
+        !row || row.week_start !== shiftDay(weekStart,-7*index) || row.parent_asin !== parentAsin ||
+        !validAmount(row.sales_basis,0) || !validAmount(row.profit_before_ads,-Number.MAX_SAFE_INTEGER) ||
+        (row.sales_basis === null && row.profit_before_ads !== null) ||
+        !validMovement(row.returns_days,row.return_units) || !validMovement(row.shipments_days,row.shipped_units))) {
+        throw new Error('每周利润和退货数据格式有误。');
+      }
+      return {rows,error:false};
+    } catch {
+      return {rows:[],error:!signal.aborted};
+    }
+  }
+
   function validDailyFees(row, expectedDate, expectedParent) {
     return row?.report_date === expectedDate && row.parent_asin === expectedParent &&
       Number.isSafeInteger(row.revision) && row.revision >= 0 && row.revision <= 2147483647 &&
@@ -720,16 +747,17 @@
         pageStatus();
         return;
       }
-      const [main, ad] = await Promise.all([
+      const [main, ad, weeklyMetrics] = await Promise.all([
         rpc('mc_weekly_results_read',{ p_week_start: weekStart, p_parent_asin: parentAsin },controller.signal),
         optionalAds(weekStart, parentAsin, controller.signal),
+        optionalWeeklyMetrics(weekStart,parentAsin,controller.signal),
       ]);
       if (context !== controller || !auth) return;
       const rows = rowsFrom(main, weekStart, parentAsin);
       const line = rows.find(row => row.week_start === weekStart);
       const otherAds = parentAsin
         ? await weeklyOtherAds([
-          ...Array.from({length:26},(_,i)=>shiftDay(weekStart,-i*7)),
+          ...Array.from({length:weekLimit},(_,i)=>shiftDay(weekStart,-i*7)),
           ...rows.map(row=>row.week_start),...(ad.rows ?? []).map(row=>row.week_start),
         ],parentAsin,controller.signal)
         : blankOtherAds();
@@ -745,7 +773,7 @@
           returnParent = '';
         }
       } else {
-        detail = { rows, ads: ad.rows, otherAds, spError:ad.error, search: { state: 'idle' } };
+        detail = { rows, ads: ad.rows, otherAds, spError:ad.error, weeklyMetrics, search: { state: 'idle' } };
         renderDetail();
         renderNotes(line);
         if (focusDetail) {

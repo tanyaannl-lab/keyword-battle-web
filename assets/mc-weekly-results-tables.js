@@ -9,11 +9,12 @@
   const percent = new Intl.NumberFormat('en-US', { style: 'percent', maximumFractionDigits: 2 });
   const sourceNotice = '同一父 ASIN 的周数据。销售额为已订购商品销售额，订单商品数不等于独立订单数；会话数为各子 ASIN 会话数之和。周报未齐时暂不汇总。';
   const spNotice = 'SP 指商品推广，订单和销售额采用 7 天归因，可能包含其他 SKU。仅展示明确归属当前父 ASIN 的数据。';
-  const profitNotice = '利润尚未计算：产品目录目前只存当前成本，交易表的退款和平台费用还未按产品接入核算。';
+  const weeklyProfitNotice = '周利润按当前产品目录成本估算，扣除本周已归属广告费及本表的三项周费用。每日费用只用于每日明细；未纳入独立促销、退款或结算调整。所需数据不齐时显示「—」。';
+  const weeklyReturnsNotice = 'FBA 周退货率 = 全周收退件数 ÷ 全周发货件数。退货和发货数据都需齐全 7 天；当周无发货时显示「—」。该比率反映当周进出量。';
   const channelOrder = ['SP', 'SB', 'SD'];
   const otherAdChannels = channelOrder.slice(1);
   const channelMetrics = ['cost', 'sales', 'orders'];
-  const dailyFeeKeys = ['review_fee', 'offsite_fee', 'other_fee'];
+  const manualFeeKeys = ['review_fee', 'offsite_fee', 'other_fee'];
   const adShareNotice = '归因销售额占比 = 表内广告归因销售额 ÷ 同期销售额，仅供参考。各广告类型的归因窗口可能不同，归因订单合计未跨类型去重。';
   const numberKinds = new Set(['usd', 'num', 'int', 'pct']);
   const compactHeadings = Object.freeze({
@@ -29,6 +30,7 @@
     '利润（估算）': ['利润', '估算'],
     '毛利率（估算）': ['毛利率', '估算'],
     'FBA 退货率': ['FBA 退货率', '当日收退 / 发货'],
+    'FBA 周退货率': ['FBA 退货率', '全周收退 / 发货'],
     '广告费占总销售额': ['广告费占', '总销售额'],
     '总访客数': ['总访客数', '会话数'],
     'SP 归因销售额占比（参考）': ['SP 归因销售额占比', '参考'],
@@ -90,12 +92,12 @@
   const summaryColumns = [
     col('week_start', '周期', 'week'),
     col('sales', '销售额', 'usd'),
-    col('profit', '利润', 'usd'),
+    col('profit', '利润（估算）', 'usd'),
     col('orders', '订单商品数', 'int'),
     col('units', '已订购商品数量', 'int'),
     col('visits', '会话数', 'int'),
     col('unit_session_rate', '订购件数 / 会话数', 'pct'),
-    col('returns_rate', '退货率', 'pct'),
+    col('returns_rate', 'FBA 周退货率', 'pct'),
     col('total_ad_cost', '总广告费', 'usd'),
     col('sp_cost', 'SP 广告费', 'usd'),
     col('sp_orders', 'SP 归因订单', 'int'),
@@ -212,6 +214,20 @@
     if (!values.length || values.some(value => value === null)) return null;
     const sum = values.reduce((total, value) => total + value, 0);
     return Number.isFinite(sum) ? sum : null;
+  }
+
+  function validFee(value) {
+    const amount = numeric(value);
+    return amount !== null && amount >= 0 && amount <= 9_999_999_999.99 &&
+      amount === Math.round(amount * 100) / 100 ? amount : null;
+  }
+
+  function sumFees(row) {
+    const cents = addKnown(manualFeeKeys.map(key => {
+      const amount = validFee(own(row, key));
+      return amount === null ? null : Math.round(amount * 100);
+    }));
+    return cents === null ? null : cents / 100;
   }
 
   function aggregateOtherAds(rows, keyOf) {
@@ -458,6 +474,7 @@
       const notes = own(row, 'notes');
       weeks.set(week, {
         week_start: week,
+        parent_asin: own(row, 'parent_asin'),
         sales: complete ? own(row, 'sales') : null,
         orders: complete ? own(row, 'orders') : null,
         units: complete ? own(row, 'units') : null,
@@ -483,19 +500,62 @@
       .sort((a, b) => b.week_start.localeCompare(a.week_start));
   }
 
-  function render(targets, { rows, week, adRows, otherAds, spError } = {}) {
+  function withWeeklyMetrics(row, ads, metrics, adError) {
+    const adCost = numeric(ads?.ad_cost);
+    const profitBasis = numeric(metrics?.profit_before_ads);
+    const salesBasis = numeric(metrics?.sales_basis);
+    const fees = sumFees(row);
+    const returned = numeric(metrics?.return_units);
+    const shipped = numeric(metrics?.shipped_units);
+    const completeReturns = numeric(metrics?.returns_days) === 7 && numeric(metrics?.shipments_days) === 7;
+    return {
+      ...row,
+      profit: !adError && profitBasis !== null && salesBasis !== null && salesBasis === numeric(row.sales) &&
+        adCost !== null && adCost >= 0 && fees !== null ? profitBasis - adCost - fees : null,
+      returns_rate: completeReturns && Number.isSafeInteger(returned) && returned >= 0 && Number.isSafeInteger(shipped)
+        ? ratio(returned, shipped) : null,
+      total_ad_cost: adCost,
+      sb_cost: ads?.sb_cost ?? null,
+      sd_cost: ads?.sd_cost ?? null,
+    };
+  }
+
+  function weeklyCoverageNote(metrics) {
+    const returnsDays = numeric(metrics?.returns_days);
+    const shipmentsDays = numeric(metrics?.shipments_days);
+    const isDayCount = value => Number.isInteger(value) && value >= 0 && value <= 7;
+    if (!isDayCount(returnsDays) || !isDayCount(shipmentsDays)) return '';
+    if (returnsDays !== 7 || shipmentsDays !== 7) return `所选周可核对的退货数据 ${returnsDays}/7 天、发货数据 ${shipmentsDays}/7 天。`;
+    return numeric(metrics?.shipped_units) === 0 ? '所选周 FBA 发货件数为 0，无法计算退货率。' : '';
+  }
+
+  function render(targets, { rows, week, adRows, otherAds, spError, weeklyMetrics } = {}) {
     const weeklyRows = buildWeeklyRows(rows, adRows, week);
-    const spNote = Array.isArray(adRows) && adRows.length ? spNotice : '此父 ASIN 暂无已导入的商品推广结果。';
-    renderTable(targets.summary, {
-      columns: summaryColumns, rows: weeklyRows, week, label: '周总结',
-      note: `${sourceNotice} ${profitNotice} ${spNote}`, emptyText: '没有可展示的周期。',
-    });
     const byWeek = aggregateOtherAds(otherAds?.rows, monday);
     const dates = new Set(weeklyRows.map(row => row.week_start));
     const baseRows = [...weeklyRows, ...[...byWeek.keys()]
       .filter(value => !dates.has(value) && (!week || value <= week))
       .map(week_start => ({ week_start }))].sort((a, b) => b.week_start.localeCompare(a.week_start));
     const scopedRows = advertisingRows(baseRows, 'week_start', byWeek, otherAds?.coverage ?? otherAds?.pending);
+    const adsByWeek = new Map(scopedRows.map(row => [row.week_start, row]));
+    const metricsByWeek = new Map((!weeklyMetrics?.error && Array.isArray(weeklyMetrics?.rows) ? weeklyMetrics.rows : [])
+      .filter(row => row && monday(row.week_start) === row.week_start)
+      .map(row => [row.week_start, row]));
+    function findMetrics(row) {
+      const metrics = metricsByWeek.get(row?.week_start);
+      return row?.parent_asin && row.parent_asin === metrics?.parent_asin ? metrics : null;
+    }
+    const summaryRows = weeklyRows.map(row => withWeeklyMetrics(row, adsByWeek.get(row.week_start),
+      findMetrics(row), spError || otherAds?.error));
+    const coverageNote = weeklyCoverageNote(findMetrics(weeklyRows.find(row => row.week_start === week)));
+    renderTable(targets.summary, {
+      columns: summaryColumns, rows: summaryRows, week, label: '周总结',
+      note: [sourceNotice, weeklyProfitNotice, weeklyReturnsNotice, coverageNote,
+        '总广告费合计能归属当前父 ASIN 的 SP、SB、SD；SBV 未单列。',
+        advertisingNotice(scopedRows, false, otherAds?.error, spError, false),
+        weeklyMetrics?.error ? '暂时无法读取周利润及 FBA 退货汇总。' : ''].filter(Boolean).join(' '),
+      emptyText: '没有可展示的周期。',
+    });
     renderTable(targets.ads, {
       columns: advertisingColumns(scopedRows, false), rows: scopedRows, week, label: '产品广告结构',
       note: advertisingNotice(scopedRows, false, otherAds?.error, spError), emptyText: '没有可展示的周期。',
@@ -529,15 +589,11 @@
       const salesBasis = numeric(dailyProfit?.sales_basis);
       const adCost = numeric(row.ad_cost);
       const savedFees = feesByDate.get(row.report_date);
-      const fees = Object.fromEntries(dailyFeeKeys.map(key => {
-        const amount = numeric(savedFees?.[key]);
-        return [key, amount !== null && amount >= 0 && amount <= 9_999_999_999.99 &&
-          amount === Math.round(amount * 100) / 100 ? amount : null];
-      }));
-      const feeTotal = addKnown(Object.values(fees).map(value => value === null ? null : Math.round(value * 100)));
+      const fees = Object.fromEntries(manualFeeKeys.map(key => [key, validFee(savedFees?.[key])]));
+      const feeTotal = sumFees(fees);
       const estimate = !spError && !otherAds?.error && profitBasis !== null && adCost !== null && adCost >= 0 &&
         feeTotal !== null && salesBasis !== null && salesBasis === numeric(row.sales)
-        ? profitBasis - adCost - feeTotal / 100 : null;
+        ? profitBasis - adCost - feeTotal : null;
       const movement = returnsByDate.get(row.report_date);
       return {
         ...row,
