@@ -13,6 +13,7 @@
   const channelOrder = ['SP', 'SB', 'SD'];
   const otherAdChannels = channelOrder.slice(1);
   const channelMetrics = ['cost', 'sales', 'orders'];
+  const dailyFeeKeys = ['review_fee', 'offsite_fee', 'other_fee'];
   const adShareNotice = '归因销售额占比 = 表内广告归因销售额 ÷ 同期销售额，仅供参考。各广告类型的归因窗口可能不同，归因订单合计未跨类型去重。';
   const numberKinds = new Set(['usd', 'num', 'int', 'pct']);
   const compactHeadings = Object.freeze({
@@ -152,6 +153,9 @@
     col('app_session_share', 'APP流量占比', 'pct'),
     col('visits', '总访客数', 'int'),
     col('unit_session_rate', '转化', 'pct'),
+    col('review_fee', '测评费用原币', 'usd'),
+    col('offsite_fee', '站外费用原币', 'usd'),
+    col('other_fee', '其他费用原币', 'usd'),
   ];
 
   function element(name, className, content) {
@@ -512,10 +516,11 @@
     });
   }
 
-  function renderDaily(target, { rows, adRows, otherAds, spError, profit, returns } = {}) {
+  function renderDaily(target, { rows, adRows, otherAds, spError, profit, returns, dailyFees } = {}) {
     const byDate = source => new Map((Array.isArray(source?.rows) ? source.rows : []).map(row => [row.report_date, row]));
     const profits = byDate(profit);
     const returnsByDate = byDate(returns);
+    const feesByDate = byDate(dailyFees?.error ? null : dailyFees);
     const dailyRows = scopedDailyAds(rows, adRows, otherAds).map(row => {
       const appSessions = numeric(own(row, 'app_sessions'));
       const visits = numeric(own(row, 'visits'));
@@ -523,12 +528,21 @@
       const profitBasis = numeric(dailyProfit?.profit_before_ads);
       const salesBasis = numeric(dailyProfit?.sales_basis);
       const adCost = numeric(row.ad_cost);
+      const savedFees = feesByDate.get(row.report_date);
+      const fees = Object.fromEntries(dailyFeeKeys.map(key => {
+        const amount = numeric(savedFees?.[key]);
+        return [key, amount !== null && amount >= 0 && amount <= 9_999_999_999.99 &&
+          amount === Math.round(amount * 100) / 100 ? amount : null];
+      }));
+      const feeTotal = addKnown(Object.values(fees).map(value => value === null ? null : Math.round(value * 100)));
       const estimate = !spError && !otherAds?.error && profitBasis !== null && adCost !== null && adCost >= 0 &&
-        salesBasis !== null && salesBasis === numeric(row.sales) ? profitBasis - adCost : null;
+        feeTotal !== null && salesBasis !== null && salesBasis === numeric(row.sales)
+        ? profitBasis - adCost - feeTotal / 100 : null;
       const movement = returnsByDate.get(row.report_date);
       return {
         ...row,
         ...estimateDailyOrderSplit(row),
+        ...fees,
         profit: estimate,
         gross_margin: ratio(estimate, salesBasis),
         returns_rate: ratio(movement?.return_units, movement?.shipped_units),
@@ -540,13 +554,14 @@
     });
     const trafficNote = '订单取销售流量报表的订单商品数，不等于独立订单数。总访客数取各子 ASIN 会话数之和，未去重。转化 = 订购件数 ÷ 会话数；APP 流量占比 = APP 会话数 ÷ 会话数。';
     const orderEstimateNote = '运营估算：自然订单 = 订单商品数 − 广告归因订单，两项占比均除以订单商品数。广告订单超过订单商品数时，广告占比按原值显示，自然订单及其占比留空。';
-    const profitNote = '预估利润按当前目录的商品成本、头程、FBA 配送费、佣金和税率，并扣除当日已归属广告费。未纳入独立促销、退款或结算调整。毛利率 = 预估利润 ÷ 销售额；所需数据缺失显示「—」。';
+    const profitNote = '预估利润按当前目录的商品成本、头程、FBA 配送费、佣金和税率，并扣除当日已归属广告费、测评费用、站外费用和其他费用。费用单位为 USD。未纳入独立促销、退款或结算调整。毛利率 = 预估利润 ÷ 销售额；所需数据缺失显示「—」。';
     const returnsNote = 'FBA 退货率 = 当天仓库收到的 FBA 退货件数 ÷ 当天 FBA 发货件数。反映当日进出量，不是同一批订单的退货率；缺报表或当天无发货时显示「—」。';
     renderTable(target, {
       columns: dailyColumns, rows: dailyRows, label: '每日销售与流量',
       note: [trafficNote, '广告销售额和广告订单取归因数据。广告费占总销售额 = 已归属广告费 ÷ 同日销售额。',
         advertisingNotice(dailyRows, false, otherAds?.error, spError, false), orderEstimateNote, profitNote, returnsNote,
-        profit?.error ? '暂时无法读取预估利润。' : '', returns?.error ? '暂时无法读取 FBA 退货数据。' : ''].filter(Boolean).join(' '),
+        profit?.error ? '暂时无法读取预估利润。' : '', returns?.error ? '暂时无法读取 FBA 退货数据。' : '',
+        dailyFees?.error ? '暂时无法读取每日费用，利润和毛利率显示「—」。' : ''].filter(Boolean).join(' '),
       emptyText: '所选日期范围暂无数据。',
     });
   }

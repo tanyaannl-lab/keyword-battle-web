@@ -9,7 +9,9 @@
     'keywordResults','attributeResults','weeklyNotesForm','reviewFee','offsiteFee','otherFee',
     'saveWeeklyNotes','notesStatus','resultView','resultWeeklyFilter','resultDateFilter','resultStartDate',
     'resultEndDate','resultDateFeedback','weekTimeZone','resultsSummaryTitle','resultsSummaryHint',
-    'resultTabSummary','resultTabAds','resultsAdsTitle','resultsWeeklyListHint','resultsDailyListHint'];
+    'resultTabSummary','resultTabAds','resultsAdsTitle','resultsWeeklyListHint','resultsDailyListHint',
+    'dailyFeesForm','dailyFeesDate','dailyReviewFee','dailyOffsiteFee','dailyOtherFee','saveDailyFees',
+    'reloadDailyFees','dailyFeesStatus'];
   const ui = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
   const tabs = [...document.querySelectorAll('[data-result-tab]')];
   const weeklyElements = [...document.querySelectorAll('[data-week-only]')];
@@ -22,7 +24,7 @@
   const allowedRpc = new Set(['mc_product_catalog_read','mc_weekly_results_weeks','mc_weekly_results_read',
     'mc_weekly_results_notes_save','mc_weekly_results_sp_read','mc_weekly_results_search','mc_weekly_results_daily_read',
     'mc_weekly_results_sp_daily_read','mc_weekly_results_search_daily_read','mc_weekly_results_other_ads_read',
-    'mc_weekly_results_daily_profit_read','mc_daily_fba_returns_read']);
+    'mc_weekly_results_daily_profit_read','mc_daily_fba_returns_read','mc_daily_results_fees_read','mc_daily_results_fees_save']);
   const asin = /^[A-Z0-9]{10}$/;
   const normalize = text => text.normalize('NFKC').toLowerCase();
   const collator = new Intl.Collator('zh-Hans', { numeric: true, sensitivity: 'base' });
@@ -31,6 +33,7 @@
   const pct = new Intl.NumberFormat('en-US', { style: 'percent', maximumFractionDigits: 1 });
   const empty = '—';
   const feeFields = ['reviewFee','offsiteFee','otherFee'];
+  const dailyFeeFields = {dailyReviewFee:'review_fee',dailyOffsiteFee:'offsite_fee',dailyOtherFee:'other_fee'};
   const dayLimit = 92;
   const earliestDay = '2000-01-01';
   const dayMs = 86_400_000;
@@ -63,6 +66,9 @@
   let focusDetail = false;
   let returnParent = '';
   const drafts = new Map();
+  const dailyFeeDrafts = new Map();
+  const dailyFeeUnconfirmed = new Set();
+  let dailyFeeRefreshing = false;
 
   const noteKey = () => `${week}/${parent}`;
   const validDay = value => {
@@ -310,7 +316,7 @@
     ui.resultTabAds.textContent = daily ? '每日广告' : '产品广告结构';
     ui.resultsAdsTitle.textContent = daily ? '每日广告表现' : '产品广告结构';
     ui.resultsSummaryTitle.textContent = daily ? '每日明细' : '每周复盘';
-    ui.resultsSummaryHint.textContent = daily ? '每个自然日一行。「—」表示当天没有可核验的数据。本周费用请切回按周查看。' :
+    ui.resultsSummaryHint.textContent = daily ? '每个自然日一行。「—」表示当天没有可核验的数据。每日费用按填写日期扣除。' :
       '选中的周高亮。「—」表示缺少数据。未填写的三项手动费用按 0 显示。';
   }
 
@@ -400,9 +406,14 @@
     target.replaceChildren(message,button);
   }
 
-  function renderDailyPanels(rows, ads, otherAds, profit, returns) {
+  function renderDailySummary() {
     if (typeof window.MCWeeklyResultTables.renderDaily !== 'function') throw new Error('每日明细组件未加载，请刷新页面。');
-    window.MCWeeklyResultTables.renderDaily(tables.summary, { rows, adRows:ads.rows, otherAds, spError:ads.error, profit, returns });
+    window.MCWeeklyResultTables.renderDaily(tables.summary, { rows:detail.rows, adRows:detail.ads, otherAds:detail.otherAds,
+      spError:detail.spError, profit:detail.profit, returns:detail.returns, dailyFees:detail.dailyFees });
+  }
+
+  function renderDailyPanels(rows, ads, otherAds) {
+    renderDailySummary();
     if (ads.rows?.length || otherAds.rows.length || otherAds.coverage.length || otherAds.error) {
       window.MCWeeklyResultTables.renderDailyAds(tables.ads,{ rows, adRows:ads.rows, otherAds, spError:ads.error });
     } else {
@@ -552,6 +563,28 @@
     }
   }
 
+  function validDailyFees(row, expectedDate, expectedParent) {
+    return row?.report_date === expectedDate && row.parent_asin === expectedParent &&
+      Number.isSafeInteger(row.revision) && row.revision >= 0 && row.revision <= 2147483647 &&
+      Object.values(dailyFeeFields).every(key => typeof row[key] === 'number' && Number.isFinite(row[key]) &&
+        row[key] >= 0 && row[key] <= 9999999999.99 && Math.abs(row[key] - Math.round(row[key] * 100) / 100) < 0.000001);
+  }
+
+  async function readDailyFees(start,end,parentAsin,signal) {
+    if (!parentAsin) return {rows:[],error:false};
+    try {
+      const rows = await rpc('mc_daily_results_fees_read',{p_start_date:start,p_end_date:end,p_parent_asin:parentAsin},signal);
+      if (!Array.isArray(rows) || rows.length !== dayCount(start,end) ||
+          rows.some((row,index)=>!validDailyFees(row,shiftDay(end,-index),parentAsin))) {
+        throw new Error('每日费用返回格式有误。');
+      }
+      return {rows,error:false};
+    } catch (error) {
+      const unavailable = error.status === 404 || error.code === 'PGRST202';
+      return {rows:[],error:true,message:unavailable ? '每日费用服务尚未启用。' : '暂时无法读取每日费用，请重试。'};
+    }
+  }
+
   function blankOtherAds() {
     return {rows:[], coverage:[], pending:[], error:false};
   }
@@ -636,6 +669,7 @@
     ui.resultsCount.textContent = '';
     ui.resultsDailyListHint.hidden = true;
     ui.weeklyNotesForm.hidden = true;
+    resetDailyFees();
     for (const table of Object.values(tables)) table.replaceChildren();
     for (const id of feeFields) ui[id].value = '0';
     updateFormState();
@@ -650,7 +684,7 @@
     pageStatus(daily ? '正在读取所选日期的结果…' : '正在读取所选周的结果…');
     try {
       if (daily) {
-        const [main,ads,otherAds,profit,returns] = await Promise.all([
+        const [main,ads,otherAds,profit,returns,dailyFees] = await Promise.all([
           rpc('mc_weekly_results_daily_read',{
             p_start_date: start, p_end_date: end, p_parent_asin: parentAsin,
           },controller.signal),
@@ -658,6 +692,7 @@
           optionalOtherAds(start,end,parentAsin,controller.signal),
           optionalDailyMetrics('profit',start,end,parentAsin,controller.signal),
           optionalDailyMetrics('returns',start,end,parentAsin,controller.signal),
+          readDailyFees(start,end,parentAsin,controller.signal),
         ]);
         if (context !== controller || controller.signal.aborted || !auth) return;
         const rows = dailyRowsFrom(main,start,end,parentAsin);
@@ -673,8 +708,9 @@
             returnParent = '';
           }
         } else {
-          detail = { rows, ads:ads.rows, otherAds, search: { state:'idle' } };
-          renderDailyPanels(rows,ads,otherAds,profit,returns);
+          detail = { rows, ads:ads.rows, otherAds, spError:ads.error, profit, returns, dailyFees, search: { state:'idle' } };
+          renderDailyPanels(rows,ads,otherAds);
+          showDailyFees();
           notice(ui.productStatus,coverage);
           if (focusDetail) {
             ui.selectedParent.focus();
@@ -758,6 +794,164 @@
     return Number(value);
   }
 
+  function resetDailyFees() {
+    dailyFeeRefreshing = false;
+    ui.dailyFeesForm.hidden = true;
+    ui.dailyFeesDate.replaceChildren();
+    ui.dailyFeesDate.disabled = ui.saveDailyFees.disabled = true;
+    ui.reloadDailyFees.hidden = true;
+    ui.reloadDailyFees.disabled = false;
+    for (const id of Object.keys(dailyFeeFields)) {
+      ui[id].value = '0';
+      ui[id].disabled = true;
+    }
+    notice(ui.dailyFeesStatus);
+  }
+
+  const dailyFeeKey = day => `${parent}/${day}`;
+  const currentDailyFee = () => detail?.dailyFees?.rows.find(row => row.report_date === ui.dailyFeesDate.value);
+
+  function dailyFeeValues() {
+    return Object.fromEntries(Object.keys(dailyFeeFields).map(id=>[id,ui[id].value]));
+  }
+
+  function sameDailyFees(values, row) {
+    return !!row && Object.entries(dailyFeeFields).every(([id,key])=>{
+      try { return !ui[id].validity?.badInput && readFee(values[id]) === row[key]; } catch { return false; }
+    });
+  }
+
+  function updateDailyFeesState() {
+    const row = currentDailyFee();
+    const key = dailyFeeKey(ui.dailyFeesDate.value);
+    const needsReload = dailyFeeUnconfirmed.has(key) || !!detail?.dailyFees?.error ||
+      (!!row && dailyFeeDrafts.has(key) && dailyFeeDrafts.get(key).revision !== row.revision);
+    const busy = mode !== 'day' || !auth || !parent || !!saveRequest || dailyFeeRefreshing;
+    ui.dailyFeesDate.disabled = busy || !row;
+    for (const id of Object.keys(dailyFeeFields)) ui[id].disabled = busy || !row;
+    ui.saveDailyFees.disabled = busy || needsReload || sameDailyFees(dailyFeeValues(),row) || !row;
+    ui.reloadDailyFees.hidden = !needsReload;
+    ui.reloadDailyFees.disabled = busy;
+  }
+
+  function showDailyFees(selected = '', message = '') {
+    ui.dailyFeesForm.hidden = false;
+    const rows = detail.dailyFees.rows;
+    ui.dailyFeesDate.replaceChildren(...rows.map(row=>new Option(row.report_date,row.report_date)));
+    if (rows.some(row=>row.report_date === selected)) ui.dailyFeesDate.value = selected;
+    else if (rows.length) ui.dailyFeesDate.value = rows[0].report_date;
+    selectDailyFeesDate(message);
+  }
+
+  function selectDailyFeesDate(message = '') {
+    const row = currentDailyFee();
+    const key = dailyFeeKey(ui.dailyFeesDate.value);
+    const draft = dailyFeeDrafts.get(key);
+    for (const [id,field] of Object.entries(dailyFeeFields)) ui[id].value = draft?.values[id] ?? String(row?.[field] ?? 0);
+    if (detail?.dailyFees?.error) notice(ui.dailyFeesStatus,detail.dailyFees.message,'error');
+    else if (dailyFeeUnconfirmed.has(key) || (row && draft && draft.revision !== row.revision)) {
+      notice(ui.dailyFeesStatus,'这笔费用可能已有更新，请先读取最新费用。','error');
+    } else notice(ui.dailyFeesStatus,message || (draft ? '已保留未保存的修改。' : ''));
+    updateDailyFeesState();
+  }
+
+  function captureDailyFeeDraft() {
+    const row = currentDailyFee();
+    if (mode !== 'day' || !row || saveRequest || dailyFeeRefreshing) return;
+    const key = dailyFeeKey(row.report_date);
+    const values = dailyFeeValues();
+    const original = dailyFeeDrafts.get(key)?.base ?? row;
+    if (sameDailyFees(values,row)) dailyFeeDrafts.delete(key);
+    else dailyFeeDrafts.set(key,{values,revision:original.revision,base:original});
+    if (!dailyFeeUnconfirmed.has(key) && (!dailyFeeDrafts.has(key) || dailyFeeDrafts.get(key).revision === row.revision)) {
+      notice(ui.dailyFeesStatus,dailyFeeDrafts.has(key) ? '有未保存的修改。' : '');
+    }
+    updateDailyFeesState();
+  }
+
+  async function reloadDailyFees() {
+    if (mode !== 'day' || !auth || !parent || !detail || !context || saveRequest || dailyFeeRefreshing) return;
+    const previous = detail;
+    const load = context;
+    const day = ui.dailyFeesDate.value;
+    const key = dailyFeeKey(day);
+    dailyFeeRefreshing = true;
+    updateDailyFeesState();
+    notice(ui.dailyFeesStatus,'正在读取最新费用…');
+    const result = await readDailyFees(dayStart,dayEnd,parent,load.signal);
+    if (context !== load || detail !== previous || load.signal.aborted || !auth) return;
+    dailyFeeRefreshing = false;
+    if (result.error) {
+      notice(ui.dailyFeesStatus,result.message,'error');
+      updateDailyFeesState();
+      return;
+    }
+    detail.dailyFees = result;
+    const saved = result.rows.find(row=>row.report_date === day);
+    const draft = dailyFeeDrafts.get(key);
+    dailyFeeUnconfirmed.delete(key);
+    if (saved && draft) {
+      const values = Object.fromEntries(Object.entries(dailyFeeFields).map(([id,field])=>{
+        let unchanged = false;
+        try { unchanged = readFee(draft.values[id]) === draft.base[field]; } catch { /* preserve invalid draft for correction */ }
+        return [id,unchanged ? String(saved[field]) : draft.values[id]];
+      }));
+      if (sameDailyFees(values,saved)) dailyFeeDrafts.delete(key);
+      else dailyFeeDrafts.set(key,{values,revision:saved.revision,base:saved});
+    }
+    renderDailySummary();
+    showDailyFees(day,dailyFeeDrafts.has(key) ? '表格已显示最新费用，输入框保留你的修改。核对后再保存。' : '已读取最新费用。');
+  }
+
+  async function saveDailyFees(event) {
+    event.preventDefault();
+    const row = currentDailyFee();
+    if (mode !== 'day' || !auth || !parent || !row || saveRequest || dailyFeeRefreshing || ui.saveDailyFees.disabled) return;
+    const key = dailyFeeKey(row.report_date);
+    const values = dailyFeeValues();
+    let amounts;
+    try {
+      amounts = Object.fromEntries(Object.entries(dailyFeeFields).map(([id,field])=>{
+        if (ui[id].validity?.badInput) throw new Error('费用请填写非负金额，最多两位小数。');
+        return [`p_${field}`,readFee(values[id])];
+      }));
+    } catch (error) { notice(ui.dailyFeesStatus,error.message,'error'); return; }
+    const params = {p_report_date:row.report_date,p_parent_asin:row.parent_asin,p_revision:row.revision,...amounts};
+    const controller = new AbortController();
+    saveRequest = controller;
+    const controls = [ui.resultView,ui.backToProducts,ui.resultStartDate,ui.resultEndDate,
+      ...ui.resultDateFilter.querySelectorAll('button')];
+    for (const input of controls) input.disabled = true;
+    updateDailyFeesState();
+    notice(ui.dailyFeesStatus,'正在保存…');
+    try {
+      const saved = await rpc('mc_daily_results_fees_save',params,controller.signal);
+      if (saveRequest !== controller || !auth || dailyFeeKey(ui.dailyFeesDate.value) !== key) return;
+      if (!validDailyFees(saved,row.report_date,row.parent_asin) || saved.revision <= row.revision ||
+          !Object.values(dailyFeeFields).every(field=>saved[field] === amounts[`p_${field}`])) {
+        throw new Error('保存结果无法确认，请读取最新费用。');
+      }
+      detail.dailyFees.rows = detail.dailyFees.rows.map(item=>item.report_date === saved.report_date ? saved : item);
+      dailyFeeDrafts.delete(key);
+      dailyFeeUnconfirmed.delete(key);
+      selectDailyFeesDate();
+      renderDailySummary();
+      notice(ui.dailyFeesStatus,`${saved.report_date} 费用已保存，表格已重新计算。`,'success');
+    } catch (error) {
+      if (saveRequest !== controller || controller.signal.aborted) return;
+      dailyFeeUnconfirmed.add(key);
+      const conflict = error.code === '40001' || error.status === 409;
+      notice(ui.dailyFeesStatus,conflict ? '这笔费用已被其他人更新。请读取最新费用，核对后再保存。'
+        : '保存结果暂未确认。请读取最新费用后再试。','error');
+    } finally {
+      if (saveRequest === controller) {
+        saveRequest = null;
+        for (const input of controls) input.disabled = false;
+        updateDailyFeesState();
+      }
+    }
+  }
+
   async function saveNotes(event) {
     event.preventDefault();
     if (mode !== 'week' || !auth || !loadedContext || !parent || activeNoteKey !== noteKey() || saveRequest) return;
@@ -815,6 +1009,7 @@
     bootstrap = context = saveRequest = null;
     auth = null;
     parents.clear(); listRows.clear(); listAds.clear(); drafts.clear();
+    dailyFeeDrafts.clear(); dailyFeeUnconfirmed.clear();
     week = parent = activeNoteKey = dayStart = dayEnd = '';
     mode = 'week';
     selectedTab = 'summary';
@@ -827,10 +1022,12 @@
     ui.resultOwner.replaceChildren(new Option('全部负责人',''));
     ui.resultWeek.replaceChildren();
     ui.resultStartDate.value = ui.resultEndDate.value = '';
+    for (const input of [ui.resultStartDate,ui.resultEndDate,...ui.resultDateFilter.querySelectorAll('button')]) input.disabled = false;
     ui.resultView.disabled = false;
     ui.parentResults.replaceChildren();
     for (const table of Object.values(tables)) table.replaceChildren();
     for (const id of feeFields) ui[id].value = '0';
+    resetDailyFees();
     for (const id of ['selectedParent','selectedOwner','selectedWeek','resultsCount','resultsCatalogDate']) ui[id].textContent = '';
     notice(ui.notesStatus);
     notice(ui.productStatus);
@@ -935,6 +1132,18 @@
     });
   });
   ui.weeklyNotesForm.addEventListener('submit',saveNotes);
+  ui.dailyFeesForm.addEventListener('submit',saveDailyFees);
+  ui.dailyFeesDate.addEventListener('change',()=>selectDailyFeesDate());
+  ui.reloadDailyFees.addEventListener('click',()=>void reloadDailyFees());
+  for (const id of Object.keys(dailyFeeFields)) {
+    ui[id].addEventListener('input',captureDailyFeeDraft);
+    ui[id].addEventListener('blur',()=>{
+      if (ui[id].value === '' && !ui[id].validity?.badInput) {
+        ui[id].value = '0';
+        captureDailyFeeDraft();
+      }
+    });
+  }
   for (const id of feeFields) {
     ui[id].addEventListener('input',captureDraft);
     ui[id].addEventListener('blur',() => {
@@ -950,7 +1159,7 @@
     try { await window.KBAuth.logout(); } finally { location.replace(login); }
   });
   window.addEventListener('beforeunload',event => {
-    if (drafts.size || saveRequest) { event.preventDefault(); event.returnValue = ''; }
+    if (drafts.size || dailyFeeDrafts.size || saveRequest) { event.preventDefault(); event.returnValue = ''; }
   });
   window.addEventListener('pagehide',clearPrivate);
   window.addEventListener('pageshow',event => { if (event.persisted) void initialize(); });

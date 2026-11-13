@@ -160,6 +160,35 @@
               <h3 id="resultsSummaryTitle">每周复盘</h3>
               <p id="resultsSummaryHint">选中的周高亮。「—」表示缺少数据。未填写的三项手动费用按 0 显示。</p>
             </header>
+            <form id="dailyFeesForm" class="results-notes" aria-labelledby="dailyFeesTitle" autocomplete="off" hidden>
+              <header class="results-panel-head">
+                <h3 id="dailyFeesTitle">每日费用</h3>
+                <p id="dailyFeesHint">按当前父 ASIN 和美国太平洋日期保存，单位为 USD。默认 0，保存后从当天的预估利润中扣除。</p>
+                <label class="results-field" for="dailyFeesDate">
+                  <span>填写日期</span>
+                  <select id="dailyFeesDate" aria-describedby="dailyFeesHint" disabled></select>
+                </label>
+              </header>
+              <div class="results-note-fees">
+                <label class="results-field" for="dailyReviewFee">
+                  <span>测评费用原币（USD）</span>
+                  <input id="dailyReviewFee" type="number" inputmode="decimal" min="0" max="9999999999.99" step="0.01" value="0" disabled>
+                </label>
+                <label class="results-field" for="dailyOffsiteFee">
+                  <span>站外费用原币（USD）</span>
+                  <input id="dailyOffsiteFee" type="number" inputmode="decimal" min="0" max="9999999999.99" step="0.01" value="0" disabled>
+                </label>
+                <label class="results-field" for="dailyOtherFee">
+                  <span>其他费用原币（USD）</span>
+                  <input id="dailyOtherFee" type="number" inputmode="decimal" min="0" max="9999999999.99" step="0.01" value="0" disabled>
+                </label>
+              </div>
+              <div class="results-notes-actions">
+                <button id="saveDailyFees" class="results-button results-button-primary" type="submit" disabled>保存当天费用</button>
+                <button id="reloadDailyFees" class="results-button" type="button" hidden>读取最新费用</button>
+                <p id="dailyFeesStatus" class="results-state" role="status" aria-live="polite"></p>
+              </div>
+            </form>
             <div id="summaryResults" class="results-data"></div>
 
             <form id="weeklyNotesForm" class="results-notes" aria-labelledby="weeklyNotesTitle" autocomplete="off">
@@ -212,8 +241,8 @@
 <noscript><style>#loading{display:none}</style><p class="auth-loading">请启用 JavaScript 后查看周结果。</p></noscript>
 <script src="../assets/config.js"></script>
 <script src="../assets/auth-client.js"></script>
-<script src="../assets/mc-weekly-results-tables.js?v=20261113-5"></script>
-<script src="../assets/mc-weekly-results.js?v=20261113-6"></script>
+<script src="../assets/mc-weekly-results-tables.js?v=20261113-6"></script>
+<script src="../assets/mc-weekly-results.js?v=20261113-7"></script>
 </body>
 </html>
 
