@@ -21,6 +21,9 @@
     '开始点击日期': ['首次点击'],
     '最后点击日期': ['末次点击'],
     '已订购商品数量': ['订购件数'],
+    '广告订单': ['广告订单', '归因'],
+    '广告费占总销售额': ['广告费占', '总销售额'],
+    '总访客数': ['总访客数', '会话数'],
     'SP 归因销售额占比（参考）': ['SP 归因销售额占比', '参考'],
     '广告归因销售额占比（参考）': ['广告归因销售额占比', '参考'],
   });
@@ -128,12 +131,21 @@
 
   const dailyColumns = [
     col('report_date', '日期', 'date'),
+    col('profit', '利润', 'usd'),
+    col('gross_margin', '毛利率', 'pct'),
     col('sales', '销售额', 'usd'),
-    col('orders', '订单商品数', 'int'),
-    col('units', '订购件数', 'int'),
-    col('visits', '会话数', 'int'),
-    col('unit_session_rate', '订购件数 / 会话数', 'pct'),
-    col('traffic_status', '销售流量报表'),
+    col('ad_sales', '广告销售额', 'usd'),
+    col('orders', '订单', 'int'),
+    col('organic_orders', '自然订单', 'int'),
+    col('ad_orders', '广告订单', 'int'),
+    col('organic_order_share', '自然单占比', 'pct'),
+    col('ad_order_share', '广告单占比', 'pct'),
+    col('ad_cost', '广告费', 'usd'),
+    col('ad_cost_of_sales', '广告费占总销售额', 'pct'),
+    col('returns_rate', '退货率', 'pct'),
+    col('app_session_share', 'APP流量占比', 'pct'),
+    col('visits', '总访客数', 'int'),
+    col('unit_session_rate', '转化', 'pct'),
   ];
 
   function element(name, className, content) {
@@ -253,7 +265,7 @@
     ];
   }
 
-  function advertisingNotice(rows, daily, error, spError) {
+  function advertisingNotice(rows, daily, error, spError, showSalesShare = true) {
     const seen = new Set(rows.flatMap(row => row.ad_channels));
     const names = channelOrder.filter(channel => seen.has(channel));
     const pending = new Set(rows.flatMap(row => row.ad_pending));
@@ -262,7 +274,7 @@
     const join = values => otherAdChannels.filter(channel => values.has(channel)).join('、');
     const notices = [
       names.length ? `统计范围：${names.length === 1 ? `仅 ${names[0]}` : names.join(' + ')}，只计入能归属当前父 ASIN 的数据。` : '暂无能归属当前父 ASIN 的广告数据。',
-      names.length ? adShareNotice : '',
+      names.length ? (showSalesShare ? adShareNotice : '各广告类型的归因窗口可能不同，归因订单未跨类型去重。') : '',
       seen.has('SP') ? spNotice : '',
       pending.size ? `${join(pending)} 有广告报表，但部分或全部记录未能归属产品，未归属部分未计入。` : '',
       missingReports.size ? `部分期间缺少 ${join(missingReports)} 报表，缺失未按 0 计。` : '',
@@ -481,26 +493,41 @@
     });
   }
 
-  function renderDaily(target, { rows } = {}) {
-    const dailyRows = (Array.isArray(rows) ? rows : []).map(row => ({
-      ...row,
-      unit_session_rate: ratio(own(row, 'units'), own(row, 'visits')),
-      traffic_status: own(row, 'traffic_days') === 1 ? '已到齐' : '未到齐',
-    }));
+  function renderDaily(target, { rows, adRows, otherAds, spError } = {}) {
+    const dailyRows = scopedDailyAds(rows, adRows, otherAds).map(row => {
+      const appSessions = numeric(own(row, 'app_sessions'));
+      const visits = numeric(own(row, 'visits'));
+      return {
+        ...row,
+        ad_cost_of_sales: ratio(row.ad_cost, row.sales),
+        app_session_share: appSessions !== null && visits !== null && appSessions >= 0 && appSessions <= visits
+          ? ratio(appSessions, visits) : null,
+        unit_session_rate: ratio(own(row, 'units'), visits),
+      };
+    });
+    const trafficNote = '订单取销售流量报表的订单商品数，不等于独立订单数。总访客数取各子 ASIN 会话数之和，未去重。转化 = 订购件数 ÷ 会话数；APP 流量占比 = APP 会话数 ÷ 会话数。';
+    const limitsNote = '利润、毛利率、退货率缺少每日成本和交易数据；自然订单及两项订单占比缺少同口径的订单归因，暂显示「—」。';
     renderTable(target, {
       columns: dailyColumns, rows: dailyRows, label: '每日销售与流量',
-      note: '日期按美国太平洋时间。只展示对应日期的实际报表数据；「—」表示没有可确认的数据。',
+      note: [trafficNote, '广告销售额和广告订单取归因数据。广告费占总销售额 = 已归属广告费 ÷ 同日销售额。',
+        advertisingNotice(dailyRows, false, otherAds?.error, spError, false), limitsNote].join(' '),
       emptyText: '所选日期范围暂无数据。',
     });
   }
 
-  function renderDailyAds(target, { rows, adRows, otherAds, spError } = {}) {
-    const byDay = new Map((adRows ?? []).map(row => [row.report_date, row]));
-    const dailyRows = (rows ?? []).map(row => {
+  function scopedDailyAds(rows, adRows, otherAds) {
+    const byDay = new Map((Array.isArray(adRows) ? adRows : []).map(row => [row.report_date, row]));
+    const dailyRows = (Array.isArray(rows) ? rows : []).map(row => {
       const ad = byDay.get(row.report_date);
-      return { ...row, ...ad, sp_sales_share: ratio(ad?.sp_sales, row.sales), sp_acos: ratio(ad?.sp_cost, ad?.sp_sales) };
+      return { ...row, sp_cost: ad?.sp_cost, sp_sales: ad?.sp_sales, sp_orders: ad?.sp_orders,
+        sp_impressions: ad?.sp_impressions, sp_clicks: ad?.sp_clicks,
+        sp_sales_share: ratio(ad?.sp_sales, row.sales), sp_acos: ratio(ad?.sp_cost, ad?.sp_sales) };
     });
-    const scopedRows = advertisingRows(dailyRows, 'report_date', aggregateOtherAds(otherAds?.rows, date => date), otherAds?.coverage ?? otherAds?.pending);
+    return advertisingRows(dailyRows, 'report_date', aggregateOtherAds(otherAds?.rows, date => date), otherAds?.coverage ?? otherAds?.pending);
+  }
+
+  function renderDailyAds(target, { rows, adRows, otherAds, spError } = {}) {
+    const scopedRows = scopedDailyAds(rows, adRows, otherAds);
     renderTable(target, {
       columns: advertisingColumns(scopedRows, true), rows: scopedRows, label: '每日广告结构',
       note: advertisingNotice(scopedRows, true, otherAds?.error, spError),

@@ -308,7 +308,7 @@
     ui.resultTabSummary.textContent = daily ? '每日明细' : '周总结';
     ui.resultTabAds.textContent = daily ? '每日广告' : '产品广告结构';
     ui.resultsAdsTitle.textContent = daily ? '每日广告表现' : '产品广告结构';
-    ui.resultsSummaryTitle.textContent = daily ? '每日销售与流量' : '每周复盘';
+    ui.resultsSummaryTitle.textContent = daily ? '每日明细' : '每周复盘';
     ui.resultsSummaryHint.textContent = daily ? '每个自然日一行。「—」表示当天没有可核验的数据。本周费用请切回按周查看。' :
       '选中的周高亮。「—」表示缺少数据。未填写的三项手动费用按 0 显示。';
   }
@@ -401,7 +401,7 @@
 
   function renderDailyPanels(rows, ads, otherAds) {
     if (typeof window.MCWeeklyResultTables.renderDaily !== 'function') throw new Error('每日明细组件未加载，请刷新页面。');
-    window.MCWeeklyResultTables.renderDaily(tables.summary, { rows });
+    window.MCWeeklyResultTables.renderDaily(tables.summary, { rows, adRows:ads.rows, otherAds, spError:ads.error });
     if (ads.rows?.length || otherAds.rows.length || otherAds.coverage.length || otherAds.error) {
       window.MCWeeklyResultTables.renderDailyAds(tables.ads,{ rows, adRows:ads.rows, otherAds, spError:ads.error });
     } else {
