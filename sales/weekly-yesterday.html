@@ -4,12 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="referrer" content="no-referrer">
-  <title>昨日数据｜利润表｜每周报表</title>
+  <title>每日经营明细｜利润表｜每周报表</title>
   <link rel="stylesheet" href="../assets/styles.css">
   <link rel="stylesheet" href="../assets/workspace-nav.css?v=20261110">
   <link rel="stylesheet" href="../assets/mc-weekly-source-nav.css?v=20261113-1">
   <link rel="stylesheet" href="../assets/mc-weekly-results.css?v=20261113-1">
-  <link rel="stylesheet" href="../assets/mc-weekly-yesterday.css?v=20261114-1">
+  <link rel="stylesheet" href="../assets/mc-daily-sku.css?v=20261114-1">
 </head>
 <body>
 <div class="shell workspace-shell workspace-sales" id="appShell" hidden>
@@ -38,7 +38,7 @@
         <span class="workspace-subnav-label">利润表</span>
         <a href="./weekly-products.html#product-catalog">产品目录</a>
         <a href="./weekly-results.html#weekly-results">周结果</a>
-        <a href="#weekly-yesterday" aria-current="page">昨日数据</a>
+        <a href="#weekly-yesterday" aria-current="page">每日经营明细</a>
         <details class="weekly-source-downloads">
           <summary>数据源下载</summary>
           <div class="weekly-source-links">
@@ -64,99 +64,63 @@
       </div>
     </header>
 
-    <main id="main" class="main sales-main mc-weekly-results mc-weekly-yesterday">
+    <main id="main" class="main sales-main mc-weekly-results mc-daily-sku">
       <header class="results-heading">
         <p class="results-market">MC · AMAZON US</p>
         <p class="results-path">每周报表 <span aria-hidden="true">›</span> 利润表</p>
-        <h1 id="weekly-yesterday">昨日数据</h1>
-        <p class="results-intro">按父 ASIN 查看一天的销售、利润估算与广告表现。</p>
+        <h1 id="weekly-yesterday">每日经营明细</h1>
+        <p class="results-intro">按卖家 SKU 查看一天的流量、销售和广告。日期按美国太平洋时间计算，默认选择昨天。</p>
       </header>
 
-      <div class="results-controls yesterday-controls" role="group" aria-label="筛选昨日数据">
-        <label class="results-field" for="yesterdayDate">
-          <span>日期</span>
-          <input id="yesterdayDate" type="date" min="2000-01-03" required aria-describedby="yesterdayTimeZone">
+      <div class="results-controls sku-day-controls" role="group" aria-label="筛选每日经营明细">
+        <label class="results-field" for="skuDate">
+          <span>报表日期</span>
+          <input id="skuDate" type="date" min="2000-01-03" required>
         </label>
-        <label class="results-field" for="yesterdayParent">
+        <label class="results-field" for="skuParent">
           <span>父 ASIN</span>
-          <select id="yesterdayParent"><option value="">正在读取产品目录…</option></select>
+          <select id="skuParent"><option value="">全部父 ASIN</option></select>
         </label>
-        <button id="yesterdayReload" class="results-button results-button-primary" type="button">重新读取</button>
+        <label class="results-field" for="skuSearch">
+          <span>搜索 SKU 或 ASIN</span>
+          <input id="skuSearch" type="search" placeholder="输入卖家 SKU 或 ASIN" maxlength="128" autocomplete="off" spellcheck="false">
+        </label>
+        <button id="skuReload" class="results-button results-button-primary" type="button">重新读取</button>
       </div>
-      <p id="yesterdayTimeZone" class="results-timezone">日期按美国太平洋时间计算，默认选择昨天。</p>
-      <p id="yesterdayStatus" class="results-state" role="status">正在读取昨日数据…</p>
+      <p id="skuStatus" class="results-state" role="status">正在读取每日经营明细…</p>
 
-      <section id="yesterdayData" class="results-detail yesterday-data" aria-labelledby="yesterdayHeading" hidden>
-        <header class="results-detail-head yesterday-data-head">
-          <h2 id="yesterdayHeading">单日结果</h2>
-          <p id="yesterdayCoverage" class="results-state" hidden></p>
-        </header>
-
-        <section class="results-panel yesterday-panel" aria-labelledby="yesterdayOverviewTitle">
-          <header class="results-panel-head">
-            <h3 id="yesterdayOverviewTitle">每日总结</h3>
-            <p id="yesterdayOverviewHint">销售和流量来自亚马逊业务报告。利润为估算，已扣除已归属广告费和当日录入费用，未计入退款、独立促销或结算调整。FBA 退货率按当日收退件数 ÷ 发货件数计算。「—」表示未同步或无法计算，0 表示确认为零。</p>
-          </header>
-          <div class="results-table-wrap" tabindex="0" role="region" aria-labelledby="yesterdayOverviewTitle">
-            <table class="results-table results-table-compact yesterday-table" aria-labelledby="yesterdayOverviewTitle" aria-describedby="yesterdayOverviewHint">
-              <thead><tr>
-                <th scope="col">日期</th>
-                <th scope="col" class="results-number">销售额</th>
-                <th scope="col" class="results-number">利润（估算）</th>
-                <th scope="col" class="results-number">订单商品数</th>
-                <th scope="col" class="results-number">订购件数</th>
-                <th scope="col" class="results-number">会话数</th>
-                <th scope="col" class="results-number">订购件数 / 会话数</th>
-                <th scope="col" class="results-number">FBA 退货率</th>
-                <th scope="col" class="results-number">总广告费</th>
-                <th scope="col" class="results-number">SP 广告费</th>
-                <th scope="col" class="results-number">SP 归因订单</th>
-                <th scope="col" class="results-number">SP ACOS</th>
-                <th scope="col" class="results-number">SBV 广告费</th>
-                <th scope="col" class="results-number">SB 广告费</th>
-                <th scope="col" class="results-number">SD 广告费</th>
-                <th scope="col">销售报表</th>
-                <th scope="col" class="results-number">测评费用原币</th>
-                <th scope="col" class="results-number">站外费用原币</th>
-                <th scope="col" class="results-number">其他费用原币</th>
-              </tr></thead>
-              <tbody id="yesterdayOverview"></tbody>
-            </table>
+      <section id="skuData" class="sku-day-data" aria-labelledby="skuHeading" hidden>
+        <div class="sku-day-summary">
+          <div>
+            <h2 id="skuHeading">每日经营明细</h2>
+            <p id="skuCatalogDate" class="sku-day-catalog"></p>
           </div>
-        </section>
-
-        <section class="results-panel yesterday-panel" aria-labelledby="yesterdayAdvertisingTitle">
-          <header class="results-panel-head">
-            <h3 id="yesterdayAdvertisingTitle">产品广告结构</h3>
-            <p id="yesterdayAdvertisingHint">广告结构只列 SP（商品推广）；总广告费只计入能归属当前父 ASIN 的广告费。SP 归因销售额占比以同日销售额为分母，归因指标可能在之后更新。</p>
-          </header>
-          <div class="results-table-wrap" tabindex="0" role="region" aria-labelledby="yesterdayAdvertisingTitle">
-            <table class="results-table results-table-compact yesterday-table" aria-labelledby="yesterdayAdvertisingTitle" aria-describedby="yesterdayAdvertisingHint">
-              <thead><tr>
-                <th scope="col">日期</th>
-                <th scope="col">统计范围</th>
-                <th scope="col" class="results-number">销售额</th>
-                <th scope="col" class="results-number">SP 归因销售额</th>
-                <th scope="col" class="results-number">SP 归因销售额占比</th>
-                <th scope="col" class="results-number">SP 广告费</th>
-                <th scope="col" class="results-number">SP 归因订单</th>
-                <th scope="col" class="results-number">SP 展现</th>
-                <th scope="col" class="results-number">SP 点击</th>
-                <th scope="col" class="results-number">SP ACOS</th>
-              </tr></thead>
-              <tbody id="yesterdayAdvertising"></tbody>
-            </table>
+          <div class="sku-day-sources" aria-label="报表同步状态">
+            <p id="skuCoverageBr" class="sku-day-source"></p>
+            <p id="skuCoverageSp" class="sku-day-source"></p>
           </div>
-        </section>
+        </div>
+        <p id="skuHint" class="sku-day-note">销售与流量按亚马逊业务报告显示，“BR订单数”指订单商品数。广告指标和总广告花费目前仅含能归到 SKU 的 SP 广告。成本列展示产品目录当前设置。订单列表、交易表及未接入的列暂显示「—」；「—」也用于未同步、无记录或无法归属，0 表示报表明确给出零。</p>
+        <div id="skuSections" class="sku-day-sections" role="group" aria-label="跳转到列组"></div>
+        <div id="skuScroll" class="results-table-wrap sku-day-scroll" tabindex="0" role="region" aria-label="每日经营明细表，可横向滚动" aria-describedby="skuHint">
+          <table id="skuTable" class="results-table results-table-compact sku-day-table" aria-labelledby="skuHeading">
+            <thead id="skuTableHead"></thead>
+            <tbody id="skuTableBody"></tbody>
+          </table>
+        </div>
+        <div class="sku-day-pagination" aria-label="分页">
+          <p id="skuCount" class="results-count" role="status"></p>
+          <button id="skuPrev" class="results-button" type="button">上一页</button>
+          <button id="skuNext" class="results-button" type="button">下一页</button>
+        </div>
       </section>
     </main>
   </div>
 </div>
 <div class="auth-loading" id="loading" role="status">正在验证登录状态…</div>
-<noscript><style>#loading{display:none}</style><p class="auth-loading">请启用 JavaScript 后查看昨日数据。</p></noscript>
+<noscript><style>#loading{display:none}</style><p class="auth-loading">请启用 JavaScript 后查看每日经营明细。</p></noscript>
 <script src="../assets/config.js"></script>
 <script src="../assets/auth-client.js"></script>
-<script src="../assets/mc-yesterday-model.js?v=20261114-1"></script>
-<script src="../assets/mc-weekly-yesterday.js?v=20261114-1"></script>
+<script src="../assets/mc-daily-sku.js?v=20261114-1"></script>
 </body>
 </html>
