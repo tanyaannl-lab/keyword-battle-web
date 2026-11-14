@@ -1,0 +1,54 @@
+.mc-weekly-yesterday .yesterday-controls {
+  grid-template-columns: minmax(9.5rem, 13rem) minmax(11rem, 18rem) max-content;
+}
+
+.mc-weekly-yesterday .yesterday-data-head {
+  padding-bottom: .65rem;
+}
+
+.mc-weekly-yesterday .yesterday-data-head h2 {
+  font-size: clamp(1.05rem, 3vw, 1.25rem);
+}
+
+.mc-weekly-yesterday .yesterday-data-head .results-state {
+  margin: 0;
+}
+
+.mc-weekly-yesterday .yesterday-panel + .yesterday-panel {
+  border-top: 1px solid var(--results-line);
+}
+
+.mc-weekly-yesterday .yesterday-table th:first-child {
+  min-width: 6rem;
+}
+
+.mc-weekly-yesterday .yesterday-table .results-number {
+  min-width: 3.6rem;
+}
+
+.mc-weekly-yesterday .yesterday-table th:last-child,
+.mc-weekly-yesterday .yesterday-table td:last-child {
+  padding-inline-end: .7rem;
+}
+
+.mc-weekly-yesterday .yesterday-table tbody th {
+  vertical-align: middle;
+  border-bottom: 0;
+}
+
+@container (max-width: 520px) {
+  .mc-weekly-yesterday .yesterday-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mc-weekly-yesterday .yesterday-controls button {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+}
+
+@container (max-width: 340px) {
+  .mc-weekly-yesterday .yesterday-controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
