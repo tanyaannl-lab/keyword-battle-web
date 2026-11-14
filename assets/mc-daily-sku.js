@@ -9,6 +9,7 @@
   const asinPattern = /^[A-Z0-9]{10}$/u;
   const catalogStates = new Set(['matched', 'unmatched', 'conflict']);
   const rowStates = new Set(['reported', 'not_reported', 'pending', 'conflict']);
+  const sessionSources = new Set(['sku', 'child_asin']);
   const cfg = window.KB_CONFIG;
   const ids = ['appShell', 'loading', 'logoutBtn', 'userEmail', 'skuDate', 'skuParent', 'skuSearch', 'skuReload', 'skuStatus', 'skuData', 'skuHeading', 'skuCatalogDate', 'skuCoverageBr', 'skuCoverageSp', 'skuSections', 'skuScroll', 'skuTable', 'skuTableHead', 'skuTableBody', 'skuCount', 'skuPrev', 'skuNext'];
   const ui = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
@@ -64,6 +65,8 @@
   const columns = groups.flatMap(([, entries]) => entries);
   const brKeys = new Set(groups[4][1].map(([,key]) => key).filter(Boolean));
   const spKeys = new Set(groups[5][1].map(([,key]) => key).filter(Boolean));
+  const sessionKeys = new Set(['sessions_browser','sessions_app','sessions']);
+  const childSessionLabel = '来自同日子 ASIN 报表；该子 ASIN 只对应一个卖家 SKU';
   const states = {pending:'报表尚未同步', not_reported:'同步报表里没有此 SKU 的记录', conflict:'无法唯一归属到该 SKU'};
   const dateKeys = new Set(['report_date','week','week_sat','week_sun','week_label','month']);
   let auth, refreshAuth, dayRequest, catalogRequest, current, generation = 0, page = 0;
@@ -116,6 +119,7 @@
       if (typeof row?.sku !== 'string' || row.sku.length < 1 || row.sku.length > 128 || /[\x00-\x1f\x7f]/u.test(row.sku) || seen.has(row.sku) ||
           (row.asin != null && !asinPattern.test(row.asin)) || (row.parent_asin != null && !asinPattern.test(row.parent_asin)) ||
           (parent && parent !== row.parent_asin) || !catalogStates.has(row.catalog_status) || !rowStates.has(row.br_status) || !rowStates.has(row.sp_status) ||
+          (row.sessions_source != null && !sessionSources.has(row.sessions_source)) ||
           ['company_skus','names','owners'].some(key => !Array.isArray(row[key]) || row[key].some(item => typeof item !== 'string'))) throw new TypeError('Invalid daily row');
       seen.add(row.sku);
     }
@@ -262,12 +266,17 @@
     return formats[mask].format(Number(raw));
   }
 
+  function childAsinSessions(row, key) {
+    return sessionKeys.has(key) && current.coverage.br.status === 'ready' &&
+      row.sessions_source === 'child_asin' && row.catalog_status === 'matched' && row.br_status === 'not_reported';
+  }
+
   function cellValue(row, key, fmt) {
     if (!key) return null;
     if (dateKeys.has(key)) return current.period[key];
     if (key === 'store') return 'MC';
     if (key === 'marketplace') return 'amazon.com';
-    if (brKeys.has(key) && (current.coverage.br.status !== 'ready' || row.br_status !== 'reported')) return null;
+    if (brKeys.has(key) && !childAsinSessions(row,key) && (current.coverage.br.status !== 'ready' || row.br_status !== 'reported')) return null;
     if (spKeys.has(key) && (current.coverage.sp.status !== 'ready' || row.sp_status !== 'reported')) return null;
     const raw = row[key];
     if (raw == null) return null;
@@ -302,6 +311,9 @@
           cell.classList.add('results-missing');
           const missing = brKeys.has(key) ? states[row.br_status] : spKeys.has(key) ? states[row.sp_status] : null;
           if (missing) { cell.title = missing;cell.setAttribute('aria-label',missing); }
+        } else if (childAsinSessions(row,key)) {
+          cell.title = childSessionLabel;
+          cell.setAttribute('aria-label',`${value}，${childSessionLabel}`);
         } else if (index === 1 && row.catalog_status !== 'matched') {
           cell.title = row.catalog_status === 'conflict' ? '产品目录中 SKU 对应关系有冲突' : '产品目录没有唯一匹配项';
         } else if (key === 'names' || key === 'owners' || key === 'company_skus') {
