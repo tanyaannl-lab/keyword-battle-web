@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>FBA 库存｜MC 美国站｜每周报表</title>
+  <link rel="stylesheet" href="../assets/styles.css">
+  <link rel="stylesheet" href="../assets/workspace-nav.css?v=20261110">
+  <link rel="stylesheet" href="../assets/mc-weekly-source-nav.css?v=20261113-1">
+  <link rel="stylesheet" href="../assets/mc-weekly-results.css?v=20261113-1">
+  <link rel="stylesheet" href="../assets/mc-weekly-inventory.css?v=20261114-2">
+</head>
+<body>
+<div class="shell workspace-shell workspace-sales" id="appShell" hidden>
+  <aside class="workspace-sidebar">
+    <nav class="workspace-rail" aria-label="工作台模块">
+      <a class="workspace-mark" href="../tool/index.html" aria-label="关键词作战工具">K</a>
+      <a class="workspace-module" href="./index.html#home">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4v16h16M8 15v-3m5 3V8m5 7V5"/></svg>
+        <span>销量观察</span>
+      </a>
+      <a class="workspace-module" href="../tool/index.html">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h12M8 12h12M8 18h12M3 6h1M3 12h1M3 18h1"/></svg>
+        <span>关键词任务</span>
+      </a>
+      <a class="workspace-module" href="./weekly.html" aria-current="true">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H5v18h14V3h-3M8 2h8v4H8zM8 10h8m-8 4h8m-8 4h5"/></svg>
+        <span>每周报表</span>
+      </a>
+    </nav>
+    <div class="workspace-pane">
+      <div class="workspace-pane-head">
+        <span class="workspace-pane-title">每周报表</span>
+        <span class="workspace-pane-caption">AMAZON · US MARKET</span>
+      </div>
+      <nav class="workspace-subnav weekly-results-subnav" aria-label="每周报表子导航">
+        <span class="workspace-subnav-label">利润表</span>
+        <a href="./weekly-products.html#product-catalog">产品目录</a>
+        <a href="./weekly-results.html#weekly-results">周结果</a>
+        <details class="weekly-source-downloads">
+          <summary>数据源下载</summary>
+          <div class="weekly-source-links">
+            <a href="./weekly.html#sales-and-traffic">详情页面销售和流量</a>
+            <a href="./weekly-orders.html#orders">订单</a>
+            <a href="./weekly-ads.html#ads-report">广告报告</a>
+            <a href="./weekly-transactions.html#transactions">交易表</a>
+            <a href="./weekly-returns.html#fba-returns">FBA 退货表</a>
+          </div>
+        </details>
+        <span class="workspace-subnav-label">库存管理</span>
+        <a href="./weekly-inventory.html#fba-inventory" aria-current="page">FBA 库存</a>
+      </nav>
+    </div>
+  </aside>
+
+  <div class="workspace-content">
+    <header class="topbar">
+      <a class="brand" href="../tool/index.html"><span class="brand-mark">K</span><span>关键词作战工具</span></a>
+      <div class="top-actions">
+        <span class="desktop-only" id="userEmail"></span>
+        <button class="btn btn-ghost btn-sm" id="logoutBtn" type="button">退出</button>
+      </div>
+    </header>
+
+    <main id="main" class="main sales-main mc-weekly-results mc-fba-inventory">
+      <header class="results-heading">
+        <p class="results-market">MC · AMAZON US</p>
+        <p class="results-path">每周报表 <span aria-hidden="true">›</span> 库存管理</p>
+        <h1 id="fba-inventory">FBA 库存</h1>
+        <p class="results-intro">按卖家 SKU 查看 FBA 库存、近 30 天订购件数和预计可售天数。</p>
+      </header>
+
+      <div class="inventory-source">
+        <p id="inventorySnapshot" class="inventory-snapshot" hidden>
+          FBA 库存同步（美西）：<time id="inventorySnapshotAt"></time>
+        </p>
+        <p id="inventorySalesWindow" class="inventory-snapshot" hidden>
+          <span id="inventorySalesDates"></span><time id="inventorySalesAt"></time>
+          <span id="inventorySalesLag" class="inventory-sales-lag" hidden>统计截止日距今已超过 3 天</span>
+        </p>
+        <button class="results-button" type="button" id="inventoryReload">重新读取</button>
+      </div>
+      <p id="inventoryStatus" class="results-state" role="status">正在读取库存…</p>
+
+      <section id="inventoryResults" class="results-list" aria-label="库存快照" hidden>
+        <div class="results-controls inventory-controls" role="group" aria-label="筛选库存">
+          <label class="results-field" for="inventorySearch">
+            <span>搜索库存</span>
+            <input type="search" id="inventorySearch" autocomplete="off" maxlength="160" placeholder="SKU、ASIN、运营简称或 FNSKU">
+          </label>
+          <label class="results-field" for="inventoryScope">
+            <span>查看范围</span>
+            <select id="inventoryScope">
+              <option value="tracked" selected>运营跟踪</option>
+              <option value="all">全部 SKU</option>
+            </select>
+          </label>
+          <label class="results-field" for="inventoryFilter">
+            <span>库存筛选</span>
+            <select id="inventoryFilter">
+              <option value="">全部</option>
+              <option value="sellable">有可售库存</option>
+              <option value="zero">可售为 0</option>
+              <option value="reserved">有预留库存</option>
+              <option value="inbound">有实际在途</option>
+              <option value="unfulfillable">有不可售库存</option>
+              <option value="unknown">可售数量未返回</option>
+            </select>
+          </label>
+          <button class="results-button results-button-primary" type="button" id="inventoryDownload" disabled>导出筛选结果</button>
+        </div>
+
+        <p class="results-table-note" id="inventoryHelp">实际在途 = 已发往亚马逊 + 接收中，计划入库单独统计。日均订购件数 = 近 30 天订购件数 ÷ 30；预计可售天数 = 当前可售 ÷ 日均订购件数。「—」表示缺少数据或无法计算。CSV 导出当前筛选的全部页及 FBA 明细。</p>
+        <p class="results-table-note" id="inventoryTracking" role="status" hidden></p>
+        <p id="inventoryCount" class="results-count inventory-count" role="status"></p>
+        <p id="inventoryEmpty" class="results-empty" hidden></p>
+        <button class="results-button inventory-show-all" type="button" id="inventoryShowAll" hidden>查看全部 SKU</button>
+
+        <div id="inventoryTable" class="results-table-wrap inventory-table-wrap" tabindex="0" role="region" aria-label="FBA 库存表" hidden>
+          <table class="results-table results-table-compact inventory-table" aria-describedby="inventoryHelp">
+            <thead>
+              <tr>
+                <th scope="col">卖家 SKU</th>
+                <th scope="col">子 ASIN</th>
+                <th scope="col" class="inventory-name">运营简称</th>
+                <th scope="col" class="results-number">当前可售</th>
+                <th scope="col" class="results-number">预留</th>
+                <th scope="col" class="results-number">不可售</th>
+                <th scope="col" class="results-number">实际在途</th>
+                <th scope="col" class="results-number">计划入库</th>
+                <th scope="col" class="results-number">近 30 天订购件数</th>
+                <th scope="col" class="results-number">日均订购件数</th>
+                <th scope="col" class="results-number">预计可售天数</th>
+              </tr>
+            </thead>
+            <tbody id="inventoryRows"></tbody>
+          </table>
+        </div>
+        <nav id="inventoryPages" class="results-table-pagination" aria-label="库存列表分页" hidden>
+          <button type="button" id="inventoryPrev">上一页</button>
+          <p id="inventoryPageNumber" class="inventory-page-number" aria-live="polite"></p>
+          <button type="button" id="inventoryNext">下一页</button>
+        </nav>
+      </section>
+    </main>
+  </div>
+</div>
+<div class="auth-loading" id="loading" role="status">正在验证登录状态…</div>
+<noscript><style>#loading{display:none}</style><p class="auth-loading">请启用 JavaScript 后查看 FBA 库存。</p></noscript>
+<script src="../assets/config.js"></script>
+<script src="../assets/auth-client.js"></script>
+<script src="../assets/mc-weekly-inventory.js?v=20261114-2"></script>
+</body>
+</html>

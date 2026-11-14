@@ -1,0 +1,68 @@
+.workspace-content > .mc-fba-inventory {
+  container-type: inline-size;
+}
+
+.mc-fba-inventory .inventory-source {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: .55rem 1rem;
+}
+
+.mc-fba-inventory .inventory-snapshot {
+  margin: 0;
+  color: var(--results-muted);
+  font-size: .86rem;
+}
+
+.mc-fba-inventory .inventory-snapshot time {
+  color: var(--results-ink);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.mc-fba-inventory .inventory-sales-lag { margin-inline-start: .25rem; color: #895614; font-weight: 700; }
+
+.mc-fba-inventory .inventory-controls {
+  grid-template-columns: minmax(0, 23rem) minmax(8rem, 10rem) minmax(10rem, 13rem) auto;
+  justify-content: start;
+}
+
+.mc-fba-inventory .inventory-count { margin: .8rem .05rem .55rem; }
+.mc-fba-inventory .inventory-show-all { margin-top: .55rem; }
+.mc-fba-inventory .inventory-table-wrap { max-height: min(65vh, 38rem); }
+.mc-fba-inventory .inventory-table th, .mc-fba-inventory .inventory-table td { padding: .44rem .5rem; vertical-align: middle; }
+.mc-fba-inventory .inventory-table thead .results-number { min-width: 3rem; }
+.mc-fba-inventory .inventory-table tbody th { background: #fff; z-index: 1; }
+.mc-fba-inventory .inventory-table tbody th, .mc-fba-inventory .inventory-table thead th:first-child {
+  min-width: 9rem;
+  max-width: 17rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.mc-fba-inventory .inventory-table .inventory-name {
+  min-width: 5.7rem;
+  max-width: 13rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.mc-fba-inventory .inventory-table tbody tr:last-child th { border-bottom: 0; }
+.mc-fba-inventory .inventory-table tbody tr:hover th { background: #f8fbfc; }
+.mc-fba-inventory .inventory-table .inventory-zero { color: #973523; }
+.mc-fba-inventory .inventory-page-number { margin: 0; }
+
+@container (max-width: 635px) {
+  .mc-fba-inventory .inventory-controls { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .mc-fba-inventory .inventory-controls label:first-child { grid-column: 1 / -1; }
+}
+
+@container (max-width: 350px) {
+  .mc-fba-inventory .inventory-controls { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 480px) {
+  .mc-fba-inventory .inventory-table tbody th, .mc-fba-inventory .inventory-table thead th:first-child {
+    min-width: 7rem;
+    max-width: 10rem;
+  }
+}
