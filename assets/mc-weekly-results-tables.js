@@ -35,6 +35,8 @@
     '总访客数': ['总访客数', '会话数'],
     'SP 归因销售额占比（参考）': ['SP 归因销售额占比', '参考'],
     '广告归因销售额占比（参考）': ['广告归因销售额占比', '参考'],
+    '订单毛利（估算）': ['订单毛利', '估算'],
+    '订单毛利率（估算）': ['订单毛利率', '估算'],
   });
 
   function col(key, label, kind = 'text', aliases = [], rule = null) {
@@ -285,7 +287,7 @@
     });
   }
 
-  function advertisingColumns(rows, daily) {
+  function advertisingColumns(rows, daily, skuPreview = false) {
     const seen = new Set(rows.flatMap(row => row.ad_channels));
     const showCombined = otherAdChannels.some(channel => seen.has(channel));
     const details = showCombined ? otherAdChannels.filter(channel => seen.has(channel)).flatMap(channel => {
@@ -298,7 +300,8 @@
       col('ad_scope', '统计范围'),
       col('sales', '销售额', 'usd'),
       ...(showCombined ? combinedAdColumns : []),
-      ...(!showCombined || seen.has('SP') ? spMetricColumns : []),
+      ...(!showCombined || seen.has('SP') || skuPreview ? spMetricColumns : []),
+      ...(skuPreview ? [col('sp_units', 'SP 归因销量', 'int')] : []),
       ...details,
       ...(daily ? [] : weeklyAdExtraColumns),
     ];
@@ -642,5 +645,103 @@
     });
   }
 
-  window.MCWeeklyResultTables = Object.freeze({ render, renderDaily, renderDailyAds, renderSearch, weekLabel, keywordColumns, attributeColumns });
+  const skuSources = [['br','BR'],['sp','SP'],['orders','订单'],['transactions','交易']];
+  const skuFinanceColumns = [
+    col('order_sales','订单销售额','usd'), col('order_orders','订单 SKU 单数合计','int'),
+    col('order_units','订单销量','int'), col('order_profit_net','订单毛利（估算）','usd'),
+    col('order_gross_margin','订单毛利率（估算）','pct'),
+    col('txn_sales','交易订单销售额','usd'), col('txn_orders','交易 SKU 单数合计','int'),
+    col('txn_units','交易销量','int'), col('txn_total','交易净额','usd'), col('txn_refund','交易退款','usd'),
+    col('txn_profit','交易毛利（估算）','usd'),
+  ];
+
+  function skuContextCoverage(days) {
+    const ready = key => days.filter(day=>day.coverage?.[key] === 'ready').length;
+    const label = skuSources.map(([key,name])=>`${name} ${ready(key)}/${days.length} 天`).join('、');
+    const conflicts = days.reduce((sum,row)=>sum+(row.conflict_count ?? 0),0);
+    return `报表到齐：${label}。${conflicts ? `共有 ${conflicts} 条 SKU 日期记录存在归属冲突，受影响的指标留空。` : ''}`;
+  }
+
+  function renderSku(targets, { sku, week = '', otherAds, returns, dailyFees, weeklyNotes } = {}) {
+    const daily = !week;
+    const days = sku?.days ?? [];
+    const dateKey = daily ? 'report_date' : 'week_start';
+    const coverageText = coverage => {
+      const absent = skuSources.filter(([key])=>coverage?.[key] !== 'ready').map(([,label])=>label);
+      return absent.length ? `待同步：${absent.join('、')}` : '四类报表已齐';
+    };
+    const weekCoverage = Object.fromEntries(skuSources.map(([key])=>
+      [key,days.length === 7 && days.every(day=>day.coverage?.[key] === 'ready') ? 'ready' : 'missing']));
+    const baseRows = (daily ? days : [{...sku?.totals,week_start:week,coverage:weekCoverage}]).map(raw => ({
+      ...raw,
+      data_coverage:coverageText(raw.coverage),
+      sales:raw.br_sales,
+      orders:raw.br_orders,
+      sp_sales_share:ratio(raw.sp_sales,raw.br_sales),
+      sp_acos:ratio(raw.sp_cost,raw.sp_sales),
+    }));
+    const scopedRows = advertisingRows(baseRows,dateKey,
+      aggregateOtherAds(!daily && sku?.unfinished ? [] : otherAds?.rows,daily ? date=>date : monday),
+      otherAds?.coverage ?? otherAds?.pending);
+    const movements = new Map((!returns?.error ? returns?.rows ?? [] : []).map(row=>[row.report_date,row]));
+    const expenses = new Map((!dailyFees?.error ? dailyFees?.rows ?? [] : []).map(row=>[row.report_date,row]));
+    const summaryRows = scopedRows.map(row=>{
+      const date = row[dateKey];
+      const savedFees = daily ? expenses.get(date) : weeklyNotes ?
+        Object.fromEntries(manualFeeKeys.map(key=>[key,weeklyNotes.notes?.[key] ?? 0])) : null;
+      const fees = Object.fromEntries(manualFeeKeys.map(key=>[key,validFee(savedFees?.[key])]));
+      const feeTotal = sumFees(fees);
+      const orderProfit = numeric(row.order_profit);
+      const txnProfit = numeric(row.txn_profit);
+      const otherCostParts = otherAdChannels.filter(channel=>row.ad_channels.includes(channel))
+        .map(channel=>numeric(row[`${channel.toLowerCase()}_cost`]));
+      const otherCost = otherAds?.error ? null : otherCostParts.length ? addKnown(otherCostParts) : 0;
+      const net = orderProfit !== null && feeTotal !== null && otherCost !== null
+        ? orderProfit - feeTotal - otherCost : null;
+      const movementDays = daily ? [date] : days.map(day=>day.report_date);
+      const allReturned = addKnown(movementDays.map(day=>numeric(movements.get(day)?.return_units)));
+      const allShipped = addKnown(movementDays.map(day=>numeric(movements.get(day)?.shipped_units)));
+      return {...row,...fees,...estimateDailyOrderSplit(row),order_profit_net:net,
+        txn_profit:txnProfit !== null && otherCost !== null ? txnProfit - otherCost : null,
+        order_gross_margin:ratio(net,row.order_sales), returns_rate:ratio(allReturned,allShipped),
+        app_session_share:ratio(row.sessions_app,row.sessions),unit_session_rate:ratio(row.br_units,row.sessions),
+        ad_cost_of_sales:ratio(row.ad_cost,row.br_sales)};
+    });
+    const returnNote = daily ? 'FBA 退货率 = 当日收退件数 ÷ 发货件数。' : weeklyReturnsNotice;
+    const coverage = skuContextCoverage(days);
+    const periodNote = sku?.unfinished ? '所选周尚未结束，整周汇总留空。' : '';
+    const manual = daily ? '当日手动费用' : '本周手动费用';
+    const feeUnavailable = daily ? dailyFees?.error : !weeklyNotes;
+    renderTable(targets.summary,{
+      columns:[
+        daily ? col('report_date','日期','date') : col('week_start','周期','week'),
+        col('data_coverage','数据状态'),
+        col('br_sales','BR 销售额','usd'),col('br_orders','BR 订单商品数','int'),col('br_units','BR 订购件数','int'),
+        col('sessions','会话数','int'),col('app_session_share','APP 流量占比','pct'),
+        col('unit_session_rate','订购件数 / 会话数','pct'),...skuFinanceColumns,
+        col('returns_rate',daily ? 'FBA 退货率' : 'FBA 周退货率','pct'),
+        col('ad_sales','已归属广告销售额','usd'),col('ad_cost','已归属广告费','usd'),
+        col('ad_cost_of_sales','广告费占总销售额','pct'),col('ad_orders','广告订单','int'),
+        col('organic_orders','自然订单（估算）','int'),col('organic_order_share','自然单占比（估算）','pct'),
+        col('ad_order_share','广告单占比（估算）','pct'),
+        col('review_fee','测评费用原币','usd'),col('offsite_fee','站外费用原币','usd'),col('other_fee','其他费用原币','usd'),
+      ],
+      rows:summaryRows,week,label:daily ? 'SKU 每日明细核对' : 'SKU 周总结核对',
+      note:[coverage,periodNote,sku?.error,
+        `订单毛利已扣 SP 和交易退款，再扣除${manual}。交易毛利按交易净额估算，已扣 SP，未扣手动费用。两项毛利都扣除能归属本产品的 SB、SD 广告费；如读取失败或已归属的广告缺花费，毛利留空。订单毛利率以订单列表销售额为分母。`,
+        'BR 订单商品数和两项 SKU 单数合计均不能当作去重后的父 ASIN 订单数。自然单按 BR 订单商品数减广告归因订单估算。',
+        returnNote,returns?.error ? '暂时无法读取 FBA 退货数据。' : '',
+        feeUnavailable ? `无法读取${manual}，订单毛利估算留空。` : '',
+      ].filter(Boolean).join(' '),emptyText:'所选期间暂无每日 SKU 数据。',
+    });
+    renderTable(targets.ads,{
+      columns:[...advertisingColumns(scopedRows,daily,true),col('data_coverage','数据状态')],
+      rows:scopedRows,week,label:daily ? 'SKU 每日广告核对' : 'SKU 产品广告结构核对',
+      note:[coverage,periodNote,sku?.error,advertisingNotice(scopedRows,daily,otherAds?.error,false),
+        'SP 来自每日 SKU 数据，缺日不补 0。SB、SD 只展示可归属本产品的部分。'].filter(Boolean).join(' '),
+      emptyText:'所选期间暂无可核对的广告数据。',
+    });
+  }
+
+  window.MCWeeklyResultTables = Object.freeze({ render, renderDaily, renderDailyAds, renderSku, renderSearch, weekLabel, keywordColumns, attributeColumns });
 })();

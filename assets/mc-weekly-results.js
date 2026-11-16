@@ -11,7 +11,7 @@
     'resultEndDate','resultDateFeedback','weekTimeZone','resultsSummaryTitle','resultsSummaryHint',
     'resultTabSummary','resultTabAds','resultsAdsTitle','resultsWeeklyListHint','resultsDailyListHint',
     'dailyFeesForm','dailyFeesDate','dailyReviewFee','dailyOffsiteFee','dailyOtherFee','saveDailyFees',
-    'reloadDailyFees','dailyFeesStatus'];
+    'reloadDailyFees','dailyFeesStatus','dailyFeesHint','weeklyNotesHint','skuPreviewNotice'];
   const ui = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
   const tabs = [...document.querySelectorAll('[data-result-tab]')];
   const weeklyElements = [...document.querySelectorAll('[data-week-only]')];
@@ -25,7 +25,14 @@
     'mc_weekly_results_notes_save','mc_weekly_results_sp_read','mc_weekly_results_search','mc_weekly_results_daily_read',
     'mc_weekly_results_sp_daily_read','mc_weekly_results_search_daily_read','mc_weekly_results_other_ads_read',
     'mc_weekly_results_daily_profit_read','mc_daily_fba_returns_read','mc_daily_results_fees_read','mc_daily_results_fees_save',
-    'mc_weekly_results_weekly_metrics_read']);
+    'mc_weekly_results_weekly_metrics_read','mc_weekly_results_sku_read']);
+  const previewParams = new URLSearchParams(window.location?.search ?? '');
+  const skuPreview = previewParams.get('sku') === '1';
+  const skuSources = ['br','sp','orders','transactions'];
+  const skuMetricKeys = ['sessions_browser','sessions_app','sessions','br_orders','br_units','br_sales',
+    'sp_impressions','sp_clicks','sp_cost','sp_orders','sp_units','sp_sales','order_orders','order_units',
+    'order_sales','order_profit','order_profit_cny','txn_orders','txn_units','txn_sales','txn_total',
+    'txn_refund','txn_profit','txn_profit_cny'];
   const asin = /^[A-Z0-9]{10}$/;
   const normalize = text => text.normalize('NFKC').toLowerCase();
   const collator = new Intl.Collator('zh-Hans', { numeric: true, sensitivity: 'base' });
@@ -38,6 +45,7 @@
   const dayLimit = 92;
   const weekLimit = 26;
   const earliestDay = '2000-01-01';
+  const earliestSkuDay = '2000-01-03';
   const dayMs = 86_400_000;
   const pacificCalendar = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit',
@@ -85,7 +93,7 @@
   const rangeLabel = (start, end) => start === end ? start : `${start} 至 ${end}`;
   const weekLabel = value => rangeLabel(value, shiftDay(value, 6));
   const pacificToday = () => {
-    const parts = Object.fromEntries(pacificCalendar.formatToParts().map(({ type,value }) => [type,value]));
+    const parts = Object.fromEntries(pacificCalendar.formatToParts(new Date()).map(({ type,value }) => [type,value]));
     return `${parts.year}-${parts.month}-${parts.day}`;
   };
   const number = value => value !== null && value !== '' &&
@@ -300,6 +308,11 @@
 
   function renderDetail() {
     if (!detail) return;
+    if (detail.sku) {
+      renderSkuPanels(tables);
+      selectTab(selectedTab);
+      return;
+    }
     window.MCWeeklyResultTables.render(tables, { rows: detail.rows, week, adRows: detail.ads,
       otherAds: detail.otherAds, spError:detail.spError, weeklyMetrics:detail.weeklyMetrics });
     selectTab(selectedTab);
@@ -321,6 +334,15 @@
     ui.resultsSummaryTitle.textContent = daily ? '每日明细' : '每周复盘';
     ui.resultsSummaryHint.textContent = daily ? '每个自然日一行。「—」表示当天没有可核验的数据。每日费用按填写日期扣除。' :
       '选中的周高亮。「—」表示缺少数据。未填写的三项手动费用按 0 显示。';
+    if (skuPreview) {
+      ui.skuPreviewNotice.hidden = false;
+      ui.resultStartDate.min = ui.resultEndDate.min = earliestSkuDay;
+      ui.weekTimeZone.textContent = daily ? '日期按美国太平洋时间计算，可查询最近已结束日期，最多 92 天。' : '周次按美国太平洋时间计算，周一至周日。';
+      ui.resultsSummaryHint.textContent = daily ? '每日 SKU 数据按父 ASIN 汇总，每天一行。「—」表示还没有可核对的数值。' :
+        '这里核对所选一周。按天汇总，某项指标缺任意一天就显示「—」。';
+      ui.dailyFeesHint.textContent = '按父 ASIN 和美国太平洋日期保存，单位为 USD。保存后从当天的订单毛利估算中扣除。';
+      ui.weeklyNotesHint.textContent = '按父 ASIN 与周次保存，单位为 USD。保存后从本周的订单毛利估算中扣除。';
+    }
   }
 
   function changeMode(next) {
@@ -336,9 +358,10 @@
   }
 
   function setDateControls() {
-    const latest = pacificToday();
+    const today = pacificToday();
+    const latest = skuPreview ? shiftDay(today,-1) : today;
     if (!dayStart) {
-      dayStart = dayEnd = shiftDay(latest,-1);
+      dayStart = dayEnd = shiftDay(today,-1);
     }
     ui.resultStartDate.max = ui.resultEndDate.max = latest;
     ui.resultStartDate.value = dayStart;
@@ -351,9 +374,11 @@
     const start = ui.resultStartDate.value;
     const end = ui.resultEndDate.value;
     const today = pacificToday();
-    ui.resultStartDate.max = ui.resultEndDate.max = today;
-    if (!validDay(start) || !validDay(end) || start < earliestDay || end < start || end > today) {
-      notice(ui.resultDateFeedback,'请选择有效的开始和结束日期，结束日期不能早于开始日期或晚于今天。','error');
+    const latest = skuPreview ? shiftDay(today,-1) : today;
+    ui.resultStartDate.max = ui.resultEndDate.max = latest;
+    if (!validDay(start) || !validDay(end) || start < (skuPreview ? earliestSkuDay : earliestDay) || end < start || end > latest) {
+      notice(ui.resultDateFeedback,skuPreview ? '请选择有效日期，结束日期不能早于开始日期或晚于美西昨天。' :
+        '请选择有效的开始和结束日期，结束日期不能早于开始日期或晚于今天。','error');
       return;
     }
     if (dayCount(start,end) > dayLimit) {
@@ -410,6 +435,10 @@
   }
 
   function renderDailySummary() {
+    if (detail?.sku) {
+      renderSkuPanels({summary:tables.summary});
+      return;
+    }
     if (typeof window.MCWeeklyResultTables.renderDaily !== 'function') throw new Error('每日明细组件未加载，请刷新页面。');
     window.MCWeeklyResultTables.renderDaily(tables.summary, { rows:detail.rows, adRows:detail.ads, otherAds:detail.otherAds,
       spError:detail.spError, profit:detail.profit, returns:detail.returns, dailyFees:detail.dailyFees });
@@ -423,6 +452,13 @@
       renderWeeklyFallback(tables.ads, ads.error ? '暂时无法读取每日广告数据。' : '这个父 ASIN 在所选日期范围内暂无已发布的广告日报。');
     }
     selectTab(selectedTab);
+  }
+
+  function renderSkuPanels(targets) {
+    if (typeof window.MCWeeklyResultTables.renderSku !== 'function') throw new Error('SKU 核对表未加载，请刷新页面。');
+    window.MCWeeklyResultTables.renderSku(targets, { sku:detail.sku, week:mode === 'week' ? week : '',
+      otherAds:detail.otherAds, returns:detail.returns, dailyFees:detail.dailyFees,
+      weeklyNotes:detail.rows.find(row=>row.week_start === week) });
   }
 
   function renderSearchState(search) {
@@ -671,6 +707,82 @@
       pending:snapshots.flatMap(value=>value.pending),error:snapshots.some(value=>value.error)};
   }
 
+  async function readSkuPreview(start,end,lastClosed,parentAsin,signal) {
+    const dates = Array.from({length:dayCount(start,end)},(_,index)=>shiftDay(end,-index));
+    const days = new Map();
+    const completeEnd = end <= lastClosed ? end : lastClosed;
+    const validMetric = value => value === null ||
+      ((typeof value === 'number' || typeof value === 'string' && /^[+-]?\d+(?:\.\d+)?$/.test(value)) &&
+        number(value) !== null && Math.abs(number(value)) <= Number.MAX_SAFE_INTEGER);
+    const validMetrics = row => row && typeof row === 'object' && !Array.isArray(row) &&
+      skuMetricKeys.every(key=>validMetric(row[key])) &&
+      Number.isSafeInteger(row.conflict_count) && row.conflict_count >= 0;
+    let totals = null;
+    let error = '';
+    if (start <= completeEnd) {
+      try {
+        const payload = await rpc('mc_weekly_results_sku_read',{
+          p_start_date:start,p_end_date:completeEnd,p_parent_asin:parentAsin,
+        },signal);
+        if (payload?.parent_asin !== parentAsin || !Array.isArray(payload.days) ||
+            payload.days.length !== dayCount(start,completeEnd) || !validMetrics(payload.totals)) {
+          throw new Error('Invalid SKU preview response');
+        }
+        for (const row of payload.days) {
+          if (!validMetrics(row) || !validDay(row.report_date) || row.report_date < start || row.report_date > completeEnd ||
+              days.has(row.report_date) || !skuSources.every(key=>['ready','missing'].includes(row.coverage?.[key]))) {
+            throw new Error('Invalid SKU preview date');
+          }
+          days.set(row.report_date,row);
+        }
+        if (completeEnd === end) totals = payload.totals;
+      } catch (err) {
+        days.clear();
+        error = err.status === 404 || err.code === 'PGRST202' ? 'SKU 汇总接口尚未启用。' : '暂时无法读取 SKU 汇总，请重新加载。';
+      }
+    }
+    const missingCoverage = Object.fromEntries(skuSources.map(key=>[key,'missing']));
+    return {days:dates.map(report_date=>days.get(report_date) ?? {report_date,coverage:missingCoverage}),
+      totals,error,unfinished:completeEnd < end};
+  }
+
+  async function readSkuWeeklyNotes(weekStart,parentAsin,signal) {
+    try {
+      const main = await rpc('mc_weekly_results_read',{p_week_start:weekStart,p_parent_asin:parentAsin},signal);
+      return rowsFrom(main,weekStart,parentAsin).filter(row=>row.week_start === weekStart);
+    } catch {
+      return [];
+    }
+  }
+
+  async function loadSkuContext(controller, daily, weekStart, start, end, parentAsin) {
+    const lastClosed = shiftDay(pacificToday(),-1);
+    const from = daily ? start : weekStart;
+    const to = daily ? end : shiftDay(weekStart,6);
+    const subsidiaryEnd = to < lastClosed ? to : lastClosed;
+    const subsidiary = from <= subsidiaryEnd;
+    const signal = controller.signal;
+    const [sku,otherAds,returns,dailyFees,rows] = await Promise.all([
+      readSkuPreview(from,to,lastClosed,parentAsin,signal),
+      subsidiary ? optionalOtherAds(from,subsidiaryEnd,parentAsin,signal) : blankOtherAds(),
+      subsidiary ? optionalDailyMetrics('returns',from,subsidiaryEnd,parentAsin,signal) : {rows:[],error:false},
+      daily ? readDailyFees(from,to,parentAsin,signal) : null,
+      daily ? [] : readSkuWeeklyNotes(weekStart,parentAsin,signal),
+    ]);
+    if (context !== controller || signal.aborted || !auth) return;
+    detail = {sku,otherAds,returns,dailyFees,rows,search:{state:'idle'}};
+    loadedContext = true;
+    renderDetail();
+    if (daily) showDailyFees();
+    else if (rows.length) renderNotes(rows[0]);
+    notice(ui.productStatus,daily || rows.length ? '' : '暂时无法读取本周费用，订单毛利估算留空。', 'warning');
+    if (focusDetail) {
+      (focusDetail === 'notes' && rows.length ? ui.reviewFee : ui.selectedParent).focus();
+      focusDetail = false;
+    }
+    pageStatus(sku.error,sku.error ? 'error' : '',sku.error ? loadContext : null);
+  }
+
   async function loadContext() {
     if (!auth || !week || saveRequest) return;
     context?.abort();
@@ -710,6 +822,10 @@
     }
     pageStatus(daily ? '正在读取所选日期的结果…' : '正在读取所选周的结果…');
     try {
+      if (skuPreview && parentAsin) {
+        await loadSkuContext(controller,daily,weekStart,start,end,parentAsin);
+        return;
+      }
       if (daily) {
         const [main,ads,otherAds,profit,returns,dailyFees] = await Promise.all([
           rpc('mc_weekly_results_daily_read',{
@@ -1088,8 +1204,20 @@
       ui.resultsCatalogDate.textContent = catalog.snapshot_date;
       ui.resultsCatalogDate.dateTime = catalog.snapshot_date;
       week = available[1] ?? available[0];
-      ui.resultWeek.value = week;
       mode = 'day';
+      if (skuPreview) {
+        const previewWeek = previewParams.get('week');
+        const previewDate = previewParams.get('date');
+        const previewParent = previewParams.get('parent');
+        if (validWeek(previewWeek) && available.includes(previewWeek)) {
+          week = previewWeek;
+          mode = 'week';
+        } else if (validDay(previewDate) && previewDate >= earliestSkuDay && previewDate < pacificToday()) {
+          dayStart = dayEnd = previewDate;
+        }
+        if (parents.has(previewParent)) parent = previewParent;
+      }
+      ui.resultWeek.value = week;
       setDateControls();
       renderMode();
       ui.results.hidden = false;
