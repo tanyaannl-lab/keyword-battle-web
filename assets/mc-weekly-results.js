@@ -29,12 +29,9 @@
   const previewParams = new URLSearchParams(window.location?.search ?? '');
   const skuPreference = previewParams.get('sku');
   const skuPreview = skuPreference === '1';
-  const releasedSku = { parent: 'B0DT9PHC5Z', start: '2026-11-02', end: '2026-11-08' };
-  const isReleasedRange = (parentAsin, start, end) => parentAsin === releasedSku.parent &&
-    !!start && !!end && start <= end && start >= releasedSku.start && end <= releasedSku.end;
-  const canUseReleasedSku = (parentAsin, start, end) => !skuPreview && skuPreference !== '0' &&
-    isReleasedRange(parentAsin,start,end);
+  const skuAuto = skuPreference !== '0' && !skuPreview;
   const skuSources = ['br','sp','orders','transactions'];
+  const skuRequiredMetricKeys = ['br_sales','sp_cost','order_sales','order_units','txn_total'];
   const skuMetricKeys = ['sessions_browser','sessions_app','sessions','br_orders','br_units','br_sales',
     'sp_impressions','sp_clicks','sp_cost','sp_orders','sp_units','sp_sales','order_orders','order_units',
     'order_sales','order_profit','order_profit_cny','txn_orders','txn_units','txn_sales','txn_total',
@@ -52,6 +49,7 @@
   const weekLimit = 26;
   const earliestDay = '2000-01-01';
   const earliestSkuDay = '2000-01-03';
+  const latestSkuDay = '2099-12-31';
   const dayMs = 86_400_000;
   const pacificCalendar = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit',
@@ -104,6 +102,8 @@
   };
   const number = value => value !== null && value !== '' &&
     (typeof value === 'number' || typeof value === 'string') && Number.isFinite(Number(value)) ? Number(value) : null;
+  const validSkuRange = (start,end) => validDay(start) && validDay(end) && start >= earliestSkuDay &&
+    end <= latestSkuDay && start <= end && dayCount(start,end) <= dayLimit;
   const format = (value, formatter) => number(value) === null ? empty : formatter.format(number(value));
   const groupLabel = value => value?.owners.length ? value.owners.join('、') : empty;
 
@@ -345,11 +345,11 @@
     renderSkuSource();
   }
 
-  function renderSkuSource(released = false, fallback = false) {
+  function renderSkuSource(released = false, fallback = '') {
     const daily = mode === 'day';
     const usesSku = skuPreview || released;
     if (skuPreview) notice(ui.skuPreviewNotice,'SKU 数据核对预览。打开父 ASIN 后，「每日明细／周总结」和「每日广告／产品广告结构」显示新口径。父款列表、关键词分析、属性分析沿用正式数据。','warning');
-    else if (fallback) notice(ui.skuPreviewNotice,'每日经营明细的数据暂不可用，本次显示原版数据。刷新页面可重试。','warning');
+    else if (fallback) notice(ui.skuPreviewNotice,fallback,'warning');
     else if (released) notice(ui.skuPreviewNotice,'本期明细与广告使用每日经营明细的数据。');
     else notice(ui.skuPreviewNotice);
     ui.resultsSummaryHint.textContent = usesSku
@@ -369,15 +369,17 @@
     notice(ui.resultDateFeedback);
     if (mode === 'day') {
       const weekEnd = shiftDay(week,6);
-      if (canUseReleasedSku(parent,week,weekEnd)) {
+      if (skuAuto && parents.has(parent) && validSkuRange(week,weekEnd) && weekEnd < pacificToday()) {
         dayStart = week;
         dayEnd = weekEnd;
       }
       setDateControls();
       selectedTab = 'summary';
-    } else if (canUseReleasedSku(parent,dayStart,dayEnd) &&
-        Array.from(ui.resultWeek.options ?? ui.resultWeek.children).some(option=>option.value === releasedSku.start)) {
-      week = ui.resultWeek.value = releasedSku.start;
+    } else if (skuAuto && parents.has(parent) && validDay(dayEnd)) {
+      const dayWeek = weekOf(dayEnd);
+      if (Array.from(ui.resultWeek.options ?? ui.resultWeek.children).some(option=>option.value === dayWeek)) {
+        week = ui.resultWeek.value = dayWeek;
+      }
     }
     renderMode();
     void loadContext();
@@ -788,17 +790,19 @@
     const subsidiaryEnd = to < lastClosed ? to : lastClosed;
     const subsidiary = from <= subsidiaryEnd;
     const signal = controller.signal;
-    const [sku,otherAds,returns,dailyFees,rows] = await Promise.all([
-      readSkuPreview(from,to,lastClosed,parentAsin,signal),
+    const current = () => context === controller && !signal.aborted && !!auth;
+    const sku = await readSkuPreview(from,to,lastClosed,parentAsin,signal);
+    if (!current()) return;
+    const missingPrimary = values => skuRequiredMetricKeys.some(key=>number(values[key]) === null);
+    if (released && (sku.error || !sku.totals || sku.totals.conflict_count !== 0 || missingPrimary(sku.totals) ||
+      sku.days.some(day=>day.conflict_count !== 0 || skuSources.some(source=>day.coverage[source] !== 'ready') || missingPrimary(day)))) return 'legacy';
+    const [otherAds,returns,dailyFees,rows] = await Promise.all([
       subsidiary ? optionalOtherAds(from,subsidiaryEnd,parentAsin,signal) : blankOtherAds(),
       subsidiary ? optionalDailyMetrics('returns',from,subsidiaryEnd,parentAsin,signal) : {rows:[],error:false},
       daily ? readDailyFees(from,to,parentAsin,signal) : null,
       daily ? [] : readSkuWeeklyNotes(weekStart,parentAsin,signal),
     ]);
-    if (context !== controller || signal.aborted || !auth) return;
-    if (released && (sku.error || !sku.totals || sku.days.some(day=>day.conflict_count !== 0 ||
-      skuSources.some(source=>day.coverage[source] !== 'ready') ||
-      ['br_sales','sp_cost','order_sales','order_units','txn_total'].some(key=>number(day[key]) === null)))) return 'legacy';
+    if (!current()) return;
     renderSkuSource(released);
     detail = {sku,otherAds,returns,dailyFees,rows,search:{state:'idle'}};
     loadedContext = true;
@@ -823,8 +827,11 @@
     const start = dayStart;
     const end = dayEnd;
     const parentAsin = parent || null;
-    const released = canUseReleasedSku(parentAsin,daily ? start : weekStart,daily ? end : shiftDay(weekStart,6));
-    renderSkuSource();
+    const skuStart = daily ? start : weekStart;
+    const skuEnd = daily ? end : shiftDay(weekStart,6);
+    const skuCandidate = skuAuto && parents.has(parentAsin) && validSkuRange(skuStart,skuEnd);
+    const released = skuCandidate && skuEnd < pacificToday();
+    renderSkuSource(false,skuCandidate && !released ? '所选日期尚未全部结束，本次显示原版数据。' : '');
     loadedContext = false;
     hasList = false;
     detail = null;
@@ -857,7 +864,7 @@
       if ((skuPreview && parentAsin) || released) {
         const result = await loadSkuContext(controller,daily,weekStart,start,end,parentAsin,released);
         if (result !== 'legacy' || context !== controller || controller.signal.aborted || !auth) return;
-        renderSkuSource(false,true);
+        renderSkuSource(false,'所选范围的每日经营明细未齐或暂不可用，本次显示原版数据。');
       }
       if (daily) {
         const [main,ads,otherAds,profit,returns,dailyFees] = await Promise.all([
@@ -1242,11 +1249,11 @@
       const linkedDate = previewParams.get('date');
       const linkedParent = previewParams.get('parent');
       const weekLink = validWeek(linkedWeek) && available.includes(linkedWeek);
-      const dayLink = validDay(linkedDate) && linkedDate >= earliestSkuDay && linkedDate < pacificToday();
-      const releasedWeekLink = weekLink && isReleasedRange(linkedParent,linkedWeek,shiftDay(linkedWeek,6));
-      const releasedDayLink = dayLink && isReleasedRange(linkedParent,linkedDate,linkedDate);
-      if (skuPreview || releasedWeekLink || releasedDayLink) {
-        if (weekLink && (skuPreview || releasedWeekLink)) {
+      const today = pacificToday();
+      const dayLink = validDay(linkedDate) && linkedDate >= (skuPreview ? earliestSkuDay : earliestDay) &&
+        linkedDate <= (skuPreview ? shiftDay(today,-1) : today);
+      if (skuPreview || (parents.has(linkedParent) && (weekLink || dayLink))) {
+        if (weekLink) {
           week = linkedWeek;
           mode = 'week';
         } else if (dayLink) {
