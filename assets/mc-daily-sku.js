@@ -11,7 +11,7 @@
   const rowStates = new Set(['reported', 'not_reported', 'pending', 'conflict']);
   const sessionSources = new Set(['sku', 'child_asin']);
   const cfg = window.KB_CONFIG;
-  const ids = ['appShell', 'loading', 'logoutBtn', 'userEmail', 'skuDate', 'skuParent', 'skuSearch', 'skuReload', 'skuStatus', 'skuData', 'skuHeading', 'skuCatalogDate', 'skuCoverageBr', 'skuCoverageSp', 'skuSections', 'skuScroll', 'skuTable', 'skuTableHead', 'skuTableBody', 'skuCount', 'skuPrev', 'skuNext'];
+  const ids = ['appShell', 'loading', 'logoutBtn', 'userEmail', 'skuDate', 'skuParent', 'skuSearch', 'skuReload', 'skuStatus', 'skuData', 'skuHeading', 'skuCatalogDate', 'skuCoverageBr', 'skuCoverageSp', 'skuCoverageOrders', 'skuCoverageTransactions', 'skuSections', 'skuScroll', 'skuTable', 'skuTableHead', 'skuTableBody', 'skuCount', 'skuPrev', 'skuNext'];
   const ui = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
   const query = new URLSearchParams(location.search);
   const dates = new Intl.DateTimeFormat('en-US', {timeZone:marketTime, calendar:'gregory', numberingSystem:'latn', year:'numeric', month:'2-digit', day:'2-digit'});
@@ -49,22 +49,25 @@
       ['SBV广告花费',null,'usd'], ['SB广告花费',null,'usd'], ['SD广告花费',null,'usd'], ['总广告花费','sp_cost','usd'],
       ['广告订单','sp_orders','count'], ['广告销量','sp_units','count'], ['广告销售额','sp_sales','usd'],
     ]],
-    ['订单列表 · 待接入', [
-      ['订单列表采购',null,'usd'], ['订单列表头程',null,'usd'], ['订单列表佣金',null,'usd'], ['订单列表税额',null,'usd'],
-      ['订单列表FBA配送费',null,'usd'], ['订单列表促销订单数',null,'count'], ['订单列表促销',null,'usd'],
-      ['订单列表订单数',null,'count'], ['订单列表销量',null,'count'], ['订单列表销售额',null,'usd'],
-      ['订单列表毛利原币',null,'usd'], ['订单列表毛利(RMB)',null,'cny'],
+    ['订单列表 · 下单日', [
+      ['订单列表采购','order_procurement','usd'], ['订单列表头程','order_inbound','usd'], ['订单列表佣金','order_commission','usd'], ['订单列表税额','order_tax','usd'],
+      ['订单列表FBA配送费','order_fba','usd'], ['订单列表促销订单数','order_promotion_orders','count'], ['订单列表促销','order_promotion','usd'],
+      ['订单列表订单数','order_orders','count'], ['订单列表销量','order_units','count'], ['订单列表销售额','order_sales','usd'],
+      ['订单列表毛利原币','order_profit','usd'], ['订单列表毛利(RMB)','order_profit_cny','cny'],
     ]],
-    ['交易表 · 待接入', [
-      ['交易表采购',null,'usd'], ['交易表头程',null,'usd'], ['交易表佣金',null,'usd'], ['交易表税额',null,'usd'],
-      ['交易表FBA配送费',null,'usd'], ['交易表促销订单数',null,'count'], ['交易表促销',null,'usd'], ['交易表退款',null,'usd'],
-      ['交易表订单数',null,'count'], ['交易表销量',null,'count'], ['交易表回款订单销售额',null,'usd'],
-      ['交易表Total回款金额',null,'usd'], ['交易表毛利原币',null,'usd'], ['交易表毛利(RMB)',null,'cny'],
+    ['交易表 · 入账日', [
+      ['交易表采购','txn_procurement','usd'], ['交易表头程','txn_inbound','usd'], ['交易表佣金','txn_commission','usd'], ['交易表税额','txn_tax','usd'],
+      ['交易表FBA配送费','txn_fba','usd'], ['交易表促销订单数','txn_promotion_orders','count'], ['交易表促销','txn_promotion','usd'], ['交易表退款','txn_refund','usd'],
+      ['交易表订单数','txn_orders','count'], ['交易表销量','txn_units','count'], ['交易表回款订单销售额','txn_sales','usd'],
+      ['交易表Total回款金额','txn_total','usd'], ['交易表毛利原币','txn_profit','usd'], ['交易表毛利(RMB)','txn_profit_cny','cny'],
     ]],
   ];
   const columns = groups.flatMap(([, entries]) => entries);
   const brKeys = new Set(groups[4][1].map(([,key]) => key).filter(Boolean));
   const spKeys = new Set(groups[5][1].map(([,key]) => key).filter(Boolean));
+  const orderKeys = new Set(groups[6][1].map(([,key]) => key).filter(Boolean));
+  const txnKeys = new Set(groups[7][1].map(([,key]) => key).filter(Boolean));
+  const profitKeys = new Set(['order_profit','order_profit_cny','txn_profit','txn_profit_cny']);
   const sessionKeys = new Set(['sessions_browser','sessions_app','sessions']);
   const childSessionLabel = '来自同日子 ASIN 报表；该子 ASIN 只对应一个卖家 SKU';
   const states = {pending:'报表尚未同步', not_reported:'同步报表里没有此 SKU 的记录', conflict:'无法唯一归属到该 SKU'};
@@ -113,12 +116,18 @@
     if (data?.report_date !== date || data.store !== 'MC' || data.marketplace !== 'amazon.com' ||
         (data.catalog_date != null && !parseDay(data.catalog_date)) ||
         !Array.isArray(data.rows) || data.rows.length > 30000) throw new TypeError('Invalid report response');
-    const coverage = {br:normalizeCoverage(data.coverage?.br), sp:normalizeCoverage(data.coverage?.sp)};
+    const coverage = {
+      br:normalizeCoverage(data.coverage?.br),
+      sp:normalizeCoverage(data.coverage?.sp),
+      orders:normalizeCoverage(data.coverage?.orders ?? {status:'missing'}),
+      transactions:normalizeCoverage(data.coverage?.transactions ?? {status:'missing'}),
+    };
     const seen = new Set();
     for (const row of data.rows) {
       if (typeof row?.sku !== 'string' || row.sku.length < 1 || row.sku.length > 128 || /[\x00-\x1f\x7f]/u.test(row.sku) || seen.has(row.sku) ||
           (row.asin != null && !asinPattern.test(row.asin)) || (row.parent_asin != null && !asinPattern.test(row.parent_asin)) ||
           (parent && parent !== row.parent_asin) || !catalogStates.has(row.catalog_status) || !rowStates.has(row.br_status) || !rowStates.has(row.sp_status) ||
+          (row.order_status != null && !rowStates.has(row.order_status)) || (row.txn_status != null && !rowStates.has(row.txn_status)) ||
           (row.sessions_source != null && !sessionSources.has(row.sessions_source)) ||
           ['company_skus','names','owners'].some(key => !Array.isArray(row[key]) || row[key].some(item => typeof item !== 'string'))) throw new TypeError('Invalid daily row');
       seen.add(row.sku);
@@ -138,7 +147,7 @@
     page = 0;
     ui.skuData.hidden = true;
     ui.skuTableBody.replaceChildren();
-    for (const key of ['skuHeading','skuCatalogDate','skuCoverageBr','skuCoverageSp','skuCount']) ui[key].textContent = '';
+    for (const key of ['skuHeading','skuCatalogDate','skuCoverageBr','skuCoverageSp','skuCoverageOrders','skuCoverageTransactions','skuCount']) ui[key].textContent = '';
   }
 
   function clearPrivate() {
@@ -271,6 +280,11 @@
       row.sessions_source === 'child_asin' && row.catalog_status === 'matched' && row.br_status === 'not_reported';
   }
 
+  function financeVisible(row, key, source, status) {
+    return current.coverage[source].status === 'ready' && row.catalog_status !== 'conflict' &&
+      (status === 'reported' || (status === 'not_reported' && row.catalog_status === 'matched' && profitKeys.has(key)));
+  }
+
   function cellValue(row, key, fmt) {
     if (!key) return null;
     if (dateKeys.has(key)) return current.period[key];
@@ -278,11 +292,19 @@
     if (key === 'marketplace') return 'amazon.com';
     if (brKeys.has(key) && !childAsinSessions(row,key) && (current.coverage.br.status !== 'ready' || row.br_status !== 'reported')) return null;
     if (spKeys.has(key) && (current.coverage.sp.status !== 'ready' || row.sp_status !== 'reported')) return null;
+    if (orderKeys.has(key) && !financeVisible(row,key,'orders',row.order_status)) return null;
+    if (txnKeys.has(key) && !financeVisible(row,key,'transactions',row.txn_status)) return null;
     const raw = row[key];
     if (raw == null) return null;
     if (fmt) return numeric(raw,fmt);
     if (Array.isArray(raw)) return raw.length ? raw.join(' / ') : null;
     return typeof raw === 'string' && raw ? raw : null;
+  }
+
+  function missingFinance(source, state, row, key) {
+    if (current.coverage[source].status !== 'ready') return states.pending;
+    if (row.catalog_status === 'conflict') return states.conflict;
+    return states[state] ?? (profitKeys.has(key) ? '报表或成本资料尚不完整，无法计算毛利' : '报表未提供该值，或缺少计算所需的成本资料');
   }
 
   function renderPage(resetVertical = false) {
@@ -309,11 +331,16 @@
         if (fmt) cell.classList.add('results-number');
         if (value == null) {
           cell.classList.add('results-missing');
-          const missing = brKeys.has(key) ? states[row.br_status] : spKeys.has(key) ? states[row.sp_status] : null;
+          const missing = brKeys.has(key) ? states[row.br_status] : spKeys.has(key) ? states[row.sp_status] :
+            orderKeys.has(key) ? missingFinance('orders',row.order_status,row,key) :
+            txnKeys.has(key) ? missingFinance('transactions',row.txn_status,row,key) : null;
           if (missing) { cell.title = missing;cell.setAttribute('aria-label',missing); }
         } else if (childAsinSessions(row,key)) {
           cell.title = childSessionLabel;
           cell.setAttribute('aria-label',`${value}，${childSessionLabel}`);
+        } else if (profitKeys.has(key) && (orderKeys.has(key) ? row.order_status : row.txn_status) === 'not_reported') {
+          cell.title = '该来源当日无此 SKU 记录，毛利仍计入已确认的费用';
+          cell.setAttribute('aria-label',`${value}，${cell.title}`);
         } else if (index === 1 && row.catalog_status !== 'matched') {
           cell.title = row.catalog_status === 'conflict' ? '产品目录中 SKU 对应关系有冲突' : '产品目录没有唯一匹配项';
         } else if (key === 'names' || key === 'owners' || key === 'company_skus') {
@@ -339,12 +366,15 @@
     ui.skuNext.disabled = page >= last;
   }
 
-  function reportCoverage(node, label, coverage) {
+  function reportCoverage(node, label, coverage, skuAggregate = false) {
     const ready = coverage.status === 'ready';
-    node.textContent = ready ? `${label}：已同步（全店报表 ${formats.count.format(coverage.source_rows)} 行）` : `${label}：未同步`;
+    const count = ready ? formats.count.format(coverage.source_rows) : '';
+    const detail = skuAggregate ? `全店 ${count} 个 SKU` : `全店报表 ${count} 行`;
+    node.textContent = ready ? `${label}：已同步（${detail}）` : `${label}：未同步`;
     node.dataset.ready = String(ready);
     const generated = coverage.source_generated_at == null ? null : new Date(coverage.source_generated_at);
-    node.title = generated && Number.isFinite(+generated) ? `报告生成时间（美西）：${generated.toLocaleString('zh-CN',{timeZone:marketTime})}` : '';
+    const timestampLabel = skuAggregate ? '快照时间' : '报表生成时间';
+    node.title = generated && Number.isFinite(+generated) ? `${timestampLabel}（美西）：${generated.toLocaleString('zh-CN',{timeZone:marketTime})}` : '';
   }
 
   function showDay(day) {
@@ -353,6 +383,8 @@
     ui.skuCatalogDate.textContent = day.catalogDate ? `产品目录版本：${day.catalogDate}` : '产品目录尚未同步';
     reportCoverage(ui.skuCoverageBr,'业务报告',day.coverage.br);
     reportCoverage(ui.skuCoverageSp,'SP 广告',day.coverage.sp);
+    reportCoverage(ui.skuCoverageOrders,'订单列表',day.coverage.orders,true);
+    reportCoverage(ui.skuCoverageTransactions,'交易表',day.coverage.transactions,true);
     ui.skuData.hidden = false;
     renderPage(true);
     status();
