@@ -27,7 +27,13 @@
     'mc_weekly_results_daily_profit_read','mc_daily_fba_returns_read','mc_daily_results_fees_read','mc_daily_results_fees_save',
     'mc_weekly_results_weekly_metrics_read','mc_weekly_results_sku_read']);
   const previewParams = new URLSearchParams(window.location?.search ?? '');
-  const skuPreview = previewParams.get('sku') === '1';
+  const skuPreference = previewParams.get('sku');
+  const skuPreview = skuPreference === '1';
+  const releasedSku = { parent: 'B0DT9PHC5Z', start: '2026-11-02', end: '2026-11-08' };
+  const isReleasedRange = (parentAsin, start, end) => parentAsin === releasedSku.parent &&
+    !!start && !!end && start <= end && start >= releasedSku.start && end <= releasedSku.end;
+  const canUseReleasedSku = (parentAsin, start, end) => !skuPreview && skuPreference !== '0' &&
+    isReleasedRange(parentAsin,start,end);
   const skuSources = ['br','sp','orders','transactions'];
   const skuMetricKeys = ['sessions_browser','sessions_app','sessions','br_orders','br_units','br_sales',
     'sp_impressions','sp_clicks','sp_cost','sp_orders','sp_units','sp_sales','order_orders','order_units',
@@ -332,17 +338,29 @@
     ui.resultTabAds.textContent = daily ? '每日广告' : '产品广告结构';
     ui.resultsAdsTitle.textContent = daily ? '每日广告表现' : '产品广告结构';
     ui.resultsSummaryTitle.textContent = daily ? '每日明细' : '每周复盘';
-    ui.resultsSummaryHint.textContent = daily ? '每个自然日一行。「—」表示当天没有可核验的数据。每日费用按填写日期扣除。' :
-      '选中的周高亮。「—」表示缺少数据。未填写的三项手动费用按 0 显示。';
     if (skuPreview) {
-      ui.skuPreviewNotice.hidden = false;
       ui.resultStartDate.min = ui.resultEndDate.min = earliestSkuDay;
       ui.weekTimeZone.textContent = daily ? '日期按美国太平洋时间计算，可查询最近已结束日期，最多 92 天。' : '周次按美国太平洋时间计算，周一至周日。';
-      ui.resultsSummaryHint.textContent = daily ? '每日 SKU 数据按父 ASIN 汇总，每天一行。「—」表示还没有可核对的数值。' :
-        '这里核对所选一周。按天汇总，某项指标缺任意一天就显示「—」。';
-      ui.dailyFeesHint.textContent = '按父 ASIN 和美国太平洋日期保存，单位为 USD。保存后从当天的订单毛利估算中扣除。';
-      ui.weeklyNotesHint.textContent = '按父 ASIN 与周次保存，单位为 USD。保存后从本周的订单毛利估算中扣除。';
     }
+    renderSkuSource();
+  }
+
+  function renderSkuSource(released = false, fallback = false) {
+    const daily = mode === 'day';
+    const usesSku = skuPreview || released;
+    if (skuPreview) notice(ui.skuPreviewNotice,'SKU 数据核对预览。打开父 ASIN 后，「每日明细／周总结」和「每日广告／产品广告结构」显示新口径。父款列表、关键词分析、属性分析沿用正式数据。','warning');
+    else if (fallback) notice(ui.skuPreviewNotice,'每日经营明细的数据暂不可用，本次显示原版数据。刷新页面可重试。','warning');
+    else if (released) notice(ui.skuPreviewNotice,'本期明细与广告使用每日经营明细的数据。');
+    else notice(ui.skuPreviewNotice);
+    ui.resultsSummaryHint.textContent = usesSku
+      ? (daily ? '每日 SKU 数据按父 ASIN 汇总，每天一行。「—」表示还没有可核对的数值。' :
+        '周数据由每日 SKU 数据汇总。某项指标缺任意一天就显示「—」。')
+      : (daily ? '每个自然日一行。「—」表示当天没有可核验的数据。每日费用按填写日期扣除。' :
+        '选中的周高亮。「—」表示缺少数据。未填写的三项手动费用按 0 显示。');
+    ui.dailyFeesHint.textContent = usesSku ? '按父 ASIN 和美国太平洋日期保存，单位为 USD。保存后从当天的订单毛利估算中扣除。' :
+      '按当前父 ASIN 和美国太平洋日期保存，单位为 USD。默认 0，保存后从当天的预估利润中扣除。';
+    ui.weeklyNotesHint.textContent = usesSku ? '按父 ASIN 与周次保存，单位为 USD。保存后从本周的订单毛利估算中扣除。' :
+      '按父 ASIN 和周次保存，单位为 USD。默认 0，保存后从该周的预估利润中扣除。';
   }
 
   function changeMode(next) {
@@ -350,8 +368,16 @@
     mode = next;
     notice(ui.resultDateFeedback);
     if (mode === 'day') {
+      const weekEnd = shiftDay(week,6);
+      if (canUseReleasedSku(parent,week,weekEnd)) {
+        dayStart = week;
+        dayEnd = weekEnd;
+      }
       setDateControls();
       selectedTab = 'summary';
+    } else if (canUseReleasedSku(parent,dayStart,dayEnd) &&
+        Array.from(ui.resultWeek.options ?? ui.resultWeek.children).some(option=>option.value === releasedSku.start)) {
+      week = ui.resultWeek.value = releasedSku.start;
     }
     renderMode();
     void loadContext();
@@ -755,7 +781,7 @@
     }
   }
 
-  async function loadSkuContext(controller, daily, weekStart, start, end, parentAsin) {
+  async function loadSkuContext(controller, daily, weekStart, start, end, parentAsin, released = false) {
     const lastClosed = shiftDay(pacificToday(),-1);
     const from = daily ? start : weekStart;
     const to = daily ? end : shiftDay(weekStart,6);
@@ -770,6 +796,10 @@
       daily ? [] : readSkuWeeklyNotes(weekStart,parentAsin,signal),
     ]);
     if (context !== controller || signal.aborted || !auth) return;
+    if (released && (sku.error || !sku.totals || sku.days.some(day=>day.conflict_count !== 0 ||
+      skuSources.some(source=>day.coverage[source] !== 'ready') ||
+      ['br_sales','sp_cost','order_sales','order_units','txn_total'].some(key=>number(day[key]) === null)))) return 'legacy';
+    renderSkuSource(released);
     detail = {sku,otherAds,returns,dailyFees,rows,search:{state:'idle'}};
     loadedContext = true;
     renderDetail();
@@ -793,6 +823,8 @@
     const start = dayStart;
     const end = dayEnd;
     const parentAsin = parent || null;
+    const released = canUseReleasedSku(parentAsin,daily ? start : weekStart,daily ? end : shiftDay(weekStart,6));
+    renderSkuSource();
     loadedContext = false;
     hasList = false;
     detail = null;
@@ -822,9 +854,10 @@
     }
     pageStatus(daily ? '正在读取所选日期的结果…' : '正在读取所选周的结果…');
     try {
-      if (skuPreview && parentAsin) {
-        await loadSkuContext(controller,daily,weekStart,start,end,parentAsin);
-        return;
+      if ((skuPreview && parentAsin) || released) {
+        const result = await loadSkuContext(controller,daily,weekStart,start,end,parentAsin,released);
+        if (result !== 'legacy' || context !== controller || controller.signal.aborted || !auth) return;
+        renderSkuSource(false,true);
       }
       if (daily) {
         const [main,ads,otherAds,profit,returns,dailyFees] = await Promise.all([
@@ -1205,17 +1238,21 @@
       ui.resultsCatalogDate.dateTime = catalog.snapshot_date;
       week = available[1] ?? available[0];
       mode = 'day';
-      if (skuPreview) {
-        const previewWeek = previewParams.get('week');
-        const previewDate = previewParams.get('date');
-        const previewParent = previewParams.get('parent');
-        if (validWeek(previewWeek) && available.includes(previewWeek)) {
-          week = previewWeek;
+      const linkedWeek = previewParams.get('week');
+      const linkedDate = previewParams.get('date');
+      const linkedParent = previewParams.get('parent');
+      const weekLink = validWeek(linkedWeek) && available.includes(linkedWeek);
+      const dayLink = validDay(linkedDate) && linkedDate >= earliestSkuDay && linkedDate < pacificToday();
+      const releasedWeekLink = weekLink && isReleasedRange(linkedParent,linkedWeek,shiftDay(linkedWeek,6));
+      const releasedDayLink = dayLink && isReleasedRange(linkedParent,linkedDate,linkedDate);
+      if (skuPreview || releasedWeekLink || releasedDayLink) {
+        if (weekLink && (skuPreview || releasedWeekLink)) {
+          week = linkedWeek;
           mode = 'week';
-        } else if (validDay(previewDate) && previewDate >= earliestSkuDay && previewDate < pacificToday()) {
-          dayStart = dayEnd = previewDate;
+        } else if (dayLink) {
+          dayStart = dayEnd = linkedDate;
         }
-        if (parents.has(previewParent)) parent = previewParent;
+        if (parents.has(linkedParent)) parent = linkedParent;
       }
       ui.resultWeek.value = week;
       setDateControls();
