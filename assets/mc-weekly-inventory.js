@@ -11,6 +11,8 @@
   const missing = '—';
   const windowDays = 30;
   const dayMs = 86_400_000;
+  const stockFreshnessMs = 30 * 3_600_000;
+  const ageFreshnessDays = 7;
   const salesFreshnessDays = 3; // Normal reporting delay is two Pacific calendar days.
   const quantityKeys = ['fulfillable','reserved','unfulfillable','inbound_working','inbound_shipped',
     'inbound_receiving','researching','total_quantity','ordered_units_30d'];
@@ -67,10 +69,13 @@
   ];
   const ids = {
     shell: 'appShell', loading: 'loading', email: 'userEmail', logout: 'logoutBtn',
-    snapshot: 'inventorySnapshot', timestamp: 'inventorySnapshotAt', reload: 'inventoryReload',
-    salesWindow: 'inventorySalesWindow', salesDates: 'inventorySalesDates', salesTimestamp: 'inventorySalesAt',
-    salesLag: 'inventorySalesLag',
-    ageNotice: 'inventoryAgeNotice',
+    timestamp: 'inventorySnapshotAt', stockState: 'inventoryStockState', stockTime: 'inventoryStockTime',
+    stockLag: 'inventoryStockLag', reload: 'inventoryReload',
+    salesDates: 'inventorySalesDates', salesTimestamp: 'inventorySalesAt', salesTime: 'inventorySalesTime',
+    salesLag: 'inventorySalesLag', salesState: 'inventorySalesState',
+    ageNotice: 'inventoryAgeNotice', ageState: 'inventoryAgeState', ageTime: 'inventoryAgeTime',
+    ageTimestamp: 'inventoryAgeAt', ageReport: 'inventoryAgeReport', ageReportDate: 'inventoryAgeReportDate',
+    ageLag: 'inventoryAgeLag', coverageNotice: 'inventoryCoverageNotice',
     status: 'inventoryStatus', results: 'inventoryResults', search: 'inventorySearch',
     scope: 'inventoryScope', showAll: 'inventoryShowAll', tracking: 'inventoryTracking', filter: 'inventoryFilter',
     download: 'inventoryDownload', count: 'inventoryCount',
@@ -109,7 +114,7 @@
     unknown: row => row.fulfillable === null,
   };
   let auth, request, snapshot, generation = 0, page = 0, scopedCount = 0, visible = [];
-  let ageRequest, ageStatus = 'idle', ageRows = null;
+  let stockStatus = 'idle', ageRequest, ageStatus = 'idle', ageSnapshot = null;
   const visibleAgeCells = new Map();
   const openAgeCards = new Map();
   const downloads = new Set();
@@ -196,18 +201,20 @@
     if (data?.store !== 'MC' || data.marketplace !== 'amazon.com' || !isTime(data.captured_at) ||
         !Array.isArray(data.rows) || data.rows.length > 20_000 || data.row_count !== data.rows.length) invalid();
     const rows = new Map();
+    let reportDate = null;
     for (const row of data.rows) {
       if (!safeText(row?.seller_sku,255) || typeof row.asin !== 'string' || !asinShape.test(row.asin) ||
           (row.fnsku !== null && (typeof row.fnsku !== 'string' || !fnskuShape.test(row.fnsku))) || !isDay(row.report_snapshot_date) ||
           (row.age_snapshot_date !== null && !isDay(row.age_snapshot_date)) ||
           ageQuantityColumns.some(([key]) => row[key] !== null &&
             (!Number.isSafeInteger(row[key]) || row[key] < 0))) invalid();
+      if (reportDate === null || row.report_snapshot_date > reportDate) reportDate = row.report_snapshot_date;
       const key = ageKey(row);
       if (key === null) continue;
       if (rows.has(key)) invalid();
       rows.set(key,row);
     }
-    return rows;
+    return {capturedAt:data.captured_at,reportDate,rows};
   }
 
   async function readRpc(api, current, signal) {
@@ -248,13 +255,15 @@
   }
 
   function renderPage() {
+    renderSources();
     openAgeCards.clear();
     visibleAgeCells.clear();
     const count = visible.length;
     const pages = Math.ceil(count / pageSize);
     const total = snapshot.rows.length;
     const noTracked = total > 0 && scopedCount === 0;
-    el.count.textContent = `符合条件 ${formatUnits(count)} / ${formatUnits(scopedCount)} 个 SKU`;
+    const scopeLabel = el.scope.value === 'all' ? '' : `（运营跟踪 · 全店 ${formatUnits(total)} 个 SKU）`;
+    el.count.textContent = `符合条件 ${formatUnits(count)} / ${formatUnits(scopedCount)} 个 SKU${scopeLabel}`;
     el.empty.hidden = count > 0;
     el.empty.textContent = !total ? '最近一次同步成功，亚马逊未返回库存记录。' :
       noTracked ? (snapshot.tracking_count ? '运营跟踪名单没有匹配到本次库存快照，可查看全部库存。' :
@@ -273,11 +282,12 @@
     el.page.textContent = pages ? `第 ${formatUnits(page + 1)} / ${formatUnits(pages)} 页` : '';
     const body = document.createDocumentFragment();
     let rowNumber = page * pageSize;
+    const outdated = stockDelayed() || salesDelayed();
     for (const row of visible.slice(rowNumber,(page + 1) * pageSize)) {
       const tr = document.createElement('tr');
       const panelId = `inventory-detail-${++rowNumber}`;
       for (const [key,,kind] of columns) {
-        const value = row[key];
+        const value = key === 'sellable_days' && outdated ? null : row[key];
         const isSku = key === 'seller_sku';
         const cell = document.createElement(isSku ? 'th' : 'td');
         if (isSku) {
@@ -308,7 +318,7 @@
   }
 
   function fillAgeCells(row,cells) {
-    const data = ageRows?.get(ageKey(row));
+    const data = ageSnapshot?.rows.get(ageKey(row));
     const amounts = ageBands.map(([key]) => data?.[key] ?? null);
     const sum = amounts.every(value => value !== null) ? amounts.reduce((total,value) => total+value,0) : null;
     amounts.push(Number.isSafeInteger(sum) ? sum : null);
@@ -388,7 +398,7 @@
     title.textContent = '库龄';
     const note = document.createElement('p');
     note.classList.add('inventory-age-note');
-    const data = ageRows?.get(ageKey(row));
+    const data = ageSnapshot?.rows.get(ageKey(row));
     if (!data) {
       note.textContent = ageStatus === 'loading' ? '正在读取库龄…' :
         ageStatus === 'failed' ? '库龄暂不可用。' :
@@ -437,10 +447,12 @@
   function refreshAge() {
     for (const [row,cells] of visibleAgeCells) fillAgeCells(row,cells);
     for (const [row,card] of openAgeCards) renderAgeCard(row,card);
-    const text = ageStatus === 'loading' ? '正在读取库龄…' : ageStatus === 'failed' ? '库龄暂不可用，可点「重新读取」重试。' :
+    const text = ageStatus === 'loading' ? '正在读取库龄…' : ageStatus === 'failed' ?
+      (ageSnapshot ? '库龄读取失败，暂用上次成功加载的报表。' : '库龄暂不可用，可点「重新读取」重试。') :
       ageStatus === 'idle' && snapshot?.rows.length ? '暂无库龄报表。' : '';
     el.ageNotice.textContent = text;
     el.ageNotice.hidden = !text;
+    renderSources();
   }
 
   function cancelAge() {
@@ -452,17 +464,18 @@
     cancelAge();
     const read = new AbortController();
     ageRequest = read;
-    ageRows = null;
     ageStatus = 'loading';
     refreshAge();
     try {
       const signal = AbortSignal.any([read.signal,AbortSignal.timeout(25_000)]);
       const next = parseAgeSnapshot(await readRpc(ageEndpoint,auth,signal));
       if (ageRequest !== read || read.signal.aborted || snapshot !== base) return;
-      ageRows = next;
+      ageSnapshot = next;
       ageStatus = next === null ? 'idle' : 'ready';
-    } catch {
+    } catch (error) {
       if (ageRequest !== read || read.signal.aborted || snapshot !== base) return;
+      // An authorization error cannot leave data from an earlier allowed read visible.
+      if (error.status === 401 || error.status === 403 || error.code === '42501') ageSnapshot = null;
       ageStatus = 'failed';
     } finally {
       if (ageRequest === read) {
@@ -492,9 +505,11 @@
     const csvColumns = [...columns,...extraColumns,...optionalDetailColumns];
     const header = [...csvColumns.map(([,label]) => label), ...ageCsvColumns.map(([,label]) => label), '库存快照时间（UTC）',
       '订购统计起始日（美西）', '订购统计截止日（美西）', '订购报表采集时间（UTC）'].map(csvCell).join(',');
+    const outdated = stockDelayed() || salesDelayed();
     const blob = new Blob(['\uFEFF',header,'\r\n', ...visible.map(row => {
-      const age = ageRows?.get(ageKey(row));
-      return [...csvColumns.map(([key]) => row[key]), ...ageCsvColumns.map(([key]) => age?.[key] ?? null),
+      const age = ageSnapshot?.rows.get(ageKey(row));
+      return [...csvColumns.map(([key]) => key === 'sellable_days' && outdated ? null : row[key]),
+        ...ageCsvColumns.map(([key]) => age?.[key] ?? null),
         snapshot.captured_at,
         snapshot.sales_start_date,snapshot.sales_end_date,snapshot.sales_captured_at].map(csvCell).join(',') + '\r\n';
     })],
@@ -514,8 +529,8 @@
 
   function clearSnapshot() {
     cancelAge();
-    ageRows = null;
-    ageStatus = 'idle';
+    ageSnapshot = null;
+    ageStatus = stockStatus = 'idle';
     visibleAgeCells.clear();
     openAgeCards.clear();
     snapshot = undefined;
@@ -524,44 +539,92 @@
     el.body.replaceChildren();
     el.ageNotice.textContent = '';
     el.ageNotice.hidden = true;
-    el.results.hidden = el.snapshot.hidden = el.salesWindow.hidden = true;
-    el.timestamp.removeAttribute('datetime');
-    el.salesTimestamp.removeAttribute('datetime');
-    for (const item of [el.timestamp,el.salesDates,el.salesTimestamp,el.count,el.empty,el.tracking,el.page]) item.textContent = '';
+    el.results.hidden = true;
+    for (const item of [el.count,el.empty,el.tracking,el.page]) item.textContent = '';
+    renderSources();
     for (const href of downloads) URL.revokeObjectURL(href);
     downloads.clear();
   }
 
-  function displaySalesWindow() {
-    const {sales_start_date,sales_end_date,sales_captured_at} = snapshot;
-    el.salesLag.hidden = true;
-    if (sales_captured_at === null) {
-      el.salesDates.textContent = '近 30 天订购报表尚未同步。';
-      el.salesTimestamp.hidden = true;
-      el.salesTimestamp.removeAttribute('datetime');
-      el.salesTimestamp.textContent = '';
-    } else {
-      el.salesDates.textContent = `近 30 天订购统计（美西）：${sales_start_date} 至 ${sales_end_date} · 报表采集：`;
-      el.salesTimestamp.hidden = false;
-      el.salesTimestamp.dateTime = sales_captured_at;
-      el.salesTimestamp.textContent = dates.format(new Date(sales_captured_at));
-      const {year,month,day} = Object.fromEntries(pacificDay.formatToParts().map(({type,value}) => [type,value]));
-      const lag = (Date.parse(`${year}-${month}-${day}`) - Date.parse(sales_end_date)) / dayMs;
-      el.salesLag.hidden = lag <= salesFreshnessDays;
-    }
-    el.salesWindow.hidden = false;
+  function daysSincePacific(value) {
+    const {year,month,day} = Object.fromEntries(pacificDay.formatToParts().map(({type,value}) => [type,value]));
+    return (Date.parse(`${year}-${month}-${day}`) - Date.parse(value)) / dayMs;
+  }
+
+  function stockDelayed() {
+    return !!snapshot && Date.now() - Date.parse(snapshot.captured_at) > stockFreshnessMs;
+  }
+
+  function salesDelayed() {
+    return !!snapshot?.sales_end_date && daysSincePacific(snapshot.sales_end_date) > salesFreshnessDays;
+  }
+
+  function showTime(field,time,value,display) {
+    field.hidden = time.hidden = !value;
+    time.textContent = value ? display : '';
+    if (value) time.dateTime = value;
+    else time.removeAttribute('datetime');
+  }
+
+  function showState(el,state,label) {
+    if (el.textContent !== label) el.textContent = label;
+    el.dataset.state = state;
+  }
+
+  function renderSources() {
+    const stockLate = stockDelayed();
+    const salesLate = salesDelayed();
+    const stockAt = snapshot?.captured_at;
+    const salesAt = snapshot?.sales_captured_at;
+    const ageAt = ageSnapshot?.capturedAt;
+    const ageDate = ageSnapshot?.reportDate;
+    const ageLate = !!ageDate && daysSincePacific(ageDate) > ageFreshnessDays;
+    const incoming = stockStatus === 'loading';
+    const failed = stockStatus === 'failed';
+    const sourceState = (el,available,late,missingLabel) => {
+      if (incoming) showState(el,'loading','读取中');
+      else if (failed) showState(el,'failed',available ? '显示上次读取' : '读取失败');
+      else if (!available) showState(el,'empty',missingLabel);
+      else if (late) showState(el,'delayed','数据较旧');
+      else showState(el,'ready','已同步');
+    };
+
+    sourceState(el.stockState,stockAt,stockLate,'暂无快照');
+    showTime(el.stockTime,el.timestamp,stockAt,stockAt && dates.format(new Date(stockAt)));
+    el.stockLag.hidden = !stockLate;
+    sourceState(el.salesState,salesAt,salesLate,'尚未同步');
+    el.salesDates.textContent = salesAt ? `统计区间（美西）：${snapshot.sales_start_date} 至 ${snapshot.sales_end_date}` :
+      (stockStatus === 'ready' || stockStatus === 'empty') ? '近 30 天订购报表尚未同步。' : '';
+    showTime(el.salesTime,el.salesTimestamp,salesAt,salesAt && dates.format(new Date(salesAt)));
+    el.salesLag.hidden = !salesLate;
+
+    if (ageStatus === 'loading') showState(el.ageState,'loading','读取中');
+    else if (ageStatus === 'failed') showState(el.ageState,'failed',ageAt ? '显示上次读取' : '读取失败');
+    else if (!ageAt) showState(el.ageState,'empty',failed ? '未读取' : '暂无报表');
+    else if (ageLate) showState(el.ageState,'delayed','数据较旧');
+    else showState(el.ageState,'ready','已同步');
+    showTime(el.ageReport,el.ageReportDate,ageDate,ageDate);
+    showTime(el.ageTime,el.ageTimestamp,ageAt,ageAt && dates.format(new Date(ageAt)));
+    el.ageLag.hidden = !ageLate;
+
+    const reason = stockLate && salesLate ? '当前库存和订购数据' : stockLate ? '当前库存' : '订购数据';
+    const message = stockLate || salesLate ? `${reason}较旧，预计可售天数暂不显示，导出也留空。库存及原始订购统计仍可查看。` : '';
+    if (el.coverageNotice.textContent !== message) el.coverageNotice.textContent = message;
+    el.coverageNotice.hidden = !message;
   }
 
   async function load() {
     if (!auth || request) return;
     cancelAge();
     if (ageStatus === 'loading') {
-      ageStatus = 'failed';
+      ageStatus = ageSnapshot ? 'ready' : 'idle';
       refreshAge();
     }
     const read = new AbortController();
     request = read;
     el.reload.disabled = true;
+    stockStatus = 'loading';
+    renderSources();
     status('正在读取库存…');
     try {
       const signal = AbortSignal.any([read.signal,AbortSignal.timeout(25_000)]);
@@ -569,20 +632,17 @@
       if (request !== read || read.signal.aborted) return;
       if (next === null) {
         clearSnapshot();
+        stockStatus = 'empty';
         status('还没有库存快照。请在首次同步完成后重新读取。');
+        void loadAge(snapshot);
         return;
       }
       snapshot = next;
-      ageRows = null;
-      ageStatus = 'idle';
-      el.timestamp.dateTime = snapshot.captured_at;
-      el.timestamp.textContent = dates.format(new Date(snapshot.captured_at));
-      displaySalesWindow();
-      el.results.hidden = el.snapshot.hidden = false;
+      stockStatus = 'ready';
+      el.results.hidden = false;
       filterRows();
       status('');
-      if (next.rows.length) void loadAge(next);
-      else refreshAge();
+      void loadAge(next);
     } catch (error) {
       if (request !== read || read.signal.aborted) return;
       if (error.status === 401) {
@@ -591,6 +651,9 @@
         return;
       }
       if (error.status === 403 || error.code === '42501') clearSnapshot();
+      stockStatus = 'failed';
+      renderSources();
+      if (snapshot) renderPage();
       status(translate(error) + (snapshot ? ' 当前显示上次成功读取的快照。' : ''),'error');
     } finally {
       if (request === read) {
@@ -606,7 +669,7 @@
     request = auth = null;
     clearSnapshot();
     el.search.value = el.filter.value = el.email.textContent = '';
-    el.scope.value = 'tracked';
+    el.scope.value = 'all';
     el.reload.disabled = false;
     el.shell.hidden = true;
     el.loading.hidden = false;
@@ -672,6 +735,6 @@
     if (event.newValue) void start();
     else location.replace(login);
   });
-  el.scope.value = 'tracked';
+  el.scope.value = 'all';
   void start();
 })();

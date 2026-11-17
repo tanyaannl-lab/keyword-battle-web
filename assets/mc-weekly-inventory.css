@@ -4,9 +4,51 @@
 
 .mc-fba-inventory .inventory-source {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   flex-wrap: wrap;
-  gap: .55rem 1rem;
+  gap: .65rem;
+}
+
+.mc-fba-inventory .inventory-source-grid {
+  flex: 1 1 42rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr));
+  gap: .6rem;
+}
+
+.mc-fba-inventory .inventory-source-card {
+  padding: .58rem .7rem;
+  border: 1px solid var(--results-line, #d9e6ea);
+  border-radius: .48rem;
+  background: #fff;
+}
+
+.mc-fba-inventory .inventory-source-title {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .24rem .5rem;
+  align-items: baseline;
+  color: var(--results-ink);
+  margin: 0 0 .24rem;
+}
+
+.mc-fba-inventory .inventory-source-state {
+  display: inline-block;
+  padding: .08rem .4rem;
+  border-radius: .4rem;
+  color: #4b5e66;
+  background: #edf2f4;
+  font-size: .76rem;
+}
+
+.mc-fba-inventory .inventory-source-state[data-state="ready"] { color: #155c50; background: #e3f1ed; }
+.mc-fba-inventory .inventory-source-state[data-state="delayed"] { color: #754706; background: #fff1d8; }
+.mc-fba-inventory .inventory-source-state[data-state="failed"] { color: #8d3024; background: #fbeae6; }
+
+.mc-fba-inventory .inventory-source-warning { color: #754706; font-weight: 650; }
+
+.mc-fba-inventory .inventory-snapshot:empty {
+  display: none;
 }
 
 .mc-fba-inventory .inventory-snapshot {
@@ -21,7 +63,7 @@
   font-weight: 700;
 }
 
-.mc-fba-inventory .inventory-sales-lag { margin-inline-start: .25rem; color: #895614; font-weight: 700; }
+.mc-fba-inventory .inventory-snapshot.inventory-source-warning { color: #754706; }
 
 .mc-fba-inventory .inventory-controls {
   grid-template-columns: minmax(0, 23rem) minmax(8rem, 10rem) minmax(10rem, 13rem) auto;
