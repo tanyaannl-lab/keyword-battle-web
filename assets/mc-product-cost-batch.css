@@ -1,0 +1,15 @@
+.mc-product-cost-batch .batch-step { margin-bottom: 1rem; }
+.mc-product-cost-batch .batch-step h2 { margin: 0 0 .65rem; font-size: 1.15rem; }
+.mc-product-cost-batch .batch-step .catalog-cost-help:last-child { margin-bottom: 0; }
+.mc-product-cost-batch .batch-file { width: min(100%,32rem); }
+.mc-product-cost-batch #batchPreviewForm { margin-bottom: 0; }
+.mc-product-cost-batch .catalog-summary { margin: 0 0 .65rem; }
+.mc-product-cost-batch .batch-table .catalog-table { min-width: 650px; }
+.mc-product-cost-batch .batch-table .catalog-table th { width: auto; }
+.mc-product-cost-batch .batch-table .catalog-table th:nth-child(1),
+.mc-product-cost-batch .batch-table .catalog-table th:nth-child(4) { width: 12%; }
+.mc-product-cost-batch .batch-table .catalog-table th:nth-child(2),
+.mc-product-cost-batch .batch-table .catalog-table th:nth-child(3) { width: 17%; }
+.mc-product-cost-batch .batch-table td:last-child { overflow-wrap: anywhere; }
+.mc-product-cost-batch .batch-changes { margin: 0; padding-left: 1em; }
+.mc-product-cost-batch .batch-save-help { margin-top: .65rem; }
