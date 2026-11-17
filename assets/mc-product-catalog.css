@@ -87,6 +87,10 @@
 .catalog-back { display: inline-flex; align-items: center; text-decoration: none; }
 .catalog-cost-panel { padding: 1.1rem 1rem; border: 1px solid var(--catalog-line); border-radius: 14px; background: #fff; }
 .catalog-cost-help { margin: 0 0 1rem; color: var(--catalog-muted); font-size: .9rem; line-height: 1.55; }
+.catalog-cost-date { display: flex; align-items: end; flex-wrap: wrap; gap: .65rem; margin-bottom: 1rem; }
+.catalog-cost-date .catalog-field { width: min(100%, 13rem); }
+.catalog-cost-day, .catalog-cost-date-hint { margin: 0 0 .8rem; font-size: .86rem; color: var(--catalog-muted); }
+.catalog-cost-day time { color: var(--catalog-ink); font-weight: 700; font-variant-numeric: tabular-nums; }
 .catalog-cost-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; min-width: 0; margin: 0; padding: 0; border: 0; }
 .catalog-cost-fields small { color: var(--catalog-muted); font-size: .78rem; font-weight: 500; line-height: 1.4; }
 .catalog-cost-fields input { font-variant-numeric: tabular-nums; }

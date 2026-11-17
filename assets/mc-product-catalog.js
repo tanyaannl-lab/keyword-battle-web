@@ -5,6 +5,7 @@
     'clearFilters', 'summary', 'snapshotDate', 'catalogStatus', 'catalogList', 'catalogTable',
     'catalogPager', 'prevPage', 'nextPage', 'pageInfo', 'retry', 'catalogHeading', 'product-catalog',
     'costDetail', 'costTitle', 'costAsin', 'costParentGroup', 'costParent', 'costForm', 'costFields',
+    'costDateForm', 'costReportDate', 'costDateLoad', 'costDateHint', 'costViewDate', 'costCopyPrevious',
     'costExchange', 'costProduct', 'costInbound', 'costFba', 'costCommission', 'costVat',
     'costSave', 'costSavedAt', 'costStatus', 'costRetry'];
   const ui = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
@@ -15,6 +16,10 @@
   const sort = (a, b) => collator.compare(a, b);
   const normalize = text => text.normalize('NFKC').toLowerCase();
   const asinPattern = /^[A-Z0-9]{10}$/;
+  const firstCostDate = '2000-01-01';
+  const pacificDateFormat = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit',
+  });
   const empty = '—';
   const pageSize = 25;
   const costInputs = [
@@ -30,8 +35,11 @@
   let auth = null;
   let request = null;
   let costRequest = null;
+  let costSaving = false;
   let catalogLoaded = false;
   let activeCostAsin = null;
+  let activeCostDate = null;
+  let preferredCostDate = null;
   let costRevision = null;
   let generation = 0;
   let products = [];
@@ -80,6 +88,7 @@
     request?.abort();
     request = null;
     auth = null;
+    preferredCostDate = null;
     ui.appShell.hidden = true;
     ui.userEmail.textContent = '';
     clearCatalog();
@@ -99,20 +108,57 @@
   function clearCostView() {
     costRequest?.abort();
     costRequest = null;
+    costSaving = false;
     activeCostAsin = null;
-    costRevision = null;
+    activeCostDate = null;
     ui.catalogHeading.hidden = false;
     ui.costDetail.hidden = true;
-    ui.costForm.hidden = true;
-    ui.costFields.disabled = true;
-    ui.costSave.disabled = true;
+    ui.costDateForm.hidden = true;
+    ui.costReportDate.value = '';
     ui.costAsin.textContent = '';
     ui.costParent.textContent = '';
     ui.costParentGroup.hidden = true;
-    ui.costSavedAt.textContent = '';
-    for (const { id } of costInputs) ui[id].value = '';
+    clearCostFields();
+    refreshCostControls();
     costStatus();
     document.title = catalogTitle;
+  }
+
+  function clearCostFields() {
+    ui.costForm.hidden = true;
+    costRevision = null;
+    ui.costViewDate.textContent = '';
+    ui.costViewDate.removeAttribute('datetime');
+    ui.costSavedAt.textContent = '';
+    for (const { id } of costInputs) ui[id].value = '';
+  }
+
+  function pacificToday() {
+    const parts = Object.fromEntries(pacificDateFormat.formatToParts().map(part => [part.type, part.value]));
+    return `${parts.year}-${parts.month}-${parts.day}`;
+  }
+
+  function validCostDate(value, today = pacificToday()) {
+    if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) || value < firstCostDate || value > today) return false;
+    const date = new Date(`${value}T00:00:00Z`);
+    return Number.isFinite(+date) && date.toISOString().slice(0, 10) === value;
+  }
+
+  function previousDay(value) {
+    const date = new Date(`${value}T00:00:00Z`);
+    date.setUTCDate(date.getUTCDate() - 1);
+    return date.toISOString().slice(0, 10);
+  }
+
+  function refreshCostControls() {
+    const dateChanged = activeCostDate !== null && ui.costReportDate.value !== activeCostDate;
+    const canEdit = !dateChanged && !ui.costForm.hidden && !costRequest && costRevision !== null;
+    ui.costReportDate.disabled = costSaving;
+    ui.costDateLoad.disabled = costSaving || !dateChanged;
+    ui.costDateHint.hidden = !dateChanged;
+    ui.costFields.disabled = !canEdit;
+    ui.costSave.disabled = !canEdit;
+    ui.costCopyPrevious.disabled = !canEdit || activeCostDate <= firstCostDate;
   }
 
   function checkedText(value, max = 300) {
@@ -241,9 +287,11 @@
 
   function showRoute() {
     if (!auth || !catalogLoaded) return;
-    const asin = /^#cost-params=([A-Z0-9]{10})$/.exec(location.hash)?.[1];
+    const route = /^#cost-params=([A-Z0-9]{10})(?:&date=(\d{4}-\d{2}-\d{2}))?$/.exec(location.hash);
+    const asin = route?.[1];
+    const routeDate = route?.[2];
     const previous = activeCostAsin;
-    if (asin && asin === previous) return;
+    if (asin && asin === previous && (!routeDate || routeDate === activeCostDate)) return;
     clearCostView();
     if (!asin) {
       ui.catalog.hidden = false;
@@ -268,42 +316,73 @@
     }
     ui.costParent.textContent = product.parent;
     ui.costParentGroup.hidden = false;
+    ui.costDateForm.hidden = false;
+    const today = pacificToday();
+    const startingDate = validCostDate(routeDate, today) ? routeDate : validCostDate(preferredCostDate, today) ? preferredCostDate : today;
+    viewCostDate(startingDate);
+  }
+
+  function viewCostDate(date) {
+    const today = pacificToday();
+    ui.costReportDate.max = today;
+    if (!activeCostAsin || costSaving) return;
+    if (!validCostDate(date, today)) {
+      costStatus('请选择有效的美西日期，不可晚于美西今天。', 'error');
+      ui.costReportDate.focus();
+      return;
+    }
+    costRequest?.abort();
+    costRequest = null;
+    activeCostDate = preferredCostDate = date;
+    ui.costReportDate.value = date;
+    clearCostFields();
     void fetchCost();
   }
 
-  function showCost(data, asin) {
-    if (!data || data.asin !== asin || !Number.isInteger(data.revision) || data.revision < 0 ||
+  function costFormValues(data, asin, date) {
+    if (!data || data.asin !== asin || data.report_date !== date || !Number.isInteger(data.revision) || data.revision < 0 ||
         (data.revision === 0 ? data.updated_at !== null :
           typeof data.updated_at !== 'string' || !Number.isFinite(Date.parse(data.updated_at)))) {
       throw new Error('成本参数数据格式有误，请联系管理员。');
     }
-    const values = costInputs.map(({ key, min, max, decimals, percent }) => {
+    return costInputs.map(({ key, min, max, decimals, percent }) => {
       if (data[key] === null) return '';
+      if (data.revision === 0) throw new Error('成本参数数据格式有误，请联系管理员。');
       const value = typeof data[key] === 'number' ? data[key] * (percent ? 100 : 1) : NaN;
       if (!Number.isFinite(value) || value < min || value > max) {
         throw new Error('成本参数数据格式有误，请联系管理员。');
       }
       return value.toFixed(decimals).replace(/\.?0+$/, '');
     });
+  }
+
+  function showCost(data, asin, date) {
+    const values = costFormValues(data, asin, date);
     costInputs.forEach(({ id }, index) => { ui[id].value = values[index]; });
     costRevision = data.revision;
     ui.costForm.hidden = false;
+    ui.costViewDate.textContent = date;
+    ui.costViewDate.dateTime = date;
     ui.costSavedAt.textContent = data.updated_at === null
-      ? '尚未设置成本参数' : `上次保存：${costDateFormat.format(new Date(data.updated_at))}`;
+      ? '该日尚未填写成本' : `上次保存：${costDateFormat.format(new Date(data.updated_at))}`;
   }
 
-  async function fetchCost(values) {
-    if (!auth || !activeCostAsin || costRequest) return;
+  async function fetchCost(values, copyPrevious = false) {
+    if (!auth || !activeCostAsin || !activeCostDate || costRequest || ui.costReportDate.value !== activeCostDate) return;
     const saving = values !== undefined;
     const asin = activeCostAsin;
+    const date = activeCostDate;
+    const requestedDate = copyPrevious ? previousDay(date) : date;
+    const revision = costRevision;
+    if (((saving || copyPrevious) && revision === null) || !validCostDate(requestedDate)) return;
     const userId = auth.user.id;
     const controller = new AbortController();
-    const endpoint = saving ? 'mc_product_catalog_cost_save' : 'mc_product_catalog_cost_read';
-    const current = () => costRequest === controller && activeCostAsin === asin && auth?.user.id === userId;
+    const endpoint = saving ? 'mc_product_catalog_cost_daily_save' : 'mc_product_catalog_cost_daily_read';
+    const current = () => costRequest === controller && activeCostAsin === asin && activeCostDate === date && auth?.user.id === userId;
     costRequest = controller;
-    ui.costFields.disabled = true;
-    ui.costSave.disabled = true;
-    costStatus(saving ? '正在保存成本参数…' : '正在读取成本参数…');
+    costSaving = saving;
+    refreshCostControls();
+    costStatus(saving ? `正在保存 ${date} 的成本…` : `正在读取 ${requestedDate} 的成本…`);
     try {
       const session = typeof window.KBAuth.getValidSession === 'function'
         ? await window.KBAuth.getValidSession() : auth;
@@ -312,7 +391,8 @@
         hidePrivateData(); location.replace(login); return;
       }
       auth = session;
-      const body = saving ? { p_asin: asin, p_revision: costRevision, ...values } : { p_asin: asin };
+      const args = { p_asin: asin, p_report_date: requestedDate };
+      const body = saving ? { ...args, p_revision: revision, ...values } : args;
       const response = await fetch(`${origin}/rest/v1/rpc/${endpoint}`, {
         method: 'POST', headers: { Accept: 'application/json', 'Content-Type': 'application/json',
           apikey: config.SUPABASE_PUBLISHABLE_KEY, Authorization: `Bearer ${auth.session.access_token}` },
@@ -324,36 +404,46 @@
       const data = await response.json().catch(() => undefined);
       if (!current()) return;
       if (response.status === 403 || data?.code === '42501') {
-        ui.costForm.hidden = true;
-        costRevision = null;
-        for (const { id } of costInputs) ui[id].value = '';
+        clearCostFields();
         costStatus('当前账号没有管理 MC 产品成本参数的权限。', 'error');
         return;
       }
-      if (response.status === 404) { costStatus('成本参数尚未启用，请联系管理员。', 'error'); return; }
+      if (response.status === 404 || data?.code === 'PGRST202') { costStatus('按日成本尚未启用，请联系管理员。', 'error'); return; }
       if (data?.code === '40001') {
         costRevision = null;
-        costStatus('保存前已有其他人修改。请先载入最新值，核对后再保存。', 'error', '载入最新值');
+        costStatus('该日成本已被其他人修改，请重新读取该日后再保存。', 'error', '重新读取该日');
         return;
       }
       if (data?.code === '22023') {
-        costStatus(saving ? '请检查参数范围，或确认该子 ASIN 仍在产品目录中。' : '该子 ASIN 已不在当前 MC 产品目录中。', 'error');
+        costStatus(saving ? '请检查日期、成本参数范围和子 ASIN。' : '无法读取该子 ASIN 在所选日期的成本，请核对日期和产品目录。', 'error');
         return;
       }
       if (!response.ok) throw new Error(saving ? '暂时无法确认是否已保存，可先重新读取核对。' : '暂时无法读取成本参数，请重试。');
-      showCost(data, asin);
-      costStatus(saving ? '成本参数已保存。' : '', saving ? 'success' : '');
+      if (copyPrevious) {
+        const copied = costFormValues(data, asin, requestedDate);
+        if (ui.costReportDate.value !== date) { costStatus(); return; }
+        if (copied.every(value => value === '')) {
+          costStatus(`${requestedDate} 没有可复制的成本，请手动填写。`);
+          return;
+        }
+        costInputs.forEach(({ id }, index) => { ui[id].value = copied[index]; });
+        costStatus(`已将 ${requestedDate} 的成本填入 ${date} 的表单，请核对后保存。`);
+      } else {
+        showCost(data, asin, date);
+        costStatus(saving ? `${date} 的成本已保存。` : '', saving ? 'success' : '');
+      }
     } catch (error) {
       if (!current() || controller.signal.aborted) return;
       let message = error.message;
       if (error.name === 'TimeoutError') message = saving ? '保存请求超时，可先重新读取核对。' : '读取成本参数超时，请重试。';
       if (error instanceof TypeError) message = saving ? '暂时无法确认是否已保存，可先重新读取核对。' : '暂时无法读取成本参数，请重试。';
-      costStatus(message, 'error', saving ? '重新读取' : '重试');
+      if (saving) costRevision = null;
+      costStatus(message, 'error', saving ? '重新读取该日' : copyPrevious ? '' : '重试');
     } finally {
       if (costRequest === controller) {
         costRequest = null;
-        ui.costFields.disabled = ui.costForm.hidden;
-        ui.costSave.disabled = ui.costForm.hidden || costRevision === null;
+        costSaving = false;
+        refreshCostControls();
       }
     }
   }
@@ -406,9 +496,17 @@
     void initialize();
   });
   ui.costRetry.addEventListener('click', () => { void fetchCost(); });
+  ui.costReportDate.addEventListener('input', refreshCostControls);
+  ui.costReportDate.addEventListener('change', refreshCostControls);
+  ui.costReportDate.addEventListener('focus', () => { ui.costReportDate.max = pacificToday(); });
+  ui.costDateForm.addEventListener('submit', event => {
+    event.preventDefault();
+    if (ui.costReportDate.value !== activeCostDate) viewCostDate(ui.costReportDate.value);
+  });
+  ui.costCopyPrevious.addEventListener('click', () => { void fetchCost(undefined, true); });
   ui.costForm.addEventListener('submit', event => {
     event.preventDefault();
-    if (costRevision === null || costRequest) return;
+    if (costRevision === null || costRequest || ui.costReportDate.value !== activeCostDate) return;
     const values = {};
     for (const { id, key, min, max, decimals, percent } of costInputs) {
       const input = ui[id];
