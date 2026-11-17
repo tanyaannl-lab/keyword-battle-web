@@ -56,6 +56,7 @@
     ['age_0_90','0–90 天'], ['age_91_180','91–180 天'], ['age_181_330','181–330 天'],
     ['age_331_365','331–365 天'], ['age_366_455','366–455 天'], ['age_456_plus','456 天及以上'],
   ];
+  const ageTableKeys = [...ageBands.map(([key]) => key),'age_total'];
   const ageYoungBands = [
     ['age_0_30','0–30 天'], ['age_31_60','31–60 天'], ['age_61_90','61–90 天'],
   ];
@@ -69,6 +70,7 @@
     snapshot: 'inventorySnapshot', timestamp: 'inventorySnapshotAt', reload: 'inventoryReload',
     salesWindow: 'inventorySalesWindow', salesDates: 'inventorySalesDates', salesTimestamp: 'inventorySalesAt',
     salesLag: 'inventorySalesLag',
+    ageNotice: 'inventoryAgeNotice',
     status: 'inventoryStatus', results: 'inventoryResults', search: 'inventorySearch',
     scope: 'inventoryScope', showAll: 'inventoryShowAll', tracking: 'inventoryTracking', filter: 'inventoryFilter',
     download: 'inventoryDownload', count: 'inventoryCount',
@@ -108,6 +110,7 @@
   };
   let auth, request, snapshot, generation = 0, page = 0, scopedCount = 0, visible = [];
   let ageRequest, ageStatus = 'idle', ageRows = null;
+  const visibleAgeCells = new Map();
   const openAgeCards = new Map();
   const downloads = new Set();
 
@@ -246,6 +249,7 @@
 
   function renderPage() {
     openAgeCards.clear();
+    visibleAgeCells.clear();
     const count = visible.length;
     const pages = Math.ceil(count / pageSize);
     const total = snapshot.rows.length;
@@ -278,6 +282,7 @@
         const cell = document.createElement(isSku ? 'th' : 'td');
         if (isSku) {
           cell.scope = 'row';
+          cell.id = `${panelId}-sku`;
           cell.classList.add('inventory-sku');
         }
         if (key === 'parent_asin' || key === 'asin') cell.classList.add('inventory-asin');
@@ -288,9 +293,30 @@
         if (isSku) cell.append(detailToggle(tr,row,panelId));
         tr.append(cell);
       }
+      const ageCells = ageTableKeys.map(key => {
+        const cell = document.createElement('td');
+        cell.dataset.column = key;
+        cell.setAttribute('headers',`${panelId}-sku inventory-age-group inventory-col-${key}`);
+        tr.append(cell);
+        return cell;
+      });
+      visibleAgeCells.set(row,ageCells);
+      fillAgeCells(row,ageCells);
       body.append(tr);
     }
     el.body.replaceChildren(body);
+  }
+
+  function fillAgeCells(row,cells) {
+    const data = ageRows?.get(ageKey(row));
+    const amounts = ageBands.map(([key]) => data?.[key] ?? null);
+    const sum = amounts.every(value => value !== null) ? amounts.reduce((total,value) => total+value,0) : null;
+    amounts.push(Number.isSafeInteger(sum) ? sum : null);
+    for (const [index,cell] of cells.entries()) {
+      const value = amounts[index];
+      cell.textContent = formatCell(value,'number');
+      cell.setAttribute('class',`results-num inventory-age-value${value === null ? ' results-missing' : ''}`);
+    }
   }
 
   function detailToggle(summaryRow,row,panelId) {
@@ -319,7 +345,7 @@
     detail.classList.add('inventory-detail-row');
     detail.hidden = true;
     const cell = document.createElement('td');
-    cell.colSpan = columns.length;
+    cell.colSpan = columns.length + ageTableKeys.length;
     const panel = document.createElement('div');
     panel.id = panelId;
     panel.classList.add('inventory-detail-panel');
@@ -378,12 +404,7 @@
       date.textContent = data.age_snapshot_date;
       note.append(date);
     }
-    const list = ageList(data,ageBands);
-    if (ageBands.every(([key]) => data[key] !== null)) {
-      const sum = ageBands.reduce((acc,[key]) => acc + data[key],0);
-      if (Number.isSafeInteger(sum)) appendAgeLine(list,'六档合计',sum);
-    }
-    const items = [title,note,list];
+    const items = [title,note];
     if (ageYoungBands.every(([key]) => data[key] !== null)) {
       const details = document.createElement('details');
       details.classList.add('inventory-age-young');
@@ -413,8 +434,13 @@
     list.append(line);
   }
 
-  function refreshAgeCards() {
+  function refreshAge() {
+    for (const [row,cells] of visibleAgeCells) fillAgeCells(row,cells);
     for (const [row,card] of openAgeCards) renderAgeCard(row,card);
+    const text = ageStatus === 'loading' ? '正在读取库龄…' : ageStatus === 'failed' ? '库龄暂不可用，可点「重新读取」重试。' :
+      ageStatus === 'idle' && snapshot?.rows.length ? '暂无库龄报表。' : '';
+    el.ageNotice.textContent = text;
+    el.ageNotice.hidden = !text;
   }
 
   function cancelAge() {
@@ -428,7 +454,7 @@
     ageRequest = read;
     ageRows = null;
     ageStatus = 'loading';
-    refreshAgeCards();
+    refreshAge();
     try {
       const signal = AbortSignal.any([read.signal,AbortSignal.timeout(25_000)]);
       const next = parseAgeSnapshot(await readRpc(ageEndpoint,auth,signal));
@@ -441,7 +467,7 @@
     } finally {
       if (ageRequest === read) {
         ageRequest = null;
-        refreshAgeCards();
+        refreshAge();
       }
     }
   }
@@ -490,11 +516,14 @@
     cancelAge();
     ageRows = null;
     ageStatus = 'idle';
+    visibleAgeCells.clear();
     openAgeCards.clear();
     snapshot = undefined;
     visible = [];
     page = scopedCount = 0;
     el.body.replaceChildren();
+    el.ageNotice.textContent = '';
+    el.ageNotice.hidden = true;
     el.results.hidden = el.snapshot.hidden = el.salesWindow.hidden = true;
     el.timestamp.removeAttribute('datetime');
     el.salesTimestamp.removeAttribute('datetime');
@@ -528,7 +557,7 @@
     cancelAge();
     if (ageStatus === 'loading') {
       ageStatus = 'failed';
-      refreshAgeCards();
+      refreshAge();
     }
     const read = new AbortController();
     request = read;
@@ -544,6 +573,8 @@
         return;
       }
       snapshot = next;
+      ageRows = null;
+      ageStatus = 'idle';
       el.timestamp.dateTime = snapshot.captured_at;
       el.timestamp.textContent = dates.format(new Date(snapshot.captured_at));
       displaySalesWindow();
@@ -551,6 +582,7 @@
       filterRows();
       status('');
       if (next.rows.length) void loadAge(next);
+      else refreshAge();
     } catch (error) {
       if (request !== read || read.signal.aborted) return;
       if (error.status === 401) {

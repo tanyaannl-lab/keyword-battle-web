@@ -32,7 +32,14 @@
 .mc-fba-inventory .inventory-show-all { margin-top: .55rem; }
 .mc-fba-inventory .inventory-table-wrap { max-height: min(65vh, 38rem); }
 .mc-fba-inventory .inventory-table th, .mc-fba-inventory .inventory-table td { padding: .44rem .5rem; vertical-align: middle; }
+.mc-fba-inventory .inventory-table thead { position: sticky; top: 0; z-index: 3; }
+.mc-fba-inventory .inventory-table thead th,
+.mc-fba-inventory .inventory-table tbody > tr > td:first-child:not([colspan]) { position: static; }
 .mc-fba-inventory .inventory-table thead .results-number { min-width: 3rem; }
+.mc-fba-inventory .inventory-table thead .inventory-age-group { text-align: center; background: #e3f1ed; color: #155c50; }
+.mc-fba-inventory .inventory-table thead .inventory-age-heading { min-width: 4.4rem; white-space: nowrap; background: #eef7f4; }
+.mc-fba-inventory .inventory-table :is(.inventory-age-group, [data-column="age_0_90"]) { border-inline-start: 1px solid #c9e0d9; }
+.mc-fba-inventory .inventory-table .inventory-age-value[data-column="age_total"] { font-weight: 700; background: #f3f9f7; }
 .mc-fba-inventory .inventory-table .inventory-asin { width: 6.7rem; }
 .mc-fba-inventory .inventory-table .inventory-sku {
   min-width: 7rem;
@@ -40,6 +47,9 @@
   white-space: normal;
   overflow-wrap: anywhere;
 }
+.mc-fba-inventory .inventory-table thead th.inventory-sku,
+.mc-fba-inventory .inventory-table tbody th.inventory-sku { position: sticky; left: 0; z-index: 2; }
+.mc-fba-inventory .inventory-table tbody th.inventory-sku { background: #fff; }
 .mc-fba-inventory .inventory-table tbody tr:last-child th { border-bottom: 0; }
 .mc-fba-inventory .inventory-table tbody tr:hover th { background: #f8fbfc; }
 .mc-fba-inventory .inventory-table .inventory-zero { color: #973523; }
