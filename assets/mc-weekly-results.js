@@ -499,6 +499,7 @@
       return;
     }
     const loading = search.state === 'loading';
+    const canRetry = search.state === 'waiting' || search.state === 'error';
     const message = loading ? '正在读取搜索词分析…' : search.message;
     for (const target of [tables.keywords, tables.attributes]) {
       const status = document.createElement('p');
@@ -506,8 +507,8 @@
       status.setAttribute('role', 'status');
       status.textContent = message;
       target.replaceChildren(status);
-      if (!loading) {
-        status.dataset.state = 'error';
+      if (canRetry) {
+        if (search.state === 'error') status.dataset.state = 'error';
         const retry = document.createElement('button');
         retry.type = 'button';
         retry.className = 'results-button';
@@ -518,47 +519,74 @@
     }
   }
 
+  function validateSearchRows(data) {
+    const validRows = (rows, key) => Array.isArray(rows) && rows.length <= 100000 && rows.every(row =>
+      row && !Array.isArray(row) && typeof row[key] === 'string' && row[key].trim());
+    if (data !== null && (!validRows(data?.keyword_rows, 'term') || !validRows(data?.attribute_rows, 'attribute') ||
+        data.keyword_rows.length + data.attribute_rows.length > 100000)) {
+      throw new Error('搜索词分析数据格式有误，请联系管理员。');
+    }
+  }
+
+  function searchCoveredDays(data, start, end) {
+    if (data === null) return 0;
+    const dates = data.dates_available;
+    if (!Array.isArray(dates) || dates.length < 1 || dates.length > dayCount(start,end) ||
+        dates.some((day,i) => !validDay(day) || day < start || day > end || (i && day <= dates[i-1]))) {
+      throw new Error('搜索词日报的覆盖日期有误，请联系管理员。');
+    }
+    return dates.length;
+  }
+
   async function loadSearchAnalysis() {
     const controller = context;
     const current = detail;
     if (!auth || !controller || controller.signal.aborted || !current || !parent || !week ||
-        !['idle','error'].includes(current.search.state)) return;
+        !['idle','error','waiting'].includes(current.search.state)) return;
     const daily = mode === 'day';
-    const start = dayStart, end = dayEnd;
-    const args = daily ? { p_start_date: start, p_end_date: end, p_parent_asin: parent } : { p_week_start: week, p_parent_asin: parent };
+    const start = daily ? dayStart : week, end = daily ? dayEnd : shiftDay(week,6);
+    const rangeArgs = { p_start_date: start, p_end_date: end, p_parent_asin: parent };
+    const args = daily ? rangeArgs : { p_week_start: start, p_parent_asin: parent };
     const endpoint = daily ? 'mc_weekly_results_search_daily_read' : 'mc_weekly_results_search';
+    const total = dayCount(start,end);
     const stillCurrent = () => context === controller && detail === current && !!auth && !controller.signal.aborted;
+    let checkingWeeklyCoverage = false;
     current.search = { state: 'loading' };
     renderSearchState(current.search);
     try {
       const data = await rpc(endpoint, args, controller.signal);
       if (!stillCurrent()) return;
-      const validRows = (rows, key) => Array.isArray(rows) && rows.length <= 100000 && rows.every(row =>
-        row && !Array.isArray(row) && typeof row[key] === 'string' && row[key].trim());
-      if (data !== null && (!validRows(data?.keyword_rows, 'term') || !validRows(data?.attribute_rows, 'attribute') ||
-          data.keyword_rows.length + data.attribute_rows.length > 100000)) {
-        throw new Error('搜索词分析数据格式有误，请联系管理员。');
-      }
-      if (!daily) current.search = { state: 'ready', data };
-      else if (data === null) {
+      validateSearchRows(data);
+      if (!daily) {
+        if (data !== null) current.search = { state: 'ready', data };
+        else if (end >= pacificToday()) {
+          current.search = { state: 'open-week', message: '所选周按美西时间尚未结束。周汇总会在搜索词日报齐备后显示；要看已更新的日期，可以切换到按日。' };
+        } else {
+          checkingWeeklyCoverage = true;
+          const reports = await rpc('mc_weekly_results_search_daily_read', rangeArgs, controller.signal);
+          if (!stillCurrent()) return;
+          validateSearchRows(reports);
+          const covered = searchCoveredDays(reports,start,end);
+          current.search = covered === total
+            ? { state: 'ready', data: { ...reports,rangeNotice: `搜索词日报已齐（${covered}/${total} 天），按所选周汇总。` } }
+            : { state: 'waiting', message: `本周搜索词日报待同步（${covered}/${total} 天）。齐备后将显示关键词分析和属性分析。` };
+        }
+      } else if (data === null) {
         current.search = { state: 'weekly-only', message: '所选日期范围暂无已发布的搜索词日报。' };
       } else {
-        const dates = data.dates_available;
-        if (!Array.isArray(dates) || dates.length < 1 || dates.length > dayCount(start,end) ||
-            dates.some((day,i) => !validDay(day) || day < start || day > end || (i && day <= dates[i-1]))) {
-          throw new Error('搜索词日报的覆盖日期有误，请联系管理员。');
-        }
-        const total = dayCount(start,end);
-        const rangeNotice = dates.length === total ? `按所选日期范围汇总（${dates.length} 天）。` :
-          `只汇总已发布的搜索词日报（${dates.length} / ${total} 天），其余日期未计入。`;
-        current.search = { state: 'ready', data: { ...data,rangeNotice } };
+        const covered = searchCoveredDays(data,start,end);
+        const rangeNotice = covered === total ? `按所选日期范围汇总（${covered} 天）。` :
+          `只汇总已发布的搜索词日报（${covered} / ${total} 天），其余日期未计入。`;
+        current.search = { state: 'ready', data: { ...data,rangeNotice,period:'day' } };
       }
     } catch (error) {
       if (!stillCurrent()) return;
       const unavailable = error.status === 404 || error.code === 'PGRST202';
       current.search = unavailable && daily
         ? { state:'weekly-only', message:'按日期筛选的搜索词分析尚未启用。' }
-        : { state:'error', message:unavailable ? '搜索词分析尚未启用。' : explain(error) };
+        : { state:'error', message:unavailable
+          ? (checkingWeeklyCoverage ? '搜索词日报读取尚未启用，暂时无法确认本周的覆盖日期。' : '搜索词分析尚未启用。')
+          : explain(error) };
     }
     renderSearchState(current.search);
   }

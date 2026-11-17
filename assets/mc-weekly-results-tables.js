@@ -565,17 +565,18 @@
     });
   }
 
-  function renderSearch(targets, { keyword_rows: keywordRows, attribute_rows: attributeRows, rangeNotice = '' } = {}) {
+  function renderSearch(targets, { keyword_rows: keywordRows, attribute_rows: attributeRows, rangeNotice = '', period } = {}) {
     const scope = '仅展示明确归属当前父 ASIN 的数据。订单和销售额采用 7 天归因。搜索份额、排名和全站展现缺少源数据，显示为 —。';
+    const daily = period === 'day';
     renderTable(targets.keywords, {
       columns: keywordColumns, rows: Array.isArray(keywordRows) ? keywordRows : [], label: '关键词分析',
       note: [rangeNotice, scope].filter(Boolean).join(' '),
-      emptyText: `此父 ASIN 在所选${rangeNotice ? '日期范围' : '周'}暂无关键词分析。`,
+      emptyText: daily ? '此父 ASIN 在所选日期范围暂无关键词分析。' : '所选周没有可归属此父 ASIN 的关键词数据。',
     });
     renderTable(targets.attributes, {
       columns: attributeColumns, rows: Array.isArray(attributeRows) ? attributeRows : [], label: '属性分析',
       note: [rangeNotice, scope].filter(Boolean).join(' '),
-      emptyText: `此父 ASIN 在所选${rangeNotice ? '日期范围' : '周'}暂无属性分析。`,
+      emptyText: daily ? '此父 ASIN 在所选日期范围暂无属性分析。' : '所选周没有可归属此父 ASIN 的属性数据。',
     });
   }
 
@@ -662,6 +663,32 @@
     return `报表到齐：${label}。${conflicts ? `共有 ${conflicts} 条 SKU 日期记录存在归属冲突，受影响的指标留空。` : ''}`;
   }
 
+  function weeklySkuFba(week, movements, error, unfinished) {
+    const date = dateValue(week);
+    if (error || !date || date.getUTCDay() !== 1 || (!unfinished && !movements.size)) {
+      return {rate:null,note:'暂时无法读取 FBA 退货和发货数据。'};
+    }
+    const weekRows = Array.from({length:7},()=>{
+      const row = movements.get(date.toISOString().slice(0,10));
+      date.setUTCDate(date.getUTCDate()+1);
+      return row;
+    });
+    const units = key => weekRows.map(row=>{
+      const value = numeric(row?.[key]);
+      return Number.isSafeInteger(value) && value >= 0 ? value : null;
+    });
+    const returned = units('return_units');
+    const shipped = units('shipped_units');
+    const returnsDays = returned.filter(value=>value !== null).length;
+    const shipmentsDays = shipped.filter(value=>value !== null).length;
+    const allShipped = addKnown(shipped);
+    const zeroShipments = !unfinished && allShipped === 0 ? '所选周 FBA 发货件数为 0，无法计算退货率。' : '';
+    return {
+      rate:unfinished ? null : ratio(addKnown(returned),allShipped),
+      note:`FBA 数据到齐：退货 ${returnsDays}/7 天、发货 ${shipmentsDays}/7 天。${zeroShipments}`,
+    };
+  }
+
   function renderSku(targets, { sku, week = '', otherAds, returns, dailyFees, weeklyNotes } = {}) {
     const daily = !week;
     const days = sku?.days ?? [];
@@ -684,6 +711,7 @@
       aggregateOtherAds(!daily && sku?.unfinished ? [] : otherAds?.rows,daily ? date=>date : monday),
       otherAds?.coverage ?? otherAds?.pending);
     const movements = new Map((!returns?.error ? returns?.rows ?? [] : []).map(row=>[row.report_date,row]));
+    const weeklyFba = daily ? null : weeklySkuFba(week,movements,returns?.error,sku?.unfinished);
     const expenses = new Map((!dailyFees?.error ? dailyFees?.rows ?? [] : []).map(row=>[row.report_date,row]));
     const summaryRows = scopedRows.map(row=>{
       const date = row[dateKey];
@@ -698,12 +726,11 @@
       const otherCost = otherAds?.error ? null : otherCostParts.length ? addKnown(otherCostParts) : 0;
       const net = orderProfit !== null && feeTotal !== null && otherCost !== null
         ? orderProfit - feeTotal - otherCost : null;
-      const movementDays = daily ? [date] : days.map(day=>day.report_date);
-      const allReturned = addKnown(movementDays.map(day=>numeric(movements.get(day)?.return_units)));
-      const allShipped = addKnown(movementDays.map(day=>numeric(movements.get(day)?.shipped_units)));
+      const dailyMovement = movements.get(date);
       return {...row,...fees,...estimateDailyOrderSplit(row),order_profit_net:net,
         txn_profit:txnProfit !== null && otherCost !== null ? txnProfit - otherCost : null,
-        order_gross_margin:ratio(net,row.order_sales), returns_rate:ratio(allReturned,allShipped),
+        order_gross_margin:ratio(net,row.order_sales),
+        returns_rate:daily ? ratio(dailyMovement?.return_units,dailyMovement?.shipped_units) : weeklyFba.rate,
         app_session_share:ratio(row.sessions_app,row.sessions),unit_session_rate:ratio(row.br_units,row.sessions),
         ad_cost_of_sales:ratio(row.ad_cost,row.br_sales)};
     });
@@ -730,7 +757,7 @@
       note:[coverage,periodNote,sku?.error,
         `订单毛利已扣 SP 和交易退款，再扣除${manual}。交易毛利按交易净额估算，已扣 SP，未扣手动费用。两项毛利都扣除能归属本产品的 SB、SD 广告费；如读取失败或已归属的广告缺花费，毛利留空。订单毛利率以订单列表销售额为分母。`,
         'BR 订单商品数和两项 SKU 单数合计均不能当作去重后的父 ASIN 订单数。自然单按 BR 订单商品数减广告归因订单估算。',
-        returnNote,returns?.error ? '暂时无法读取 FBA 退货数据。' : '',
+        returnNote,daily ? (returns?.error ? '暂时无法读取 FBA 退货和发货数据。' : '') : weeklyFba.note,
         feeUnavailable ? `无法读取${manual}，订单毛利估算留空。` : '',
       ].filter(Boolean).join(' '),emptyText:'所选期间暂无每日 SKU 数据。',
     });
