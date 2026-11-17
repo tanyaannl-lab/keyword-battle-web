@@ -3,7 +3,12 @@
 (() => {
   const ids = ['appShell','loading','userEmail','logoutBtn','batchTemplateForm','batchTemplateDate','batchDownloadCatalog',
     'batchDownloadBlank','batchTemplateStatus','batchPreviewForm','batchFile','batchPreview','batchStatus','batchReview',
-    'batchSummary','batchRows','batchPager','batchPrevious','batchPageInfo','batchNext','batchSave'];
+    'batchSummary','batchRows','batchPager','batchPrevious','batchPageInfo','batchNext','batchSave',
+    'batchCoverageForm','batchCoverageStart','batchCoverageEnd','batchCoverageRun','batchCoverageStatus',
+    'batchCoverageResult','batchCoverageSummary','batchCoverageGaps','batchCoverageDays','batchCoverageExport',
+    'batchCoveragePartField','batchCoveragePart','batchCoverageDownload','batchCoverageDetailDownload','batchCoverageExportHelp',
+    'batchCoverageTable','batchCoverageRows','batchCoveragePager','batchCoveragePrevious','batchCoveragePageInfo',
+    'batchCoverageNext'];
   const ui = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
   const origin = 'https://peykqsnlistkhrqsiulx.supabase.co';
   const login = '../index.html';
@@ -13,6 +18,7 @@
   const catalogRpc = 'mc_product_catalog_read';
   const previewRpc = 'mc_product_catalog_cost_daily_batch_preview';
   const saveRpc = 'mc_product_catalog_cost_daily_batch_save';
+  const coverageRpc = 'mc_product_catalog_cost_daily_coverage_read';
   const fields = [
     ['exchange_rate','汇率',1000000],['product_cost_rmb','产品成本（RMB）',100000000],
     ['inbound_cost_rmb','头程（RMB）',100000000],['fba_fee','FBA 费用（USD）',100000000],
@@ -25,12 +31,22 @@
   const counts = ['new_count','update_count','unchanged_count'];
   const statusLabels = {new:'新增',update:'更新',unchanged:'无变化'};
   const pageSize = 35;
+  const dayMs = 86_400_000;
+  const coverageDays = 31;
+  const coverageLimit = 10_000;
+  const firstCoverageDay = '2000-01-03';
+  const costLabels = Object.fromEntries(fields.map(([key,label]) => [key,label]));
+  const reportLabels = {orders_ready:'订单',transactions_ready:'交易',br_ready:'详情页面销售和流量',sp_ready:'SP 广告'};
+  const issueLabels = {conflict:'商品归属冲突，请核对目录及报表',unmatched:'未匹配产品目录，请先核对商品'};
   let auth = null;
   let generation = 0;
   let job = null;
   let templateJob = null;
+  let coverageJob = null;
   let prepared = null;
   let page = 0;
+  let coverage = null;
+  let coveragePage = 0;
 
   function today() {
     const parts = Object.fromEntries(pacific.formatToParts().map(({type,value}) => [type,value]));
@@ -38,9 +54,23 @@
   }
 
   function validDate(date) {
-    if (!datePattern.test(date) || date < firstDay || date > today()) return false;
+    return validDay(date) && date <= today();
+  }
+
+  function validDay(date) {
+    if (typeof date !== 'string' || !datePattern.test(date) || date < firstDay) return false;
     const dt = new Date(`${date}T00:00:00Z`);
     return Number.isFinite(+dt) && dt.toISOString().slice(0,10) === date;
+  }
+
+  function shiftDay(date, days) {
+    return new Date(Date.parse(date) + days * dayMs).toISOString().slice(0,10);
+  }
+
+  function updateCoverageLimits() {
+    const yesterday = shiftDay(today(),-1);
+    ui.batchCoverageStart.max = ui.batchCoverageEnd.max = yesterday;
+    return yesterday;
   }
 
   function status(el, text = '', state = '') {
@@ -58,6 +88,22 @@
     ui.batchDownloadCatalog.disabled = !auth || !!templateJob;
     ui.batchDownloadBlank.disabled = !auth || !!templateJob;
     ui.batchTemplateDate.disabled = !auth || !!templateJob;
+    ui.batchCoverageStart.disabled = !auth;
+    ui.batchCoverageEnd.disabled = !auth;
+    ui.batchCoverageRun.disabled = !auth || !!coverageJob;
+    ui.batchCoverageDownload.disabled = ui.batchCoverageDetailDownload.disabled = !auth || !coverage?.rows.length;
+  }
+
+  function clearCoverage(message = '') {
+    coverageJob?.controller.abort();
+    coverageJob = coverage = null;
+    coveragePage = 0;
+    ui.batchCoverageResult.hidden = true;
+    for (const id of ['batchCoverageDays','batchCoverageRows','batchCoveragePart']) ui[id].replaceChildren();
+    ui.batchCoverageSummary.textContent = '';
+    ui.batchCoveragePageInfo.textContent = '';
+    status(ui.batchCoverageStatus,message);
+    updateControls();
   }
 
   function clearPreview() {
@@ -79,7 +125,9 @@
     ui.userEmail.textContent = '';
     ui.batchFile.value = '';
     ui.batchTemplateDate.value = '';
+    ui.batchCoverageStart.value = ui.batchCoverageEnd.value = '';
     clearPreview();
+    clearCoverage();
     status(ui.batchStatus);
     status(ui.batchTemplateStatus);
   }
@@ -94,7 +142,8 @@
     const user = auth.user.id;
     const forGeneration = generation;
     return {type, controller, user, current: () => generation === forGeneration && auth?.user.id === user &&
-      !controller.signal.aborted && (type === 'template' ? templateJob?.controller === controller : job?.controller === controller)};
+      !controller.signal.aborted &&
+      (type === 'coverage' ? coverageJob : type === 'template' ? templateJob : job)?.controller === controller};
   }
 
   class RpcError extends Error {
@@ -214,6 +263,137 @@
     updateControls();
   }
 
+  function decodeCoverage(data, start, end) {
+    const length = (Date.parse(end) - Date.parse(start)) / dayMs + 1;
+    const malformed = () => { throw new Error('缺项检查返回的数据不完整，请重新检查。'); };
+    const within = date => validDay(date) && date >= start && date <= end;
+    const optionalAsin = asin => asin === null || typeof asin === 'string' && asinPattern.test(asin);
+    if (data?.store !== 'MC' || data.marketplace !== 'amazon.com' || data.start_date !== start || data.end_date !== end ||
+        !(data.catalog_date === null || validDay(data.catalog_date)) ||
+        !Array.isArray(data.days) || data.days.length !== length || !Array.isArray(data.rows) ||
+        !Array.isArray(data.identity_issues) || data.rows.length + data.identity_issues.length > coverageLimit) malformed();
+    const reportKeys = Object.keys(reportLabels);
+    const gaps = data.days.flatMap((day,index) => {
+      if (day?.report_date !== shiftDay(start,index) || reportKeys.some(key => typeof day[key] !== 'boolean')) malformed();
+      const missing = reportKeys.filter(key => !day[key]).map(key => reportLabels[key]);
+      return missing.length ? [{date:day.report_date,missing}] : [];
+    });
+    const seen = new Set();
+    for (const row of data.rows) {
+      if (row?.status !== 'missing_cost' || !within(row.report_date) || typeof row.asin !== 'string' ||
+          !asinPattern.test(row.asin) || !optionalAsin(row.parent_asin) || !Array.isArray(row.missing_fields) ||
+          row.missing_fields.length === 0 || new Set(row.missing_fields).size !== row.missing_fields.length ||
+          row.missing_fields.some(field => typeof field !== 'string' || !Object.hasOwn(costLabels,field))) malformed();
+      const key = `${row.report_date}:${row.asin}`;
+      if (seen.has(key)) malformed();
+      seen.add(key);
+    }
+    for (const issue of data.identity_issues) {
+      if (!(issue && Object.hasOwn(issueLabels,issue.status)) || !within(issue.report_date) ||
+          typeof issue.sku !== 'string' || !issue.sku.trim() || [...issue.sku].length > 128 || !optionalAsin(issue.asin)) malformed();
+    }
+    const items = [...data.rows,...data.identity_issues].sort((a,b) => a.report_date.localeCompare(b.report_date) ||
+      (a.asin ?? '').localeCompare(b.asin ?? '') || (a.sku ?? '').localeCompare(b.sku ?? ''));
+    return {start,end,gaps,items,catalogDate:data.catalog_date,
+      rows:items.filter(item => item.status === 'missing_cost'),issues:data.identity_issues.length};
+  }
+
+  function renderCoverageRows() {
+    if (!coverage) return;
+    const {items} = coverage;
+    const pages = Math.ceil(items.length / pageSize);
+    ui.batchCoverageTable.hidden = items.length === 0;
+    ui.batchCoveragePager.hidden = pages < 2;
+    ui.batchCoveragePrevious.disabled = coveragePage === 0;
+    ui.batchCoverageNext.disabled = coveragePage + 1 >= pages;
+    ui.batchCoveragePageInfo.textContent = pages > 1 ? `第 ${coveragePage + 1} / ${pages} 页` : '';
+    const visible = items.slice(coveragePage * pageSize,(coveragePage + 1) * pageSize).map(row => {
+      const issue = row.status !== 'missing_cost';
+      const tr = node('tr');
+      const action = issue ? issueLabels[row.status] : `缺：${row.missing_fields.map(key => costLabels[key]).join('、')}`;
+      tr.append(node('td',row.report_date,'catalog-asin'),node('td',row.asin ?? '—','catalog-asin'),
+        node('td',(issue ? row.sku : row.parent_asin) ?? '—','catalog-asin'),node('td',action));
+      return tr;
+    });
+    ui.batchCoverageRows.replaceChildren(...visible);
+  }
+
+  function renderCoverage() {
+    const {rows,gaps,issues,start,end,catalogDate} = coverage;
+    ui.batchCoverageResult.hidden = false;
+    ui.batchCoverageSummary.textContent =
+      `${start} 至 ${end}（美西）：可补录 ${rows.length} 条（子 ASIN × 日期），待核对商品归属 ${issues} 条，${gaps.length} 天报表未齐。` +
+      (catalogDate ? `商品按 ${catalogDate} 的目录匹配。` : '暂无产品目录快照。');
+    ui.batchCoverageGaps.hidden = gaps.length === 0;
+    ui.batchCoverageDays.replaceChildren(...gaps.map(({date,missing}) =>
+      node('li',`${date}：缺 ${missing.join('、')}`)));
+    const parts = Math.ceil(rows.length / csv.MAX_ROWS);
+    ui.batchCoverageExport.hidden = ui.batchCoverageExportHelp.hidden = !parts;
+    ui.batchCoveragePartField.hidden = parts < 2;
+    ui.batchCoveragePart.replaceChildren(...Array.from({length:parts},(_,index) => {
+      const option = node('option',`第 ${index + 1} / ${parts} 批（${Math.min(csv.MAX_ROWS, rows.length - index * csv.MAX_ROWS)} 条）`);
+      option.value = String(index);
+      return option;
+    }));
+    ui.batchCoveragePart.value = parts ? '0' : '';
+    renderCoverageRows();
+    updateControls();
+  }
+
+  function coverageError(error) {
+    if (error.status === 403 || error.code === '42501') return '当前账号没有检查 MC 产品成本的权限。';
+    if (error.status === 404 || error.code === 'PGRST202') return '成本缺项检查尚未启用，请联系管理员。';
+    if (error.code === '22023') return '范围内记录太多或日期不再有效，请缩短日期范围后重新检查。';
+    return batchError(error);
+  }
+
+  async function checkCoverage() {
+    if (!auth || coverageJob) return;
+    const start = ui.batchCoverageStart.value;
+    const end = ui.batchCoverageEnd.value;
+    clearCoverage();
+    if (!validDay(start) || !validDay(end) || start < firstCoverageDay || start > end || end >= today() ||
+        (Date.parse(end) - Date.parse(start)) / dayMs >= coverageDays) {
+      status(ui.batchCoverageStatus,`请选择最多 ${coverageDays} 个已结束的美西日期，开始日期不能晚于结束日期。`,'error');
+      return;
+    }
+    const pending = control('coverage');
+    coverageJob = pending;
+    updateControls();
+    status(ui.batchCoverageStatus,'正在比对每日订单、交易、广告和成本…');
+    try {
+      const data = await rpc(coverageRpc,{p_start_date:start,p_end_date:end},pending);
+      if (!pending.current()) return;
+      coverage = decodeCoverage(data,start,end);
+      renderCoverage();
+      const partial = coverage.gaps.length || coverage.issues || !coverage.catalogDate;
+      status(ui.batchCoverageStatus,partial ? '检查完成。报表未齐或归属待核对的部分，仍需补齐后重新检查。' :
+        coverage.rows.length ? '检查完成，可下载补录 CSV。' : '检查完成，所选范围未发现需补录的成本。',partial ? '' : 'success');
+    } catch (error) {
+      if (pending.current()) status(ui.batchCoverageStatus,coverageError(error),'error');
+    } finally {
+      if (coverageJob === pending) { coverageJob = null; updateControls(); }
+    }
+  }
+
+  function downloadCoverage(details) {
+    if (!auth || !coverage) return;
+    const value = ui.batchCoveragePart.value;
+    const part = Number(value);
+    const start = part * csv.MAX_ROWS;
+    if (!/^\d+$/.test(value) || !Number.isSafeInteger(part) || start >= coverage.rows.length) return;
+    const chosen = coverage.rows.slice(start,start + csv.MAX_ROWS);
+    // Only validated dates and child ASINs enter these fixed import columns.
+    // Every cost value remains blank; the file cannot change any cost as-is.
+    const content = details
+      ? '\uFEFF日期（美西）,子ASIN,缺失成本字段\r\n' + chosen.map(({report_date,asin,missing_fields}) =>
+        [report_date,asin,missing_fields.map(field => costLabels[field]).join('、')].join(',') + '\r\n').join('')
+      : csv.template() + chosen.map(({report_date,asin}) =>
+        [report_date,asin,...fields.map(() => '')].join(',') + '\r\n').join('');
+    const parts = Math.ceil(coverage.rows.length / csv.MAX_ROWS);
+    download(content,`MC-${details ? '缺项明细-仅供核对' : '缺项补录'}-${coverage.start}至${coverage.end}-${part + 1}of${parts}.csv`);
+  }
+
   async function preview() {
     if (!auth || job) return;
     const file = ui.batchFile.files?.[0];
@@ -261,11 +441,13 @@
       const outcome = summarize(data,accepted.patches.length);
       if (outcome.some((count,index) => count !== accepted.counts[index])) throw new Error('结果与预览不匹配');
       clearPreview();
+      if (coverage || coverageJob) clearCoverage('成本已更新，请重新检查剩余缺项。');
       ui.batchFile.value = '';
       status(ui.batchStatus,`批量保存成功。${summaryText(outcome)}。`,'success');
     } catch (error) {
       if (!pending.current()) return;
       clearPreview();
+      if (coverage || coverageJob) clearCoverage('保存结果已变化或暂无法确认，请重新检查剩余缺项。');
       status(ui.batchStatus,batchError(error,accepted.lines,true),'error');
     } finally {
       if (job === pending) { job = null; updateControls(); }
@@ -342,6 +524,9 @@
       auth = session;
       ui.userEmail.textContent = auth.user.email || '—';
       ui.batchTemplateDate.value = ui.batchTemplateDate.max = today();
+      const yesterday = updateCoverageLimits();
+      ui.batchCoverageStart.value = shiftDay(yesterday,-6);
+      ui.batchCoverageEnd.value = yesterday;
       ui.loading.hidden = true;
       ui.appShell.hidden = false;
       updateControls();
@@ -356,6 +541,20 @@
   ui.batchTemplateForm.addEventListener('submit',event => {event.preventDefault(); void template(true);});
   ui.batchDownloadBlank.addEventListener('click',() => { void template(false); });
   ui.batchTemplateDate.addEventListener('focus',() => { ui.batchTemplateDate.max = today(); });
+  ui.batchCoverageForm.addEventListener('submit',event => {event.preventDefault(); void checkCoverage();});
+  for (const element of [ui.batchCoverageStart,ui.batchCoverageEnd]) {
+    element.addEventListener('focus',updateCoverageLimits);
+    element.addEventListener('input',() => clearCoverage());
+    element.addEventListener('change',() => clearCoverage());
+  }
+  ui.batchCoverageDownload.addEventListener('click',() => downloadCoverage(false));
+  ui.batchCoverageDetailDownload.addEventListener('click',() => downloadCoverage(true));
+  ui.batchCoveragePrevious.addEventListener('click',() => {
+    if (coveragePage > 0 && coverage) { coveragePage--; renderCoverageRows(); }
+  });
+  ui.batchCoverageNext.addEventListener('click',() => {
+    if (coverage && (coveragePage + 1) * pageSize < coverage.items.length) { coveragePage++; renderCoverageRows(); }
+  });
   ui.batchPrevious.addEventListener('click',() => { if (page > 0) {page--; render();} });
   ui.batchNext.addEventListener('click',() => { if (prepared && (page+1)*pageSize < prepared.rows.length) {page++; render();} });
   ui.logoutBtn.addEventListener('click',async () => {
