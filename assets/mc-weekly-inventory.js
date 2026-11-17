@@ -14,7 +14,7 @@
   const quantityKeys = ['fulfillable','reserved','unfulfillable','inbound_working','inbound_shipped',
     'inbound_receiving','researching','total_quantity','ordered_units_30d'];
   const columns = [
-    ['seller_sku','卖家 SKU'], ['asin','子 ASIN'], ['operator_name','运营简称'],
+    ['parent_asin','父 ASIN'], ['asin','子 ASIN'], ['seller_sku','卖家 SKU'],
     ['fulfillable','当前可售','number'], ['reserved','预留','number'], ['unfulfillable','不可售','number'],
     ['in_transit','实际在途','number'], ['inbound_working','计划入库','number'],
     ['ordered_units_30d','近 30 天订购件数','number'],
@@ -25,6 +25,32 @@
     ['inbound_shipped','已发往亚马逊'], ['inbound_receiving','接收中'],
     ['researching','调查中'], ['total_quantity','亚马逊总量'], ['last_updated_at','亚马逊更新时间（UTC）'],
   ];
+  const detailGroups = [
+    ['入库', [
+      ['inbound_working','处理中（计划入库）'], ['inbound_shipped','已发货'], ['inbound_receiving','接收中'],
+    ]],
+    ['库存概况', [
+      ['fulfillable','当前可售'], ['total_quantity','亚马逊库存总量'],
+    ]],
+    ['预留', [
+      ['reserved','预留总量'], ['reserved_customer_order','买家订单'],
+      ['reserved_fc_transfers','仓间调拨（API 预留）'], ['reserved_fc_processing','运营中心处理中'],
+    ]],
+    ['调查中', [
+      ['researching','调查中总量'], ['researching_short_term','1–10 天'],
+      ['researching_mid_term','11–20 天'], ['researching_long_term','21 天及以上'],
+    ]],
+    ['不可售', [
+      ['unfulfillable','不可售总量'], ['unfulfillable_warehouse_damaged','仓库残损'],
+      ['unfulfillable_defective','商品瑕疵'], ['unfulfillable_expired','已过期'],
+      ['unfulfillable_customer_damaged','买家导致残损'], ['unfulfillable_carrier_damaged','承运商导致残损'],
+      ['unfulfillable_distributor_damaged','分销商导致残损'],
+    ]],
+  ];
+  const knownQuantities = new Set(quantityKeys);
+  const optionalDetailColumns = detailGroups.flatMap(([group,items]) => items
+    .filter(([key]) => !knownQuantities.has(key))
+    .map(([key,label]) => [key,`${group} · ${label}`]));
   const ids = {
     shell: 'appShell', loading: 'loading', email: 'userEmail', logout: 'logoutBtn',
     snapshot: 'inventorySnapshot', timestamp: 'inventorySnapshotAt', reload: 'inventoryReload',
@@ -45,8 +71,10 @@
   const pacificDay = new Intl.DateTimeFormat('en-US', {timeZone:'America/Los_Angeles',
     year:'numeric',month:'2-digit',day:'2-digit'});
   const order = new Intl.Collator('en', { numeric:true });
+  const compareAsin = (a,b) => a === b ? 0 : a === null ? 1 : b === null || a < b ? -1 : 1;
   const searchable = value => String(value ?? '').normalize('NFKC').toLowerCase();
   const formatUnits = count => integers.format(count);
+  const asinShape = /^[A-Z0-9]{10}$/;
   const timeShape = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
   const dateShape = /^\d{4}-\d{2}-\d{2}$/;
   const safeText = (value,max) => typeof value === 'string' && /\S/.test(value) && Array.from(value).length <= max &&
@@ -60,6 +88,7 @@
     zero: row => row.fulfillable === 0,
     reserved: row => positive(row.reserved),
     inbound: row => positive(row.in_transit),
+    researching: row => positive(row.researching),
     unfulfillable: row => positive(row.unfulfillable),
     unknown: row => row.fulfillable === null,
   };
@@ -105,25 +134,33 @@
     const seen = new Set();
     const rows = data.rows.map(row => {
       if (!safeText(row?.seller_sku,255) || seen.has(row.seller_sku) ||
-          (row.asin !== null && !/^[A-Z0-9]{10}$/.test(row.asin ?? '')) ||
+          (row.asin !== null && !asinShape.test(row.asin ?? '')) ||
           (row.fnsku !== null && !/^[A-Z0-9_.:-]{1,128}$/.test(row.fnsku ?? '')) ||
           (row.condition !== null && !safeText(row.condition,128)) ||
           (row.last_updated_at !== null && !isTime(row.last_updated_at)) ||
           typeof row.tracked !== 'boolean' ||
-          (row.operator_name !== null && !safeText(row.operator_name,255)) ||
           (noSales && row.ordered_units_30d !== null) ||
           quantityKeys.some(key => row[key] !== null && (!Number.isSafeInteger(row[key]) || row[key] < 0))) invalid();
       seen.add(row.seller_sku);
+      const parent_asin = typeof row.parent_asin === 'string' && row.parent_asin.length === 10 &&
+        asinShape.test(row.parent_asin) ? row.parent_asin : null;
       const in_transit = row.inbound_shipped === null || row.inbound_receiving === null ?
         null : row.inbound_shipped + row.inbound_receiving;
       if (in_transit !== null && !Number.isSafeInteger(in_transit)) invalid();
       const daily_average = row.ordered_units_30d === null ? null : row.ordered_units_30d / windowDays;
       const sellable_days = row.fulfillable !== null && positive(row.ordered_units_30d) ?
         row.fulfillable * windowDays / row.ordered_units_30d : null;
-      return { ...row, in_transit, daily_average, sellable_days, tracking_label: row.tracked ? '是' : '否',
-        search: [row.seller_sku,row.asin,row.fnsku,row.operator_name].map(searchable).join(' ') };
+      // Older inventory snapshots do not include the detail properties. A bad
+      // optional value must not make the working base inventory unavailable.
+      const quantities = Object.fromEntries(optionalDetailColumns.map(([key]) => [key,
+        Number.isSafeInteger(row[key]) && row[key] >= 0 ? row[key] : null,
+      ]));
+      return { ...row, ...quantities, parent_asin, in_transit, daily_average, sellable_days,
+        tracking_label: row.tracked ? '是' : '否',
+        search: [parent_asin,row.asin,row.seller_sku,row.fnsku].map(searchable).join(' ') };
     });
-    rows.sort((a,b) => order.compare(a.seller_sku,b.seller_sku));
+    rows.sort((a,b) => compareAsin(a.parent_asin,b.parent_asin) || compareAsin(a.asin,b.asin) ||
+      order.compare(a.seller_sku,b.seller_sku) || (a.seller_sku < b.seller_sku ? -1 : 1));
     if (rows.some(row => row.tracked) !== (tracking_matched_count > 0)) invalid();
     return {captured_at:data.captured_at, sales_start_date, sales_end_date, sales_captured_at,
       tracking_count, tracking_matched_count, rows};
@@ -189,22 +226,88 @@
     el.next.disabled = page + 1 >= pages;
     el.page.textContent = pages ? `第 ${formatUnits(page + 1)} / ${formatUnits(pages)} 页` : '';
     const body = document.createDocumentFragment();
-    for (const row of visible.slice(page * pageSize,(page + 1) * pageSize)) {
+    let rowNumber = page * pageSize;
+    for (const row of visible.slice(rowNumber,(page + 1) * pageSize)) {
       const tr = document.createElement('tr');
-      for (const [index,[key,,kind]] of columns.entries()) {
+      const panelId = `inventory-detail-${++rowNumber}`;
+      for (const [key,,kind] of columns) {
         const value = row[key];
-        const cell = document.createElement(index ? 'td' : 'th');
-        if (!index) cell.scope = 'row';
+        const isSku = key === 'seller_sku';
+        const cell = document.createElement(isSku ? 'th' : 'td');
+        if (isSku) {
+          cell.scope = 'row';
+          cell.classList.add('inventory-sku');
+        }
+        if (key === 'parent_asin' || key === 'asin') cell.classList.add('inventory-asin');
         if (kind) cell.classList.add('results-num');
-        if (key === 'operator_name') cell.classList.add('inventory-name');
         if (value === null) cell.classList.add('results-missing');
         if (key === 'fulfillable' && value === 0) cell.classList.add('inventory-zero');
         cell.textContent = formatCell(value,kind);
+        if (isSku) cell.append(detailToggle(tr,row,panelId));
         tr.append(cell);
       }
       body.append(tr);
     }
     el.body.replaceChildren(body);
+  }
+
+  function detailToggle(summaryRow,row,panelId) {
+    const toggle = document.createElement('button');
+    toggle.type = 'button';
+    toggle.classList.add('inventory-detail-toggle');
+    toggle.textContent = '库存明细';
+    toggle.setAttribute('aria-label',`库存明细：${row.seller_sku}`);
+    toggle.setAttribute('aria-expanded','false');
+    let detail;
+    toggle.addEventListener('click',() => {
+      if (!detail) {
+        detail = renderDetail(row,panelId);
+        summaryRow.after(detail);
+        toggle.setAttribute('aria-controls',panelId);
+      }
+      const open = detail.hidden;
+      detail.hidden = !open;
+      toggle.setAttribute('aria-expanded',String(open));
+    });
+    return toggle;
+  }
+
+  function renderDetail(row,panelId) {
+    const detail = document.createElement('tr');
+    detail.classList.add('inventory-detail-row');
+    detail.hidden = true;
+    const cell = document.createElement('td');
+    cell.colSpan = columns.length;
+    const panel = document.createElement('div');
+    panel.id = panelId;
+    panel.classList.add('inventory-detail-panel');
+    const title = document.createElement('h2');
+    title.textContent = `${row.seller_sku} · FBA 库存明细`;
+    const grid = document.createElement('div');
+    grid.classList.add('inventory-detail-grid');
+    for (const [group,items] of detailGroups) {
+      const card = document.createElement('section');
+      card.classList.add('inventory-detail-card');
+      const heading = document.createElement('h3');
+      heading.textContent = group;
+      const list = document.createElement('dl');
+      for (const [key,label] of items) {
+        const line = document.createElement('div');
+        const term = document.createElement('dt');
+        const count = document.createElement('dd');
+        term.textContent = label;
+        count.textContent = formatCell(row[key],'number');
+        if (row[key] === null) count.classList.add('results-missing');
+        line.append(term,count);
+        list.append(line);
+      }
+      card.append(heading,list);
+      grid.append(card);
+    }
+    panel.append(title,grid);
+    cell.append(panel);
+    detail.append(cell);
+    return detail;
   }
 
   function formatCell(value,kind) {
@@ -224,12 +327,12 @@
 
   function exportRows() {
     if (!snapshot || !visible.length) return;
-    const csvColumns = [...columns,...extraColumns];
-    const header = ['库存快照时间（UTC）', '订购统计起始日（美西）', '订购统计截止日（美西）',
-      '订购报表采集时间（UTC）', ...csvColumns.map(([,label]) => label)].map(csvCell).join(',');
+    const csvColumns = [...columns,...extraColumns,...optionalDetailColumns];
+    const header = [...csvColumns.map(([,label]) => label), '库存快照时间（UTC）',
+      '订购统计起始日（美西）', '订购统计截止日（美西）', '订购报表采集时间（UTC）'].map(csvCell).join(',');
     const blob = new Blob(['\uFEFF',header,'\r\n', ...visible.map(row =>
-      [snapshot.captured_at,snapshot.sales_start_date,snapshot.sales_end_date,snapshot.sales_captured_at,
-        ...csvColumns.map(([key]) => row[key])].map(csvCell).join(',') + '\r\n')],
+      [...csvColumns.map(([key]) => row[key]), snapshot.captured_at,
+        snapshot.sales_start_date,snapshot.sales_end_date,snapshot.sales_captured_at].map(csvCell).join(',') + '\r\n')],
       {type:'text/csv;charset=utf-8'});
     const href = URL.createObjectURL(blob);
     downloads.add(href);

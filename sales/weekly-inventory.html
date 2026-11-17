@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="../assets/workspace-nav.css?v=20261110">
   <link rel="stylesheet" href="../assets/mc-weekly-source-nav.css?v=20261113-1">
   <link rel="stylesheet" href="../assets/mc-weekly-results.css?v=20261113-1">
-  <link rel="stylesheet" href="../assets/mc-weekly-inventory.css?v=20261114-2">
+  <link rel="stylesheet" href="../assets/mc-weekly-inventory.css?v=20261117-1">
 </head>
 <body>
 <div class="shell workspace-shell workspace-sales" id="appShell" hidden>
@@ -68,7 +68,7 @@
         <p class="results-market">MC · AMAZON US</p>
         <p class="results-path">每周报表 <span aria-hidden="true">›</span> 库存管理</p>
         <h1 id="fba-inventory">FBA 库存</h1>
-        <p class="results-intro">按卖家 SKU 查看 FBA 库存、近 30 天订购件数和预计可售天数。</p>
+        <p class="results-intro">按卖家 SKU 查看 FBA 库存和近 30 天订购件数，展开库存明细可核对各项数量。</p>
       </header>
 
       <div class="inventory-source">
@@ -87,7 +87,7 @@
         <div class="results-controls inventory-controls" role="group" aria-label="筛选库存">
           <label class="results-field" for="inventorySearch">
             <span>搜索库存</span>
-            <input type="search" id="inventorySearch" autocomplete="off" maxlength="160" placeholder="SKU、ASIN、运营简称或 FNSKU">
+            <input type="search" id="inventorySearch" autocomplete="off" maxlength="160" placeholder="父 ASIN、子 ASIN、SKU 或 FNSKU">
           </label>
           <label class="results-field" for="inventoryScope">
             <span>查看范围</span>
@@ -104,6 +104,7 @@
               <option value="zero">可售为 0</option>
               <option value="reserved">有预留库存</option>
               <option value="inbound">有实际在途</option>
+              <option value="researching">有调查中库存</option>
               <option value="unfulfillable">有不可售库存</option>
               <option value="unknown">可售数量未返回</option>
             </select>
@@ -111,19 +112,20 @@
           <button class="results-button results-button-primary" type="button" id="inventoryDownload" disabled>导出筛选结果</button>
         </div>
 
-        <p class="results-table-note" id="inventoryHelp">实际在途 = 已发往亚马逊 + 接收中，计划入库单独统计。日均订购件数 = 近 30 天订购件数 ÷ 30；预计可售天数 = 当前可售 ÷ 日均订购件数。「—」表示缺少数据或无法计算。CSV 导出当前筛选的全部页及 FBA 明细。</p>
+        <p class="results-table-note" id="inventoryHelp">每行一个卖家 SKU。父 ASIN 来自产品目录，未匹配显示「—」。库存取自亚马逊 FBA，订购件数取自亚马逊业务报告。实际在途 = 已发往亚马逊 + 接收中；日均订购件数 = 近 30 天订购件数 ÷ 30；预计可售天数 = 当前可售 ÷ 日均订购件数。「—」表示缺少数据或无法计算。CSV 导出当前筛选的全部页及 FBA 明细。</p>
+        <p class="results-table-note" id="inventoryDetailHelp">仓间调拨在 API 中属于预留。亚马逊库存总量为 API 原始字段，口径与卖家后台的「现有」不同。调查中按 1–10 天、11–20 天和 21 天及以上分档。明细的 0 是亚马逊返回的数量，「—」表示没有明细值。</p>
         <p class="results-table-note" id="inventoryTracking" role="status" hidden></p>
         <p id="inventoryCount" class="results-count inventory-count" role="status"></p>
         <p id="inventoryEmpty" class="results-empty" hidden></p>
         <button class="results-button inventory-show-all" type="button" id="inventoryShowAll" hidden>查看全部 SKU</button>
 
         <div id="inventoryTable" class="results-table-wrap inventory-table-wrap" tabindex="0" role="region" aria-label="FBA 库存表" hidden>
-          <table class="results-table results-table-compact inventory-table" aria-describedby="inventoryHelp">
+          <table class="results-table results-table-compact inventory-table" aria-describedby="inventoryHelp inventoryDetailHelp">
             <thead>
               <tr>
-                <th scope="col">卖家 SKU</th>
-                <th scope="col">子 ASIN</th>
-                <th scope="col" class="inventory-name">运营简称</th>
+                <th scope="col" class="inventory-asin">父 ASIN</th>
+                <th scope="col" class="inventory-asin">子 ASIN</th>
+                <th scope="col" class="inventory-sku">卖家 SKU</th>
                 <th scope="col" class="results-number">当前可售</th>
                 <th scope="col" class="results-number">预留</th>
                 <th scope="col" class="results-number">不可售</th>
@@ -150,6 +152,6 @@
 <noscript><style>#loading{display:none}</style><p class="auth-loading">请启用 JavaScript 后查看 FBA 库存。</p></noscript>
 <script src="../assets/config.js"></script>
 <script src="../assets/auth-client.js"></script>
-<script src="../assets/mc-weekly-inventory.js?v=20261114-2"></script>
+<script src="../assets/mc-weekly-inventory.js?v=20261117-1"></script>
 </body>
 </html>
