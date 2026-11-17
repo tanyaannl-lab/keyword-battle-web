@@ -4,6 +4,7 @@
   const cfg = window.KB_CONFIG;
   const origin = 'https://peykqsnlistkhrqsiulx.supabase.co';
   const endpoint = `${origin}/rest/v1/rpc/mc_fba_inventory_movement_read`;
+  const ageEndpoint = `${origin}/rest/v1/rpc/mc_fba_inventory_age_read`;
   const login = '../index.html';
   const limit = 10_000;
   const pageSize = 50;
@@ -51,6 +52,18 @@
   const optionalDetailColumns = detailGroups.flatMap(([group,items]) => items
     .filter(([key]) => !knownQuantities.has(key))
     .map(([key,label]) => [key,`${group} · ${label}`]));
+  const ageBands = [
+    ['age_0_90','0–90 天'], ['age_91_180','91–180 天'], ['age_181_330','181–330 天'],
+    ['age_331_365','331–365 天'], ['age_366_455','366–455 天'], ['age_456_plus','456 天及以上'],
+  ];
+  const ageYoungBands = [
+    ['age_0_30','0–30 天'], ['age_31_60','31–60 天'], ['age_61_90','61–90 天'],
+  ];
+  const ageQuantityColumns = [...ageBands,...ageYoungBands];
+  const ageCsvColumns = [
+    ['age_snapshot_date','库龄快照日期（美西）'], ['report_snapshot_date','库龄来源报表日期（美西）'],
+    ...ageQuantityColumns.map(([key,label]) => [key,`库龄 · ${label}`]),
+  ];
   const ids = {
     shell: 'appShell', loading: 'loading', email: 'userEmail', logout: 'logoutBtn',
     snapshot: 'inventorySnapshot', timestamp: 'inventorySnapshotAt', reload: 'inventoryReload',
@@ -75,6 +88,7 @@
   const searchable = value => String(value ?? '').normalize('NFKC').toLowerCase();
   const formatUnits = count => integers.format(count);
   const asinShape = /^[A-Z0-9]{10}$/;
+  const fnskuShape = /^[A-Z0-9_.:-]{1,128}$/;
   const timeShape = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
   const dateShape = /^\d{4}-\d{2}-\d{2}$/;
   const safeText = (value,max) => typeof value === 'string' && /\S/.test(value) && Array.from(value).length <= max &&
@@ -93,6 +107,8 @@
     unknown: row => row.fulfillable === null,
   };
   let auth, request, snapshot, generation = 0, page = 0, scopedCount = 0, visible = [];
+  let ageRequest, ageStatus = 'idle', ageRows = null;
+  const openAgeCards = new Map();
   const downloads = new Set();
 
   class ReadError extends Error {
@@ -135,7 +151,7 @@
     const rows = data.rows.map(row => {
       if (!safeText(row?.seller_sku,255) || seen.has(row.seller_sku) ||
           (row.asin !== null && !asinShape.test(row.asin ?? '')) ||
-          (row.fnsku !== null && !/^[A-Z0-9_.:-]{1,128}$/.test(row.fnsku ?? '')) ||
+          (row.fnsku !== null && !fnskuShape.test(row.fnsku ?? '')) ||
           (row.condition !== null && !safeText(row.condition,128)) ||
           (row.last_updated_at !== null && !isTime(row.last_updated_at)) ||
           typeof row.tracked !== 'boolean' ||
@@ -166,9 +182,34 @@
       tracking_count, tracking_matched_count, rows};
   }
 
-  async function readInventory(current, signal) {
+  function ageKey(row) {
+    // Do not fall back to ASIN, fold case, or match a missing FNSKU.
+    return row.asin && row.fnsku ? JSON.stringify([row.seller_sku,row.asin,row.fnsku]) : null;
+  }
+
+  function parseAgeSnapshot(data) {
+    if (data === null) return null;
+    const invalid = () => { throw new ReadError(200,'invalid'); };
+    if (data?.store !== 'MC' || data.marketplace !== 'amazon.com' || !isTime(data.captured_at) ||
+        !Array.isArray(data.rows) || data.rows.length > 20_000 || data.row_count !== data.rows.length) invalid();
+    const rows = new Map();
+    for (const row of data.rows) {
+      if (!safeText(row?.seller_sku,255) || typeof row.asin !== 'string' || !asinShape.test(row.asin) ||
+          (row.fnsku !== null && (typeof row.fnsku !== 'string' || !fnskuShape.test(row.fnsku))) || !isDay(row.report_snapshot_date) ||
+          (row.age_snapshot_date !== null && !isDay(row.age_snapshot_date)) ||
+          ageQuantityColumns.some(([key]) => row[key] !== null &&
+            (!Number.isSafeInteger(row[key]) || row[key] < 0))) invalid();
+      const key = ageKey(row);
+      if (key === null) continue;
+      if (rows.has(key)) invalid();
+      rows.set(key,row);
+    }
+    return rows;
+  }
+
+  async function readRpc(api, current, signal) {
     const access = current.session.access_token;
-    const send = token => fetch(endpoint, {
+    const send = token => fetch(api, {
       method:'POST', cache:'no-store', credentials:'omit', mode:'cors', redirect:'error',
       referrerPolicy:'no-referrer', signal,
       headers:{ Accept:'application/json', 'Content-Type':'application/json',
@@ -189,7 +230,7 @@
       try { code = (await response.json())?.code; } catch { /* HTTP status is enough. */ }
       throw new ReadError(response.status,code);
     }
-    return parseSnapshot(await response.json());
+    return response.json();
   }
 
   function filterRows() {
@@ -204,6 +245,7 @@
   }
 
   function renderPage() {
+    openAgeCards.clear();
     const count = visible.length;
     const pages = Math.ceil(count / pageSize);
     const total = snapshot.rows.length;
@@ -304,10 +346,104 @@
       card.append(heading,list);
       grid.append(card);
     }
-    panel.append(title,grid);
+    const age = document.createElement('section');
+    age.classList.add('inventory-detail-card');
+    age.classList.add('inventory-age-card');
+    openAgeCards.set(row,age);
+    renderAgeCard(row,age);
+    panel.append(title,grid,age);
     cell.append(panel);
     detail.append(cell);
     return detail;
+  }
+
+  function renderAgeCard(row, element) {
+    const title = document.createElement('h3');
+    title.textContent = '库龄';
+    const note = document.createElement('p');
+    note.classList.add('inventory-age-note');
+    const data = ageRows?.get(ageKey(row));
+    if (!data) {
+      note.textContent = ageStatus === 'loading' ? '正在读取库龄…' :
+        ageStatus === 'failed' ? '库龄暂不可用。' :
+        ageStatus === 'ready' ? '该 SKU 尚无匹配的库龄记录。' : '暂无库龄报表。';
+      element.replaceChildren(title,note);
+      return;
+    }
+    note.textContent = '库龄快照日期（美西）：';
+    if (data.age_snapshot_date === null) note.textContent += missing;
+    else {
+      const date = document.createElement('time');
+      date.dateTime = data.age_snapshot_date;
+      date.textContent = data.age_snapshot_date;
+      note.append(date);
+    }
+    const list = ageList(data,ageBands);
+    if (ageBands.every(([key]) => data[key] !== null)) {
+      const sum = ageBands.reduce((acc,[key]) => acc + data[key],0);
+      if (Number.isSafeInteger(sum)) appendAgeLine(list,'六档合计',sum);
+    }
+    const items = [title,note,list];
+    if (ageYoungBands.every(([key]) => data[key] !== null)) {
+      const details = document.createElement('details');
+      details.classList.add('inventory-age-young');
+      const summary = document.createElement('summary');
+      summary.textContent = '0–90 天细分';
+      details.append(summary,ageList(data,ageYoungBands));
+      items.push(details);
+    }
+    element.replaceChildren(...items);
+  }
+
+  function ageList(data,bands) {
+    const list = document.createElement('dl');
+    list.classList.add('inventory-age-bands');
+    for (const [key,label] of bands) appendAgeLine(list,label,data[key]);
+    return list;
+  }
+
+  function appendAgeLine(list,label,value) {
+    const line = document.createElement('div');
+    const term = document.createElement('dt');
+    const count = document.createElement('dd');
+    term.textContent = label;
+    count.textContent = formatCell(value,'number');
+    if (value === null) count.classList.add('results-missing');
+    line.append(term,count);
+    list.append(line);
+  }
+
+  function refreshAgeCards() {
+    for (const [row,card] of openAgeCards) renderAgeCard(row,card);
+  }
+
+  function cancelAge() {
+    ageRequest?.abort();
+    ageRequest = null;
+  }
+
+  async function loadAge(base) {
+    cancelAge();
+    const read = new AbortController();
+    ageRequest = read;
+    ageRows = null;
+    ageStatus = 'loading';
+    refreshAgeCards();
+    try {
+      const signal = AbortSignal.any([read.signal,AbortSignal.timeout(25_000)]);
+      const next = parseAgeSnapshot(await readRpc(ageEndpoint,auth,signal));
+      if (ageRequest !== read || read.signal.aborted || snapshot !== base) return;
+      ageRows = next;
+      ageStatus = next === null ? 'idle' : 'ready';
+    } catch {
+      if (ageRequest !== read || read.signal.aborted || snapshot !== base) return;
+      ageStatus = 'failed';
+    } finally {
+      if (ageRequest === read) {
+        ageRequest = null;
+        refreshAgeCards();
+      }
+    }
   }
 
   function formatCell(value,kind) {
@@ -328,11 +464,14 @@
   function exportRows() {
     if (!snapshot || !visible.length) return;
     const csvColumns = [...columns,...extraColumns,...optionalDetailColumns];
-    const header = [...csvColumns.map(([,label]) => label), '库存快照时间（UTC）',
+    const header = [...csvColumns.map(([,label]) => label), ...ageCsvColumns.map(([,label]) => label), '库存快照时间（UTC）',
       '订购统计起始日（美西）', '订购统计截止日（美西）', '订购报表采集时间（UTC）'].map(csvCell).join(',');
-    const blob = new Blob(['\uFEFF',header,'\r\n', ...visible.map(row =>
-      [...csvColumns.map(([key]) => row[key]), snapshot.captured_at,
-        snapshot.sales_start_date,snapshot.sales_end_date,snapshot.sales_captured_at].map(csvCell).join(',') + '\r\n')],
+    const blob = new Blob(['\uFEFF',header,'\r\n', ...visible.map(row => {
+      const age = ageRows?.get(ageKey(row));
+      return [...csvColumns.map(([key]) => row[key]), ...ageCsvColumns.map(([key]) => age?.[key] ?? null),
+        snapshot.captured_at,
+        snapshot.sales_start_date,snapshot.sales_end_date,snapshot.sales_captured_at].map(csvCell).join(',') + '\r\n';
+    })],
       {type:'text/csv;charset=utf-8'});
     const href = URL.createObjectURL(blob);
     downloads.add(href);
@@ -348,6 +487,10 @@
   }
 
   function clearSnapshot() {
+    cancelAge();
+    ageRows = null;
+    ageStatus = 'idle';
+    openAgeCards.clear();
     snapshot = undefined;
     visible = [];
     page = scopedCount = 0;
@@ -382,13 +525,18 @@
 
   async function load() {
     if (!auth || request) return;
+    cancelAge();
+    if (ageStatus === 'loading') {
+      ageStatus = 'failed';
+      refreshAgeCards();
+    }
     const read = new AbortController();
     request = read;
     el.reload.disabled = true;
     status('正在读取库存…');
     try {
       const signal = AbortSignal.any([read.signal,AbortSignal.timeout(25_000)]);
-      const next = await readInventory(auth,signal);
+      const next = parseSnapshot(await readRpc(endpoint,auth,signal));
       if (request !== read || read.signal.aborted) return;
       if (next === null) {
         clearSnapshot();
@@ -402,6 +550,7 @@
       el.results.hidden = el.snapshot.hidden = false;
       filterRows();
       status('');
+      if (next.rows.length) void loadAge(next);
     } catch (error) {
       if (request !== read || read.signal.aborted) return;
       if (error.status === 401) {

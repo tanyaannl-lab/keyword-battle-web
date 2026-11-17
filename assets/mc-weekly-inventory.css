@@ -110,6 +110,25 @@
   font-variant-numeric: tabular-nums;
 }
 
+.mc-fba-inventory .inventory-age-card { margin-top: .5rem; }
+.mc-fba-inventory .inventory-age-note {
+  margin: .15rem 0 .4rem;
+  color: var(--results-muted);
+  font-size: .8rem;
+}
+.mc-fba-inventory .inventory-age-note time { font-variant-numeric: tabular-nums; }
+.mc-fba-inventory .inventory-age-bands {
+  display: grid;
+  grid-template-columns: repeat(auto-fit,minmax(min(100%,11rem),1fr));
+  gap: .05rem .8rem;
+}
+.mc-fba-inventory .inventory-age-bands > div { border-bottom: 1px solid var(--results-line,#d9e6ea); }
+.mc-fba-inventory .inventory-age-young { margin-top: .35rem; }
+.mc-fba-inventory .inventory-age-young > summary {
+  color: var(--results-accent,#075b65);
+  cursor: pointer;
+}
+
 @container (max-width: 635px) {
   .mc-fba-inventory .inventory-controls { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .mc-fba-inventory .inventory-controls label:first-child { grid-column: 1 / -1; }
