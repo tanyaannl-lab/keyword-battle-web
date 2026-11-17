@@ -1,0 +1,28 @@
+.mc-product-parent-mapping .parent-panel { margin-bottom: 1rem; }
+.mc-product-parent-mapping .parent-panel h2 { margin: 0 0 .65rem; font-size: 1.15rem; }
+.mc-product-parent-mapping .parent-h3 { margin: .65rem 0 .4rem; font-size: .95rem; }
+.mc-product-parent-mapping .parent-meta {
+  display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,14rem),1fr));
+  gap: .75rem; margin: .85rem 0; padding: .85rem; border-radius: 10px; background: var(--catalog-tint);
+}
+.mc-product-parent-mapping .parent-meta dt { color: var(--catalog-muted); font-size: .82rem; }
+.mc-product-parent-mapping .parent-meta dd { margin: .2rem 0 0; overflow-wrap: anywhere; }
+.mc-product-parent-mapping .parent-edit { margin-top: 1rem; }
+.mc-product-parent-mapping .parent-edit-fields {
+  display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,12rem),1fr)); align-items: start; gap: .75rem;
+}
+.mc-product-parent-mapping .parent-checkbox { display: inline-flex; align-items: center; gap: .45rem; }
+.mc-product-parent-mapping .parent-checkbox input { inline-size: 1.12rem; block-size: 1.12rem; }
+.mc-product-parent-mapping .parent-edit-help { margin: .65rem 0 0; }
+.mc-product-parent-mapping .parent-batch-form { margin: .85rem 0 0; }
+.mc-product-parent-mapping .parent-file { width: min(100%,32rem); }
+.mc-product-parent-mapping .parent-file input { min-width: 0; font-size: .9rem; }
+.mc-product-parent-mapping .parent-status { margin: 0 0 .95rem; padding: .7rem .95rem; border: 1px solid var(--catalog-line); border-radius: 10px; background: #fff; }
+.mc-product-parent-mapping .catalog-table th { width: auto; }
+.mc-product-parent-mapping .parent-review-table .catalog-table { min-width: 820px; }
+.mc-product-parent-mapping .parent-review-table th:first-child { width: 15%; }
+.mc-product-parent-mapping .parent-review-table th:nth-child(2) { width: 27%; }
+.mc-product-parent-mapping .catalog-summary { margin: 0 0 .65rem; }
+.mc-product-parent-mapping .parent-range-list { margin: .35rem 0 0; padding-left: 1.2em; }
+.mc-product-parent-mapping .parent-range-list li { margin: 0 0 .18rem; font-variant-numeric: tabular-nums; }
+.mc-product-parent-mapping .parent-review-subnote { display: block; margin-top: .3rem; color: var(--catalog-muted); }

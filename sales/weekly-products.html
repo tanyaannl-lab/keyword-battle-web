@@ -69,9 +69,12 @@
         <p class="catalog-path">每周报表 <span aria-hidden="true">›</span> 利润表</p>
         <div class="catalog-cost-heading">
           <h1 id="product-catalog" tabindex="-1">产品目录</h1>
-          <a class="catalog-button catalog-back" href="./weekly-product-cost-batch.html">批量更新成本</a>
+          <div class="catalog-cost-actions">
+            <a class="catalog-button catalog-back" href="./weekly-product-parent-mapping.html">维护父 ASIN</a>
+            <a class="catalog-button catalog-back" href="./weekly-product-cost-batch.html">批量更新成本</a>
+          </div>
         </div>
-        <p class="catalog-intro">查看 MC 美国站产品的父子 ASIN、负责人和 SKU，或打开「成本参数」按日期填写费用。</p>
+        <p class="catalog-intro">查看 MC 美国站产品的目录归属、负责人和 SKU。点击目录父 ASIN，可按美西日期维护经营明细和周结果的归属。</p>
       </header>
 
       <section id="catalog" aria-label="产品目录" hidden>
@@ -94,7 +97,7 @@
 
         <div id="catalogTable" class="catalog-items" hidden>
           <table class="catalog-table" aria-label="MC 美国站产品目录">
-            <thead><tr><th scope="col">子 ASIN</th><th scope="col">父 ASIN</th><th scope="col">负责人</th><th scope="col">SKU</th><th scope="col">成本参数</th></tr></thead>
+            <thead><tr><th scope="col">子 ASIN</th><th scope="col">目录父 ASIN</th><th scope="col">负责人</th><th scope="col">SKU</th><th scope="col">成本参数</th></tr></thead>
             <tbody id="catalogList"></tbody>
           </table>
         </div>
@@ -154,6 +157,6 @@
 <noscript><style>#loading{display:none}</style><p class="auth-loading">请启用 JavaScript 后查看产品目录。</p></noscript>
 <script src="../assets/config.js"></script>
 <script src="../assets/auth-client.js"></script>
-<script src="../assets/mc-product-catalog.js?v=20261117-daily1"></script>
+<script src="../assets/mc-product-catalog.js?v=20261117-parent1"></script>
 </body>
 </html>

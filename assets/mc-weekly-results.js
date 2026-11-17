@@ -189,6 +189,15 @@
       group.children.push({ owners: item.owners, searchText: normalize([item.parent_asin,item.asin,item.sku,...item.owners].join(' ')) });
       grouped.set(item.parent_asin, group);
     }
+    // The optional list is sourced from approved reporting overrides. Add
+    // navigation entries only for parents absent from the original catalog.
+    if (Array.isArray(data.report_parent_choices) && data.report_parent_choices.length <= 10000) {
+      for (const value of data.report_parent_choices) {
+        if (typeof value !== 'string' || !asin.test(value) || grouped.has(value)) continue;
+        grouped.set(value, { parent:value, owners:new Set(), ruleOnly:true,
+          children:[{owners:[],searchText:normalize(value)}] });
+      }
+    }
     const compare = (a,b) => collator.compare(a,b);
     return {
       groups: new Map([...grouped].sort(([a],[b]) => compare(a,b)).map(([key,group]) => [key, {...group, owners:[...group.owners].sort(compare)}])),
@@ -245,7 +254,13 @@
       const tr = document.createElement('tr');
       const line = listRows.get(group.parent);
       const ad = listAds.get(group.parent);
-      makeCell(tr, '').append(productButton(group.parent, group.parent));
+      const parentCell = makeCell(tr, '');
+      parentCell.append(productButton(group.parent, group.parent));
+      if (group.ruleOnly) {
+        const label = document.createElement('small');
+        label.textContent = ' · 归属维护';
+        parentCell.append(label);
+      }
       makeCell(tr, groupLabel(group));
       makeCell(tr, format(line?.sales, usd), true);
       makeCell(tr, format(line?.orders, integer), true);

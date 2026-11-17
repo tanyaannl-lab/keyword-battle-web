@@ -233,7 +233,12 @@
       costLink.dataset.costAsin = row.asin;
       costLink.setAttribute('aria-label', `查看或修改 ${row.asin} 的成本参数`);
       costCell.append(costLink);
-      tr.append(cell(row.asin, 'catalog-asin'), cell(row.parent, 'catalog-asin'),
+      const parentCell = node('td', 'catalog-asin');
+      const parentLink = node('a', 'catalog-cost-link', row.parent);
+      parentLink.href = `./weekly-product-parent-mapping.html?asin=${encodeURIComponent(row.asin)}`;
+      parentLink.setAttribute('aria-label', `维护子 ASIN ${row.asin} 的报表归属，目录父 ASIN ${row.parent}`);
+      parentCell.append(parentLink);
+      tr.append(cell(row.asin, 'catalog-asin'), parentCell,
         cell(row.owners, 'catalog-owner'), cell(row.sku, 'catalog-sku'), costCell);
       result.append(tr);
     }

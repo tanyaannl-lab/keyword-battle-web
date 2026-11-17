@@ -433,14 +433,23 @@
       const catalog = await read('catalog',{},controller.signal);
       if (catalogRequest !== controller || controller.signal.aborted || !auth) return;
       const parents = new Set();
+      const ruleOnly = new Set();
       if (catalog !== null) {
         if (catalog?.store !== 'MC' || catalog.marketplace !== 'amazon.com' || !Array.isArray(catalog.products) || catalog.products.length > 10000) throw new TypeError('Invalid MC catalog');
         for (const item of catalog.products) if (typeof item?.parent_asin === 'string' && asinPattern.test(item.parent_asin)) parents.add(item.parent_asin);
+        if (Array.isArray(catalog.report_parent_choices) && catalog.report_parent_choices.length <= 10000) {
+          for (const value of catalog.report_parent_choices) {
+            if (typeof value !== 'string' || !asinPattern.test(value) || parents.has(value)) continue;
+            parents.add(value);
+            ruleOnly.add(value);
+          }
+        }
       }
       const selected = ui.skuParent.value;
       if (selected) parents.add(selected);
       else if (preferred && asinPattern.test(preferred)) parents.add(preferred);
-      ui.skuParent.replaceChildren(new Option('全部父 ASIN',''), ...[...parents].sort().map(value => new Option(value,value)));
+      ui.skuParent.replaceChildren(new Option('全部父 ASIN',''), ...[...parents].sort().map(value =>
+        new Option(ruleOnly.has(value) ? `${value}（归属维护）` : value,value)));
       ui.skuParent.value = selected;
     } catch (error) {
       if (catalogRequest === controller && !controller.signal.aborted && auth && error?.status === 401) reportError(error,true);
