@@ -9,7 +9,7 @@
   const percent = new Intl.NumberFormat('en-US', { style: 'percent', maximumFractionDigits: 2 });
   const sourceNotice = '同一父 ASIN 的周数据。销售额为已订购商品销售额，订单商品数不等于独立订单数；会话数为各子 ASIN 会话数之和。周报未齐时暂不汇总。';
   const spNotice = 'SP 指商品推广，订单和销售额采用 7 天归因，可能包含其他 SKU。仅展示明确归属当前父 ASIN 的数据。';
-  const weeklyProfitNotice = '周利润按当前产品目录成本估算，扣除本周已归属广告费及本表的三项周费用。每日费用只用于每日明细；未纳入独立促销、退款或结算调整。所需数据不齐时显示「—」。';
+  const weeklyProfitNotice = '周利润按各子 ASIN 每天的成本逐日估算后汇总，再扣除本周已归属广告费和本表的三项周费用。每日费用只用于每日明细；未纳入独立促销、退款或结算调整。缺少必要成本或其他数据时显示「—」。';
   const weeklyReturnsNotice = 'FBA 周退货率 = 全周收退件数 ÷ 全周发货件数。退货和发货数据都需齐全 7 天；当周无发货时显示「—」。该比率反映当周进出量。';
   const channelOrder = ['SP', 'SB', 'SD'];
   const otherAdChannels = channelOrder.slice(1);
@@ -614,7 +614,7 @@
     });
     const trafficNote = '订单取销售流量报表的订单商品数，不等于独立订单数。总访客数取各子 ASIN 会话数之和，未去重。转化 = 订购件数 ÷ 会话数；APP 流量占比 = APP 会话数 ÷ 会话数。';
     const orderEstimateNote = '运营估算：自然订单 = 订单商品数 − 广告归因订单，两项占比均除以订单商品数。广告订单超过订单商品数时，广告占比按原值显示，自然订单及其占比留空。';
-    const profitNote = '预估利润按当前目录的商品成本、头程、FBA 配送费、佣金和税率，并扣除当日已归属广告费、测评费用、站外费用和其他费用。费用单位为 USD。未纳入独立促销、退款或结算调整。毛利率 = 预估利润 ÷ 销售额；所需数据缺失显示「—」。';
+    const profitNote = '预估利润取各子 ASIN 当天的成本参数，扣除当日已归属广告费、测评费用、站外费用和其他费用。手动费用单位为 USD。未纳入独立促销、退款或结算调整。毛利率 = 预估利润 ÷ 销售额；缺少必要成本或其他数据时显示「—」。';
     const returnsNote = 'FBA 退货率 = 当天仓库收到的 FBA 退货件数 ÷ 当天 FBA 发货件数。反映当日进出量，不是同一批订单的退货率；缺报表或当天无发货时显示「—」。';
     renderTable(target, {
       columns: dailyColumns, rows: dailyRows, label: '每日销售与流量',
@@ -755,7 +755,7 @@
       ],
       rows:summaryRows,week,label:daily ? 'SKU 每日明细核对' : 'SKU 周总结核对',
       note:[coverage,periodNote,sku?.error,
-        `订单毛利已扣 SP 和交易退款，再扣除${manual}。交易毛利按交易净额估算，已扣 SP，未扣手动费用。两项毛利都扣除能归属本产品的 SB、SD 广告费；如读取失败或已归属的广告缺花费，毛利留空。订单毛利率以订单列表销售额为分母。`,
+        `成本按子 ASIN 和对应日期读取，周毛利按天汇总。必要成本未填时，受影响的毛利留空。订单毛利已扣 SP 和交易退款，再扣除${manual}。交易毛利按交易净额估算，已扣 SP，未扣手动费用。两项毛利都扣除能归属本产品的 SB、SD 广告费；如读取失败或已归属的广告缺花费，毛利留空。订单毛利率以订单列表销售额为分母。`,
         'BR 订单商品数和两项 SKU 单数合计均不能当作去重后的父 ASIN 订单数。自然单按 BR 订单商品数减广告归因订单估算。',
         returnNote,daily ? (returns?.error ? '暂时无法读取 FBA 退货和发货数据。' : '') : weeklyFba.note,
         feeUnavailable ? `无法读取${manual}，订单毛利估算留空。` : '',
