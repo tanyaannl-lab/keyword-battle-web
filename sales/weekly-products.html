@@ -9,6 +9,7 @@
   <link rel="stylesheet" href="../assets/workspace-nav.css?v=20261110">
   <link rel="stylesheet" href="../assets/mc-weekly-source-nav.css?v=20261113-1">
   <link rel="stylesheet" href="../assets/mc-product-catalog.css?v=20261117-daily1">
+  <link rel="stylesheet" href="../assets/mc-product-catalog-manage.css?v=20261118-names1">
 </head>
 <body>
 <div class="shell workspace-shell workspace-sales" id="appShell" hidden>
@@ -70,18 +71,19 @@
         <div class="catalog-cost-heading">
           <h1 id="product-catalog" tabindex="-1">产品目录</h1>
           <div class="catalog-cost-actions">
-            <a class="catalog-button catalog-back" href="./weekly-product-parent-mapping.html">维护父 ASIN</a>
+            <button class="catalog-button catalog-button-primary" type="button" id="cmAdd" disabled>新增产品</button>
+            <a class="catalog-button catalog-back" href="./weekly-product-parent-mapping.html">历史归属记录</a>
             <a class="catalog-button catalog-back" href="./weekly-product-cost-batch.html">批量更新成本</a>
           </div>
         </div>
-        <p class="catalog-intro">查看 MC 美国站产品的目录归属、负责人和 SKU。点击目录父 ASIN，可按美西日期维护经营明细和周结果的归属。</p>
+        <p class="catalog-intro">可以逐行维护产品，也可以勾选或导入 CSV 批量处理，每批最多 100 行。运营名称和负责人分别保存；产品简称可由运营后续补填。</p>
       </header>
 
       <section id="catalog" aria-label="产品目录" hidden>
         <div class="catalog-controls" role="group" aria-label="筛选产品">
           <label class="catalog-field" for="search">
             <span>搜索产品</span>
-            <input id="search" type="search" maxlength="200" autocomplete="off" placeholder="子 ASIN、父 ASIN、负责人或 SKU">
+            <input id="search" type="search" maxlength="200" autocomplete="off" placeholder="ASIN、SKU、负责人、运营名称或产品简称">
           </label>
           <label class="catalog-field" for="owner">
             <span>负责人</span>
@@ -90,14 +92,73 @@
           <button class="catalog-button" id="clearFilters" type="button">清除筛选</button>
         </div>
 
+        <div class="cm-bar" aria-label="产品批量管理">
+          <span id="cmSelected" class="cm-count" aria-live="polite">已选 0 行</span>
+          <button type="button" id="cmFiltered" class="catalog-button">选择筛选结果</button>
+          <button type="button" id="cmClear" class="catalog-button" disabled>清除选择</button>
+          <button type="button" id="cmBatch" class="catalog-button" disabled>批量修改</button>
+          <button type="button" id="cmDrop" class="catalog-button cm-danger" disabled>批量删除</button>
+          <button type="button" id="cmImport" class="catalog-button">导入 CSV</button>
+          <button type="button" id="cmExport" class="catalog-button">导出筛选结果</button>
+        </div>
+        <p id="cmNotice" class="catalog-status" role="status" hidden></p>
+        <section id="cmPanel" aria-labelledby="cmTitle" class="cm-panel" hidden>
+          <div class="cm-titlebar"><h2 id="cmTitle" tabindex="-1"></h2><button id="cmClose" type="button" class="catalog-button">取消</button></div>
+          <p id="cmDesc" class="cm-help"></p>
+          <button type="button" id="cmSiblings" class="catalog-button" hidden>一起修改该子 ASIN 的所有 SKU</button>
+          <div id="cmSingle" class="cm-grid" hidden>
+            <label class="catalog-field">子 ASIN<input id="cmAsin" maxlength="10" autocomplete="off" spellcheck="false"></label>
+            <label class="catalog-field">目录父 ASIN<input id="cmParent" maxlength="10" autocomplete="off" spellcheck="false"></label>
+            <label class="catalog-field">卖家 SKU<input id="cmSku" maxlength="128" autocomplete="off" spellcheck="false"></label>
+            <label class="catalog-field">负责人（每行一位，可留空）<textarea id="cmOwners" rows="2" maxlength="6600"></textarea></label>
+            <label class="catalog-field">运营名称<input id="cmOperator" maxlength="320" autocomplete="off" placeholder="可留空"></label>
+            <label class="catalog-field">产品简称<input id="cmShortName" maxlength="320" autocomplete="off" placeholder="可由运营后续补填"></label>
+          </div>
+          <div id="cmMulti" class="cm-grid" hidden>
+            <div><label class="cm-option"><input id="cmSetParent" type="checkbox">统一修改父 ASIN</label><label class="catalog-field"><span>新父 ASIN</span><input id="cmNewParent" maxlength="10" autocomplete="off" spellcheck="false" disabled></label></div>
+            <div><label class="cm-option"><input id="cmSetOwners" type="checkbox">替换负责人</label><label class="catalog-field"><span>新负责人（每行一位；留空会清除负责人）</span><textarea id="cmNewOwners" rows="2" maxlength="6600" disabled></textarea></label></div>
+            <div><label class="cm-option"><input id="cmSetOperator" type="checkbox">替换运营名称</label><label class="catalog-field"><span>新运营名称（留空会清除）</span><input id="cmNewOperator" maxlength="320" autocomplete="off" disabled></label></div>
+            <div><label class="cm-option"><input id="cmSetShortName" type="checkbox">替换产品简称</label><label class="catalog-field"><span>新产品简称（留空会清除）</span><input id="cmNewShortName" maxlength="320" autocomplete="off" disabled></label></div>
+          </div>
+          <div id="cmReport" class="cm-report" hidden>
+            <label class="cm-option"><input type="checkbox" id="cmBind">确认报表日期内的父 ASIN 归属</label>
+            <p class="cm-help">只纠正历史归属：保留目录字段，勾选此项，填写报表父 ASIN 和美西起止日期。日期内同一子 ASIN 的所有 SKU 将采用该归属，覆盖原有人工规则。</p>
+            <div class="cm-dates" id="cmDates" hidden>
+              <label class="catalog-field">报表父 ASIN<input id="cmReportParent" maxlength="10" autocomplete="off" placeholder="默认使用本行目录父 ASIN"></label>
+              <label class="catalog-field">开始日期（含）<input id="cmStart" type="date" min="2000-01-03" max="2099-12-31"></label>
+              <label class="catalog-field">结束日期（含）<input id="cmEnd" type="date" min="2000-01-03" max="2099-12-31"></label>
+              <label class="cm-option"><input id="cmLong" type="checkbox">长期生效</label>
+            </div>
+          </div>
+          <div id="cmCsv" hidden>
+            <div class="cm-bar">
+              <label class="catalog-field">文件格式<select id="cmFormat"><option value="manage">管理模板 CSV（新增、修改、删除）</option><option value="source">运营产品源表 CSV（新增或更新）</option></select></label>
+              <button type="button" class="catalog-button" id="cmTemplate">下载空白管理模板</button><label class="catalog-field">选择 CSV（UTF-8）<input id="cmFile" type="file" accept=".csv,text/csv"></label></div>
+            <p id="cmSourceHelp" class="cm-help" hidden>在 Excel 中将要导入的工作表另存为 CSV UTF-8。按子 ASIN 和 SKU 匹配，最多 100 行。没有出现在本次文件中的产品保留；已有行的负责人、运营名称或产品简称留空时也保留。此入口不更新成本和公司 SKU。</p>
+            <p id="cmManageHelp" class="cm-help">一次最多提交 100 行。编辑导出的目录时，填写操作「新增」「修改」或「删除」；操作留空的行会跳过。修改或删除时保留原子 ASIN 和原 SKU。修改行要清空负责人，请填 []。新版 CSV 的「运营名称」「产品简称」在修改行留空表示清除；旧模板没有这两列时保留原值。</p>
+          </div>
+          <p id="cmStatus" class="catalog-status" role="status" aria-atomic="true" hidden></p>
+          <button id="cmReload" type="button" class="catalog-button" hidden>重新读取目录（清除当前草稿）</button>
+          <div id="cmReview" class="cm-review" hidden>
+            <h3>核对本次变更</h3>
+            <p id="cmTotals" class="cm-help"></p>
+            <div id="cmUnverified" hidden>
+              <p class="cm-help" id="cmOriginalWarning"></p>
+              <label class="cm-option"><input id="cmAcceptOriginal" type="checkbox">我已逐行核对数据库当前值与 CSV 内容，确认使用这些修改或删除。</label>
+            </div>
+            <div class="catalog-items"><table class="cm-preview-table"><thead><tr><th scope="col">操作</th><th scope="col">修改前</th><th scope="col">修改后</th><th scope="col">原指定归属 → 新归属（美西）</th></tr></thead><tbody id="cmPreviewRows"></tbody></table></div>
+          </div>
+          <div class="cm-actions"><button type="button" id="cmPreview" class="catalog-button">预览变更</button><button type="button" id="cmSave" class="catalog-button catalog-button-primary" disabled>确认保存</button></div>
+        </section>
+
         <div class="catalog-overview">
           <p class="catalog-summary" id="summary" aria-live="polite" aria-atomic="true"></p>
-          <p class="catalog-snapshot">目录日期 <time id="snapshotDate">—</time></p>
+          <p class="catalog-snapshot">来源目录日期 <time id="snapshotDate">—</time></p>
         </div>
 
         <div id="catalogTable" class="catalog-items" hidden>
           <table class="catalog-table" aria-label="MC 美国站产品目录">
-            <thead><tr><th scope="col">子 ASIN</th><th scope="col">目录父 ASIN</th><th scope="col">负责人</th><th scope="col">SKU</th><th scope="col">成本参数</th></tr></thead>
+            <thead><tr><th scope="col"><input type="checkbox" id="cmPage" aria-label="选择本页产品"></th><th scope="col">子 ASIN</th><th scope="col">目录父 ASIN</th><th scope="col">负责人</th><th scope="col">运营名称</th><th scope="col">产品简称</th><th scope="col">SKU</th><th scope="col">成本参数</th><th scope="col">操作</th></tr></thead>
             <tbody id="catalogList"></tbody>
           </table>
         </div>
@@ -157,6 +218,9 @@
 <noscript><style>#loading{display:none}</style><p class="auth-loading">请启用 JavaScript 后查看产品目录。</p></noscript>
 <script src="../assets/config.js"></script>
 <script src="../assets/auth-client.js"></script>
-<script src="../assets/mc-product-catalog.js?v=20261117-parent1"></script>
+<script src="../assets/mc-product-catalog-manage-csv.js?v=20261118-names1"></script>
+<script src="../assets/mc-product-catalog-source-csv.js?v=20261118-names1"></script>
+<script src="../assets/mc-product-catalog-manage.js?v=20261118-names1"></script>
+<script src="../assets/mc-product-catalog.js?v=20261118-names1"></script>
 </body>
 </html>

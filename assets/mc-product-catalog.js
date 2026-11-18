@@ -45,7 +45,25 @@
   let products = [];
   let parentCount = 0;
   let page = 0;
-  let searchTimer = 0;
+
+  const manager = window.MCProductCatalogManage?.mount({
+    getAuth: () => auth,
+    getProducts: () => products,
+    setFiltersBusy: busy => {
+      ui.search.disabled = ui.owner.disabled = busy;
+      ui.clearFilters.disabled = busy || (!ui.search.value && !ui.owner.value);
+    },
+    getVisible: () => filteredRows(),
+    getPage: () => filteredRows().slice(page * pageSize, (page + 1) * pageSize),
+    render: () => render(),
+    reload: session => {
+      if (!auth?.user?.id || session?.user?.id !== auth.user.id || !session.session?.access_token) return false;
+      auth = session;
+      return loadCatalog(true);
+    },
+    saveRefreshFailed: summary => status(summary+' 目录暂未刷新，请点「重新加载」核对，无需再次保存。','warning',true),
+    signedOut: () => { hidePrivateData(); location.replace(login); },
+  });
 
   function node(tag, className, content) {
     const element = document.createElement(tag);
@@ -63,7 +81,7 @@
   }
 
   function clearCatalog() {
-    clearTimeout(searchTimer);
+    manager?.reset();
     catalogLoaded = false;
     products = [];
     parentCount = 0;
@@ -172,7 +190,14 @@
     if (!Array.isArray(values) || values.length > 30) {
       throw new Error('产品目录数据格式有误，请联系管理员。');
     }
-    return [...new Set(values.map(value => checkedText(value)))].sort(sort);
+    return [...new Set(values.map(value => checkedText(value)))];
+  }
+
+  function catalogLabel(value) {
+    if (value == null || value === '') return '';
+    if (typeof value !== 'string' || value !== value.trim() || [...value].length > 160 || /[\u0000-\u001F\u007F-\u009F]/u.test(value))
+      throw new Error('产品目录的运营名称或产品简称格式有误。');
+    return value;
   }
 
   function parseCatalog(data) {
@@ -180,7 +205,7 @@
       ? new Date(`${data.snapshot_date}T00:00:00Z`) : null;
     if (!date || !Number.isFinite(+date) || date.toISOString().slice(0, 10) !== data.snapshot_date ||
         data.store !== 'MC' || data.marketplace !== 'amazon.com' ||
-        !Array.isArray(data.products) || !data.products.length || data.products.length > 20000) {
+        !Array.isArray(data.products) || data.products.length > 20000) {
       throw new Error('产品目录数据格式有误，请联系管理员。');
     }
     const rows = [];
@@ -196,8 +221,9 @@
       const key = `${item.asin}\0${sku}`;
       if (keys.has(key)) throw new Error('产品目录存在重复商品，请联系管理员。');
       keys.add(key);
-      const row = { asin: item.asin, parent: item.parent_asin, sku, owners: checkedOwners(item.owners) };
-      row.searchText = normalize([row.asin, row.parent, ...row.owners, row.sku].join(' '));
+      const row = { asin: item.asin, parent: item.parent_asin, sku, owners: checkedOwners(item.owners),
+        operator_name:catalogLabel(item.operator_name), product_short_name:catalogLabel(item.product_short_name) };
+      row.searchText = normalize([row.asin, row.parent, ...row.owners, row.sku, row.operator_name, row.product_short_name].join(' '));
       row.owners.forEach(owner => owners.add(owner));
       parents.add(row.parent);
       rows.push(row);
@@ -213,15 +239,20 @@
     return td;
   }
 
-  function render() {
-    if (ui.catalog.hidden || !auth) return;
+  function filteredRows() {
     const tokens = normalize(ui.search.value.trim()).split(/\s+/).filter(Boolean);
     const owner = ui.owner.value;
-    const visible = products.filter(row => (!owner || row.owners.includes(owner)) && tokens.every(token => row.searchText.includes(token)));
+    return products.filter(row => (!owner || row.owners.includes(owner)) && tokens.every(token => row.searchText.includes(token)));
+  }
+
+  function render() {
+    if (ui.catalog.hidden || !auth) return;
+    const filtered = !!ui.search.value.trim() || !!ui.owner.value;
+    const visible = filteredRows();
     const pageCount = Math.ceil(visible.length / pageSize);
     page = Math.min(Math.max(page, 0), Math.max(pageCount - 1, 0));
-    ui.clearFilters.disabled = !ui.search.value && !owner;
-    ui.summary.textContent = tokens.length || owner
+    ui.clearFilters.disabled = !ui.search.value && !ui.owner.value;
+    ui.summary.textContent = filtered
       ? `找到 ${visible.length} / ${products.length} 个子商品`
       : `${parentCount} 个父款 · ${products.length} 个子商品`;
     const result = document.createDocumentFragment();
@@ -233,13 +264,12 @@
       costLink.dataset.costAsin = row.asin;
       costLink.setAttribute('aria-label', `查看或修改 ${row.asin} 的成本参数`);
       costCell.append(costLink);
-      const parentCell = node('td', 'catalog-asin');
-      const parentLink = node('a', 'catalog-cost-link', row.parent);
-      parentLink.href = `./weekly-product-parent-mapping.html?asin=${encodeURIComponent(row.asin)}`;
-      parentLink.setAttribute('aria-label', `维护子 ASIN ${row.asin} 的报表归属，目录父 ASIN ${row.parent}`);
-      parentCell.append(parentLink);
-      tr.append(cell(row.asin, 'catalog-asin'), parentCell,
-        cell(row.owners, 'catalog-owner'), cell(row.sku, 'catalog-sku'), costCell);
+      const parentCell = cell(row.parent, 'catalog-asin');
+      const selectCell = node('td'), actions = node('td', 'cm-links');
+      manager?.decorate(row, selectCell, actions);
+      tr.append(selectCell, cell(row.asin, 'catalog-asin'), parentCell,
+        cell(row.owners, 'catalog-owner'), cell(row.operator_name || empty,'catalog-label'),
+        cell(row.product_short_name || empty,'catalog-label'), cell(row.sku, 'catalog-sku'), costCell, actions);
       result.append(tr);
     }
     ui.catalogList.replaceChildren(result);
@@ -248,13 +278,15 @@
     ui.prevPage.disabled = page === 0;
     ui.nextPage.disabled = page + 1 >= pageCount;
     ui.pageInfo.textContent = pageCount > 1 ? `第 ${page + 1} / ${pageCount} 页` : '';
-    status(visible.length ? '' : '没有找到匹配的产品。试试其他关键词，或清除筛选。');
+    manager?.refresh();
+    status(visible.length ? '' : products.length ? '没有找到匹配的产品。试试其他关键词，或清除筛选。' : '目录暂时没有产品，点击「新增产品」或「导入 CSV」开始。');
   }
 
-  async function loadCatalog() {
+  async function loadCatalog(keepFilters = false) {
     if (!auth || request) return;
     const controller = new AbortController();
     request = controller;
+    const prior = keepFilters ? { search: ui.search.value, owner: ui.owner.value, page } : null;
     clearCatalog();
     status('正在读取 MC 产品目录…');
     try {
@@ -278,8 +310,14 @@
       ui.owner.append(...parsed.owners.map(owner => new Option(owner, owner)));
       ui.snapshotDate.textContent = data.snapshot_date;
       ui.snapshotDate.dateTime = data.snapshot_date;
+      if (prior) {
+        ui.search.value = prior.search;
+        if (parsed.owners.includes(prior.owner)) ui.owner.value = prior.owner;
+        page = prior.page;
+      }
       catalogLoaded = true;
       showRoute();
+      return true;
     } catch (error) {
       if (request !== controller || controller.signal.aborted) return;
       const message = error.name === 'TimeoutError' ? '读取产品目录超时，请重试。'
@@ -305,6 +343,7 @@
       return;
     }
 
+    manager?.reset();
     activeCostAsin = asin;
     ui.catalog.hidden = true;
     ui.catalogHeading.hidden = true;
@@ -483,14 +522,14 @@
   }
 
   ui.search.addEventListener('input', () => {
-    clearTimeout(searchTimer);
-    searchTimer = setTimeout(resetPage, 100);
+    manager?.filterChanged();
+    resetPage();
   });
-  ui.owner.addEventListener('change', resetPage);
+  ui.owner.addEventListener('change', () => { manager?.filterChanged(); resetPage(); });
   ui.clearFilters.addEventListener('click', () => {
-    clearTimeout(searchTimer);
     ui.search.value = '';
     ui.owner.value = '';
+    manager?.filterChanged();
     resetPage();
     ui.search.focus();
   });
