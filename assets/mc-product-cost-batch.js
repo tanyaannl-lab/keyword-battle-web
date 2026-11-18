@@ -8,7 +8,10 @@
     'batchCoverageResult','batchCoverageSummary','batchCoverageGaps','batchCoverageDays','batchCoverageExport',
     'batchCoveragePartField','batchCoveragePart','batchCoverageDownload','batchCoverageDetailDownload','batchCoverageExportHelp',
     'batchCoverageTable','batchCoverageRows','batchCoveragePager','batchCoveragePrevious','batchCoveragePageInfo',
-    'batchCoverageNext'];
+    'batchCoverageNext','batchMode','batchRangeOptions','batchRangeStart','batchRangeEnd','batchPolicy',
+    'batchTemplatePanel','batchTemplateDateField','batchManualPanel','batchFileField','batchAsins','batchSampleInfo','batchInputHeading',
+    'batchRatePanel','batchRateMode','batchOverwriteCheck','batchOverwriteField','batchCatalogPicker','batchFind','batchFindAdd','batchFindStatus','batchFindList',
+    ...Array.from({length:6},(_,i)=>'batchValue'+i)];
   const ui = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
   const origin = 'https://peykqsnlistkhrqsiulx.supabase.co';
   const login = '../index.html';
@@ -19,6 +22,8 @@
   const previewRpc = 'mc_product_catalog_cost_daily_batch_preview';
   const saveRpc = 'mc_product_catalog_cost_daily_batch_save';
   const coverageRpc = 'mc_product_catalog_cost_daily_coverage_read';
+  const rangePreviewRpc='mc_product_catalog_cost_range_preview';
+  const rangeSaveRpc='mc_product_catalog_cost_range_save';
   const fields = [
     ['exchange_rate','汇率',1000000],['product_cost_rmb','产品成本（RMB）',100000000],
     ['inbound_cost_rmb','头程（RMB）',100000000],['fba_fee','FBA 费用（USD）',100000000],
@@ -42,6 +47,12 @@
   let generation = 0;
   let job = null;
   let templateJob = null;
+  let pickerJob = null;
+  let pickerItems = null;
+  const mode=()=>ui.batchMode.value;
+  const manual=()=>mode()==='manual';
+  const ranged=()=>mode()!=='dated';
+  const vInputs=fields.map((_,i)=>ui['batchValue'+i]);
   let coverageJob = null;
   let prepared = null;
   let page = 0;
@@ -82,12 +93,21 @@
 
   function updateControls() {
     const saving = job?.type === 'save';
-    ui.batchFile.disabled = !auth || saving;
-    ui.batchPreview.disabled = !auth || !ui.batchFile.files?.length || !!job;
-    ui.batchSave.disabled = !auth || !prepared || !prepared.changed || !!job;
+    ui.batchRangeOptions.hidden=!ranged();
+    ui.batchManualPanel.hidden=!manual();
+    ui.batchTemplatePanel.hidden=ui.batchFileField.hidden=manual();
+    ui.batchTemplateDateField.hidden=ranged();
+    ui.batchFile.required=!manual(); ui.batchRatePanel.hidden=manual(); ui.batchRateMode.disabled=manual()||saving||!auth;
+    ui.batchMode.disabled=!auth || saving;
+    for(const el of [ui.batchRangeStart,ui.batchRangeEnd,ui.batchPolicy]) el.disabled=!auth || saving || !ranged();
+    for(const el of [ui.batchAsins,ui.batchFind,...vInputs]) el.disabled=!auth || saving || !manual();
+    ui.batchFile.disabled = !auth || saving || manual();
+    ui.batchOverwriteCheck.disabled=saving || !auth;
+    ui.batchPreview.disabled = !auth || (manual() ? !ui.batchAsins.value.trim() || !vInputs.some(el=>el.value.trim()) : !ui.batchFile.files?.length) || !!job;
+    ui.batchSave.disabled = !auth || !prepared || !prepared.changed || (!!prepared.overwrite && !ui.batchOverwriteCheck.checked) || !!job;
     ui.batchDownloadCatalog.disabled = !auth || !!templateJob;
     ui.batchDownloadBlank.disabled = !auth || !!templateJob;
-    ui.batchTemplateDate.disabled = !auth || !!templateJob;
+    ui.batchTemplateDate.disabled = !auth || !!templateJob || ranged();
     ui.batchCoverageStart.disabled = !auth;
     ui.batchCoverageEnd.disabled = !auth;
     ui.batchCoverageRun.disabled = !auth || !!coverageJob;
@@ -110,6 +130,7 @@
     prepared = null;
     page = 0;
     ui.batchReview.hidden = true;
+    ui.batchOverwriteCheck.checked=false; ui.batchOverwriteField.hidden=true;
     ui.batchRows.replaceChildren();
     ui.batchSummary.textContent = '';
     ui.batchPageInfo.textContent = '';
@@ -120,10 +141,12 @@
     generation++;
     job?.controller.abort();
     templateJob?.controller.abort();
+    pickerJob?.controller.abort(); pickerJob=null; pickerItems=null; ui.batchCatalogPicker.open=false; ui.batchFind.value=''; ui.batchFindList.replaceChildren(); ui.batchFindStatus.textContent='';
     job = templateJob = auth = null;
     ui.appShell.hidden = true;
     ui.userEmail.textContent = '';
     ui.batchFile.value = '';
+    ui.batchAsins.value=''; vInputs.forEach(el=>el.value=''); ui.batchRangeStart.value=ui.batchRangeEnd.value='';
     ui.batchTemplateDate.value = '';
     ui.batchCoverageStart.value = ui.batchCoverageEnd.value = '';
     clearPreview();
@@ -143,7 +166,7 @@
     const forGeneration = generation;
     return {type, controller, user, current: () => generation === forGeneration && auth?.user.id === user &&
       !controller.signal.aborted &&
-      (type === 'coverage' ? coverageJob : type === 'template' ? templateJob : job)?.controller === controller};
+      (type === 'picker' ? pickerJob : type === 'coverage' ? coverageJob : type === 'template' ? templateJob : job)?.controller === controller};
   }
 
   class RpcError extends Error {
@@ -151,6 +174,7 @@
       super('MC_COST_BATCH_RPC');
       this.status = status;
       this.code = body?.code;
+      this.detailMessage=typeof body?.message==='string'?body.message:'';
       try { this.row = typeof body?.details === 'string' ? JSON.parse(body.details)?.row : body?.details?.row; }
       catch { this.row = undefined; }
     }
@@ -218,11 +242,20 @@
     if (error.status === 403 || error.code === '42501') return '当前账号没有更新 MC 产品成本的权限。';
     if (error.status === 404 || error.code === 'PGRST202') return '批量成本服务尚未启用，请联系管理员。';
     if (error.code === '40001') return `${prefix}数据已被他人修改，本批未写入。请重新预览。`;
+    if (error.code==='22023' && /^子 ASIN 不在当前 MC 目录中/.test(error.detailMessage))
+      return error.detailMessage.slice(0,220)+'。本批未写入。';
     if (error.code === '22023') return `${prefix}请核对该行的子 ASIN、日期或成本。${writing ? '本批未写入，请重新预览。' : '文件未写入。'}`;
     if (writing) return '未能确认保存结果。请重新预览，核对当前值后再操作。';
     if (error.name === 'TimeoutError') return '读取超时，请稍后重试。';
     if (error instanceof RpcError || error instanceof TypeError || error instanceof SyntaxError) return '暂时无法读取，请稍后重试。';
     return error.message || '暂时无法读取，请稍后重试。';
+  }
+
+  function importError(err,lines,writing=false) {
+    if(ranged() && (err.code==='PGRST202'||err.status===404))return '日期区间功能尚未启用，请先在 MC 数据库安装区间成本更新。';
+    let message=batchError(err,lines,writing);
+    if(manual())message=message.replace(/^CSV 第 (\d+) 行：/,'第 $1 个子 ASIN：');
+    return message;
   }
 
   function node(tag, text, className) {
@@ -233,7 +266,7 @@
   }
 
   function display(value, percent) {
-    if (value === null) return '—';
+    if (value === null || value === undefined) return '—';
     return percent ? `${Number((value*100).toFixed(4))}%` : String(value);
   }
 
@@ -241,7 +274,13 @@
     if (!prepared) return;
     const count = Math.ceil(prepared.rows.length / pageSize);
     ui.batchReview.hidden = false;
-    ui.batchSummary.textContent = summaryText(prepared.counts);
+    const range=prepared.range;
+    ui.batchSummary.textContent = (range ? range.start+' 至 '+range.end+'（美西，含首尾） · '+range.items.length+' 个子 ASIN × '+range.days+' 天，共 '+range.total+' 条每日记录。' : '')+summaryText(prepared.counts);
+    ui.batchSampleInfo.hidden=!range;
+    ui.batchInputHeading.textContent=manual()?'产品序号':'CSV 行';
+    if (range) ui.batchSampleInfo.textContent=(prepared.overwrite?'覆盖本次填写的字段':'只补空字段，已有值（包括 0）保留')+'。下方展示 '+prepared.rows.length+' 条样例，先列出已存成本的变更；上面的统计包含全部日期和产品。';
+    ui.batchOverwriteField.hidden=!prepared.overwrite;
+    if(prepared.rateNote)ui.batchSummary.textContent+='。'+prepared.rateNote;
     ui.batchPager.hidden = count <= 1;
     ui.batchPrevious.disabled = page === 0;
     ui.batchNext.disabled = page + 1 >= count;
@@ -343,6 +382,8 @@
   function coverageError(error) {
     if (error.status === 403 || error.code === '42501') return '当前账号没有检查 MC 产品成本的权限。';
     if (error.status === 404 || error.code === 'PGRST202') return '成本缺项检查尚未启用，请联系管理员。';
+    if (error.code==='22023' && /^子 ASIN 不在当前 MC 目录中/.test(error.detailMessage))
+      return error.detailMessage.slice(0,220)+'。本批未写入。';
     if (error.code === '22023') return '范围内记录太多或日期不再有效，请缩短日期范围后重新检查。';
     return batchError(error);
   }
@@ -394,61 +435,182 @@
     download(content,`MC-${details ? '缺项明细-仅供核对' : '缺项补录'}-${coverage.start}至${coverage.end}-${part + 1}of${parts}.csv`);
   }
 
+  function rangeDates() {
+    const start=ui.batchRangeStart.value,end=ui.batchRangeEnd.value,policy=ui.batchPolicy.value;
+    const days=(Date.parse(end)-Date.parse(start))/dayMs+1;
+    if(!validDate(start)||!validDate(end)||!Number.isInteger(days)||days<1||days>92)
+      throw new Error('请选择连续 1–92 天的美西日期，结束日期最晚为美西今天。');
+    if(!['fill_missing','overwrite'].includes(policy))throw new Error('请选择已有成本的处理方式。');
+    return {start,end,days,policy};
+  }
+
+  function enteredAsins(){
+    return [...new Set(ui.batchAsins.value.toUpperCase().trim().split(/[\s,，、;；]+/).filter(Boolean))];
+  }
+  function manualRows() {
+    const ids=enteredAsins();
+    if(!ids.length || ids.length>csv.MAX_ROWS)throw new Error('请填写 1–1,000 个子 ASIN。');
+    const bad=ids.find(v=>!asinPattern.test(v));
+    if(bad)throw new Error('无效的子 ASIN：'+bad.slice(0,30)+'。请填写 10 位数字或英文字母。');
+    const values=vInputs.map(el=>el.value.trim());
+    if(values.every(v=>!v))throw new Error('请至少填一个成本字段。');
+    const cells=values.map(v=>'"'+v.replace(/"/g,'""')+'"').join(',');
+    // Parse just one set of amounts with the same numeric and percentage rules as the CSV form.
+    let row;
+    try {row=csv.parse(csv.HEADERS.join(',')+'\n'+today()+','+ids[0]+','+cells,{today:today(),rateMode:'percent'})[0];}
+    catch(err){throw new Error(err.message.replace(/^CSV 第 \d+ 行：/,''));}
+    const out=ids.map(asin=>({asin,values:row.values}));
+    Object.defineProperty(out,'sourceLines',{value:ids.map((_,i)=>i+1)});
+    return out;
+  }
+
+  function decodeRange(data,range,payload,lines) {
+    const counts=summarize(data,range.total);
+    const bad=()=>{throw new Error('区间预览与选择的产品或日期不一致，请重新预览。');};
+    if(typeof data.token!=='string' || !/^[a-f0-9]{64}$/.test(data.token) ||
+       data.asin_count!==range.items.length||data.day_count!==range.days||data.total_count!==range.total||
+       !Array.isArray(data.rows)||data.rows.length!==Math.min(30,range.total))bad();
+    const inputs=new Map(range.items.map((v,i)=>[v.asin,{item:v,index:i}]));
+    const seen=new Set(), fieldKeys=fields.map(([k])=>k);
+    const sampleLines=[],sampleCounts={new:0,update:0,unchanged:0};
+    for(const row of data.rows){
+      if(!row || !inputs.has(row.asin) || !validDate(row.report_date)||row.report_date<range.start||row.report_date>range.end||
+        !Object.hasOwn(statusLabels,row.status)||!row.before||Array.isArray(row.before)||typeof row.before!=='object'||
+        !row.after||Array.isArray(row.after)||typeof row.after!=='object')bad();
+      const pair=row.report_date+':'+row.asin;
+      if(seen.has(pair))bad(); seen.add(pair);
+      const {item,index}=inputs.get(row.asin);
+      if([...Object.keys(row.before),...Object.keys(row.after)].some(k=>!fieldKeys.includes(k)))bad();
+      const changed=fieldKeys.some(k=>row.before[k]!==row.after[k]);
+      if((row.status==='new'&&Object.keys(row.before).length) || (row.status==='unchanged')===changed)bad();
+      for(const [key,,max] of fields){
+        const before=row.before[key],after=row.after[key];
+        for(const v of [before,after]) if(v!==undefined&&!(typeof v==='number'&&Number.isFinite(v)&&v>=(key==='exchange_rate'?0.000001:0)&&v<=max))bad();
+        const expected=range.policy==='fill_missing' ? before??item.values[key] : item.values[key]??before;
+        if(after!==expected)bad();
+      }
+      sampleLines.push(lines?.[index]??index+1);
+      sampleCounts[row.status]++;
+    }
+    if(['new','update','unchanged'].some((k,i)=>sampleCounts[k]>counts[i]))bad();
+    return {range,payload,token:data.token,rows:data.rows,lines:sampleLines,inputLines:lines,counts,
+      changed:counts[0]+counts[1],overwrite:range.policy==='overwrite'&&counts[1]>0};
+  }
+
+  function filteredPicker(){
+    const q=ui.batchFind.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    return (pickerItems||[]).filter(x=>q.every(term=>x.search.includes(term)));
+  }
+  function drawPicker(){
+    if(!pickerItems)return;
+    const list=filteredPicker(), q=ui.batchFind.value.trim();
+    ui.batchFindStatus.textContent='匹配 '+list.length+' 个子 ASIN，显示前 '+Math.min(list.length,30)+' 个。点击产品添加；也可以先搜索，再添加全部匹配。';
+    ui.batchFindAdd.disabled=!auth || job?.type==='save' || !q || !list.length || list.length>csv.MAX_ROWS;
+    ui.batchFindList.replaceChildren(...list.slice(0,30).map(item=>{
+      const b=node('button',item.asin+' · '+item.label,'catalog-button');
+      b.type='button'; b.addEventListener('click',()=>addAsins([item.asin]));return b;
+    }));
+  }
+  function addAsins(values){
+    if(!auth || !manual() || job?.type==='save' || !values.length)return;
+    const ids=[...new Set([...enteredAsins(),...values])];
+    if(ids.length>csv.MAX_ROWS){status(ui.batchStatus,'每次最多 1,000 个子 ASIN，请缩小匹配范围。','error');return;}
+    ui.batchAsins.value=ids.join('\n');fileChanged();
+  }
+  async function loadPicker(){
+    if(!auth || pickerJob || !manual())return;
+    if(pickerItems){drawPicker();return;}
+    const pending=control('picker');pickerJob=pending;
+    ui.batchFindStatus.textContent='正在读取目录…';
+    try{
+      const d=await rpc(catalogRpc,{},pending);
+      if(!pending.current())return;
+      if(d?.store!=='MC'||d.marketplace!=='amazon.com'||!Array.isArray(d.products)||d.products.length>20000)throw new Error('目录格式有误。');
+      const rows=new Map();
+      for(const r of d.products){
+        if(!asinPattern.test(r.asin)||typeof r.sku!=='string')continue;
+        const item=rows.get(r.asin)||{asin:r.asin,label:r.sku,search:''};
+        const pieces=[r.asin,r.sku,r.parent_asin,...(Array.isArray(r.owners)?r.owners:[]),r.operator_name,r.product_short_name];
+        item.search+=' '+pieces.filter(v=>typeof v==='string').join(' ').toLowerCase();rows.set(r.asin,item);
+      }
+      pickerItems=[...rows.values()];drawPicker();
+    }catch(e){if(pending.current())ui.batchFindStatus.textContent=batchError(e)+' 可直接粘贴子 ASIN，或重新展开目录重试。';}
+    finally{if(pickerJob===pending)pickerJob=null;}
+  }
+
   async function preview() {
     if (!auth || job) return;
-    const file = ui.batchFile.files?.[0];
-    if (!file) return;
+    const file = manual()?null:ui.batchFile.files?.[0];
+    if (!manual() && !file) return;
     clearPreview();
-    if (file.size > csv.MAX_BYTES) {
+    if (file && file.size > csv.MAX_BYTES) {
       status(ui.batchStatus,'CSV 文件超过 1 MB，请分批处理。','error');
       return;
     }
     const pending = control('preview');
     job = pending;
     updateControls();
-    status(ui.batchStatus,'正在检查 CSV 和查询当前成本…');
+    status(ui.batchStatus,'正在核对填写内容和已有成本…');
     let input;
     try {
-      const bytes = await file.arrayBuffer();
-      if (!pending.current()) return;
-      let text;
-      try { text = new TextDecoder('utf-8',{fatal:true}).decode(bytes); }
-      catch { throw new Error('无法读取此文件。请在 Excel 中另存为「CSV UTF-8」。'); }
-      input = csv.parse(text,{today:today()});
-      if (!input.length) throw new Error('没有可保存的记录，请填入至少一项成本。');
-      const data = await rpc(previewRpc,{p_rows:input},pending);
-      if (!pending.current()) return;
-      prepared = decodePreview(data,input);
+      const range=ranged()?rangeDates():null;
+      if(manual()) input=manualRows();
+      else {
+        const bytes=await file.arrayBuffer();
+        if(!pending.current())return;
+        const str=csv.decode(bytes);
+        input=range ? csv.parseRange(str,{today:today(),rateMode:ui.batchRateMode.value}) : csv.parse(str,{today:today(),rateMode:ui.batchRateMode.value});
+      }
+      if (!input.length) throw new Error('请填入至少一项成本。');
+      if(range) {
+        range.items=input.map(({asin,values})=>({asin,values}));
+        range.total=range.items.length*range.days;
+        const payload={p_start_date:range.start,p_end_date:range.end,p_mode:range.policy,p_rows:range.items};
+        const data=await rpc(rangePreviewRpc,payload,pending);
+        if(!pending.current())return;
+        prepared=decodeRange(data,range,payload,input.sourceLines);
+      } else {
+        const data=await rpc(previewRpc,{p_rows:input},pending);
+        if(!pending.current())return;
+        prepared=decodePreview(data,input);
+      }
+      const rateNotes=[];
+      for(const [key,label] of [['commission_rate','佣金率'],['vat_rate','VAT 税率']]){
+        const rates=[...new Set(input.map(row=>row.values[key]).filter(v=>v!==undefined))].sort((a,b)=>a-b);
+        if(rates.length)rateNotes.push(label+' '+rates.slice(0,5).map(v=>display(v,true)).join('、')+(rates.length>5?' 等 '+rates.length+' 种':''));
+      }
+      prepared.rateNote=rateNotes.length?'本次填写：'+rateNotes.join('；'):'';
       render();
       status(ui.batchStatus,prepared.changed ? '预览完成，请核对下方变更。' : '所有记录都无变化，无需保存。','success');
     } catch (error) {
-      if (pending.current()) status(ui.batchStatus,batchError(error,input?.sourceLines),'error');
+      if (pending.current()) status(ui.batchStatus,importError(error,input?.sourceLines),'error');
     } finally {
       if (job === pending) { job = null; updateControls(); }
     }
   }
 
   async function save() {
-    if (!auth || job || !prepared?.changed) return;
+    if (!auth || job || !prepared?.changed || (prepared.overwrite && !ui.batchOverwriteCheck.checked)) return;
     const accepted = prepared;
     const pending = control('save');
     job = pending;
     updateControls();
     status(ui.batchStatus,'正在批量保存，请稍候…');
     try {
-      const data = await rpc(saveRpc,{p_rows:accepted.patches},pending);
+      const data = await rpc(accepted.range ? rangeSaveRpc : saveRpc,accepted.range ? {...accepted.payload,p_token:accepted.token} : {p_rows:accepted.patches},pending);
       if (!pending.current()) return;
-      const outcome = summarize(data,accepted.patches.length);
+      const outcome = summarize(data,accepted.range?.total ?? accepted.patches.length);
+      if(accepted.range && (!data?.saved || data.asin_count!==accepted.range.items.length || data.day_count!==accepted.range.days || data.total_count!==accepted.range.total)) throw new Error('保存结果与预览不匹配');
       if (outcome.some((count,index) => count !== accepted.counts[index])) throw new Error('结果与预览不匹配');
       clearPreview();
       if (coverage || coverageJob) clearCoverage('成本已更新，请重新检查剩余缺项。');
-      ui.batchFile.value = '';
-      status(ui.batchStatus,`批量保存成功。${summaryText(outcome)}。`,'success');
+      if(!manual()){ui.batchFile.value='';ui.batchRateMode.value='auto';}
+      status(ui.batchStatus,`批量保存成功。${accepted.range?accepted.range.start+' 至 '+accepted.range.end+'（美西），已逐日保存。':''}${summaryText(outcome)}。`,'success');
     } catch (error) {
       if (!pending.current()) return;
       clearPreview();
       if (coverage || coverageJob) clearCoverage('保存结果已变化或暂无法确认，请重新检查剩余缺项。');
-      status(ui.batchStatus,batchError(error,accepted.lines,true),'error');
+      status(ui.batchStatus,importError(error,accepted.inputLines??accepted.lines,true),'error');
     } finally {
       if (job === pending) { job = null; updateControls(); }
     }
@@ -476,11 +638,12 @@
   async function template(includeCatalog) {
     if (!auth || templateJob) return;
     if (!includeCatalog) {
-      download(csv.template({reportDate:today(),asins:[]}),'MC-每日成本-空白模板.csv');
+      if(ranged())download(csv.templateRange({asins:[]}),'MC-区间成本-空白模板.csv');
+      else download(csv.template({reportDate:today(),asins:[]}),'MC-每日成本-空白模板.csv');
       status(ui.batchTemplateStatus,'已生成空白模板。','success');
       return;
     }
-    const date = ui.batchTemplateDate.value;
+    const date = ranged()?today():ui.batchTemplateDate.value;
     if (!validDate(date)) {
       status(ui.batchTemplateStatus,'请选择有效的美西日期，不可晚于美西今天。','error');
       return;
@@ -498,8 +661,9 @@
       }
       const asins = [...new Set(data.products.map(item => item.asin))].sort();
       if (asins.length > csv.MAX_ROWS) throw new Error(`目录超过 ${csv.MAX_ROWS} 个子 ASIN，请用空白模板分批填写。`);
-      download(csv.template({reportDate:date,asins}),`MC-每日成本-${date}-目录模板.csv`);
-      status(ui.batchTemplateStatus,`已生成 ${date} 的目录模板，含 ${asins.length} 个子 ASIN。`,'success');
+      if(ranged())download(csv.templateRange({asins}), 'MC-区间成本-目录模板.csv');
+      else download(csv.template({reportDate:date,asins}),`MC-每日成本-${date}-目录模板.csv`);
+      status(ui.batchTemplateStatus,ranged()?`已生成目录模板，含 ${asins.length} 个子 ASIN。每个产品只填一次，日期以页面选择为准。`:`已生成 ${date} 的目录模板，含 ${asins.length} 个子 ASIN。`,'success');
     } catch (error) {
       if (pending.current()) status(ui.batchTemplateStatus,batchError(error),'error');
     } finally {
@@ -513,7 +677,7 @@
     ui.loading.textContent = '正在验证登录状态…';
     if (![origin,`${origin}/`].includes(config?.SUPABASE_URL) ||
         !/^sb_publishable_[A-Za-z0-9_-]+$/.test(config?.SUPABASE_PUBLISHABLE_KEY || '') ||
-        typeof br?.requireAuth !== 'function' || typeof csv?.parse !== 'function' || typeof csv?.template !== 'function') {
+        typeof br?.requireAuth !== 'function' || !['parse','parseRange','decode','template','templateRange'].every(k=>typeof csv?.[k]==='function')) {
       ui.loading.textContent = '批量成本工具未加载，请刷新页面或联系管理员。';
       return;
     }
@@ -523,6 +687,8 @@
       if (!session.user?.id || !session.session?.access_token) { expired(); return; }
       auth = session;
       ui.userEmail.textContent = auth.user.email || '—';
+      ui.batchRateMode.value='auto'; ui.batchMode.value='range_csv'; ui.batchPolicy.value='fill_missing';
+      ui.batchRangeStart.value=ui.batchRangeEnd.value=ui.batchRangeStart.max=ui.batchRangeEnd.max=today();
       ui.batchTemplateDate.value = ui.batchTemplateDate.max = today();
       const yesterday = updateCoverageLimits();
       ui.batchCoverageStart.value = shiftDay(yesterday,-6);
@@ -535,7 +701,15 @@
     }
   }
 
-  ui.batchFile.addEventListener('change',fileChanged);
+  ui.batchMode.addEventListener('change',()=>{if(job?.type==='save')return;fileChanged(); ui.batchPolicy.value='fill_missing';ui.batchRateMode.value='auto';updateControls();});
+  for(const el of [ui.batchRateMode,ui.batchPolicy,ui.batchRangeStart,ui.batchRangeEnd,ui.batchAsins,...vInputs]){
+    el.addEventListener('input',fileChanged);el.addEventListener('change',fileChanged);
+  }
+  ui.batchCatalogPicker.addEventListener('toggle',()=>{ if(ui.batchCatalogPicker.open)void loadPicker(); });
+  ui.batchFind.addEventListener('input',drawPicker);
+  ui.batchFindAdd.addEventListener('click',()=>{if(ui.batchFind.value.trim())addAsins(filteredPicker().map(item=>item.asin));});
+  ui.batchOverwriteCheck.addEventListener('change',updateControls);
+  ui.batchFile.addEventListener('change',()=>{if(job?.type==='save')return; ui.batchRateMode.value='auto';fileChanged();});
   ui.batchPreviewForm.addEventListener('submit',event => {event.preventDefault(); void preview();});
   ui.batchSave.addEventListener('click',() => { void save(); });
   ui.batchTemplateForm.addEventListener('submit',event => {event.preventDefault(); void template(true);});

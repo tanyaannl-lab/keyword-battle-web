@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="../assets/workspace-nav.css?v=20261110">
   <link rel="stylesheet" href="../assets/mc-weekly-source-nav.css?v=20261113-1">
   <link rel="stylesheet" href="../assets/mc-product-catalog.css?v=20261117-daily1">
-  <link rel="stylesheet" href="../assets/mc-product-cost-batch.css?v=20261117-coverage1">
+  <link rel="stylesheet" href="../assets/mc-product-cost-batch.css?v=20261118-range2">
 </head>
 <body>
 <div class="shell workspace-shell workspace-sales" id="appShell" hidden>
@@ -73,8 +73,86 @@
           <h1>批量成本更新</h1>
           <a class="catalog-button catalog-back" href="./weekly-products.html#product-catalog">返回产品目录</a>
         </div>
-        <p class="catalog-intro">Excel 填写后保存为「CSV UTF-8」。一行一个子 ASIN 和美西日期，可在同一个文件中填写不同日期。</p>
+        <p class="catalog-intro">同一段时间成本不变，只用填一次。选择美西起止日期后，系统为每个子 ASIN 按天保存成本。</p>
       </header>
+      <section class="catalog-cost-panel batch-step">
+        <label class="catalog-field batch-mode" for="batchMode"><span>填写方式</span>
+          <select id="batchMode">
+            <option value="range_csv" selected>按日期区间 · 各产品用自己的 CSV 成本</option>
+            <option value="manual">按日期区间 · 直接填写相同成本（无需文件）</option>
+            <option value="dated">按 CSV 每一行的日期填写</option>
+          </select>
+        </label>
+        <div id="batchRangeOptions" class="batch-range-options">
+          <div class="catalog-cost-date">
+            <label class="catalog-field" for="batchRangeStart"><span>开始日期（美西）</span><input type="date" id="batchRangeStart" min="2000-01-01" required></label>
+            <label class="catalog-field" for="batchRangeEnd"><span>结束日期（含当天）</span><input type="date" id="batchRangeEnd" min="2000-01-01" required></label>
+            <label class="catalog-field" for="batchPolicy"><span>遇到已有成本时</span><select id="batchPolicy">
+              <option value="fill_missing" selected>只补空值 · 已填数字保持不变</option><option value="overwrite">覆盖本次填写的字段</option>
+            </select></label>
+          </div>
+          <p class="catalog-cost-help">可选 1–92 天，每次最多 1,000 个子 ASIN。比如某项成本在 11 月 1–15 日不变，选这 15 天即可。中途调价时，按不同价格分段填写。</p>
+        </div>
+      </section>
+      <section class="catalog-cost-panel batch-step" id="batchTemplatePanel" aria-labelledby="batchTemplateTitle">
+        <h2 id="batchTemplateTitle">下载模板</h2>
+        <form id="batchTemplateForm" class="catalog-cost-date">
+          <label class="catalog-field" id="batchTemplateDateField" for="batchTemplateDate"><span>模板日期（美西）</span><input type="date" id="batchTemplateDate" min="2000-01-01" required></label>
+          <button type="submit" class="catalog-button" id="batchDownloadCatalog">下载目录模板</button>
+          <button type="button" class="catalog-button" id="batchDownloadBlank">下载空白模板</button>
+        </form>
+        <p class="catalog-cost-help">目录模板会带入当前目录中的子 ASIN，可删除不需要的行。区间模式下每个产品只填一行，日期以页面选择为准；原先下载的每日模板也可以直接使用。</p>
+        <p class="catalog-status" id="batchTemplateStatus" role="status" aria-atomic="true" hidden></p>
+      </section>
+      <section class="catalog-cost-panel batch-step" aria-labelledby="batchUploadTitle">
+        <h2 id="batchUploadTitle">填写成本并预览</h2>
+        <p class="catalog-cost-help" id="batchHelp">空白成本字段保留原值，填 0 才会写入零；六项都留空的行会跳过。汇率填每 1 美元对应的人民币金额。</p>
+        <form id="batchPreviewForm" class="batch-input-form" aria-describedby="batchHelp">
+          <div id="batchManualPanel" hidden>
+            <label class="catalog-field" for="batchAsins"><span>子 ASIN</span><textarea id="batchAsins" rows="3" maxlength="22000" placeholder="输入或粘贴子 ASIN，多个可用空格、逗号或换行分隔"></textarea></label>
+            <details id="batchCatalogPicker"><summary>从产品目录选择</summary>
+              <div class="catalog-cost-date"><label class="catalog-field" for="batchFind"><span>搜索目录</span><input id="batchFind" type="search" placeholder="子 ASIN、父 ASIN、SKU 或负责人"></label>
+                <button type="button" id="batchFindAdd" class="catalog-button" disabled>添加匹配的子 ASIN</button></div>
+              <p class="catalog-cost-help" id="batchFindStatus" role="status"></p>
+              <div id="batchFindList" class="batch-find-list"></div>
+            </details>
+            <p class="catalog-cost-help">下面填写的值会用于上面所有子 ASIN，留空的字段不修改。佣金率和 VAT 在这里按百分数填，例如 15% 填 15。若各产品成本不同，请选择「各产品用自己的 CSV 成本」。</p>
+            <div class="batch-manual-values"><label class="catalog-field" for="batchValue0"><span>汇率（人民币 / 美元）</span><input id="batchValue0" type="text" maxlength="32" inputmode="decimal" placeholder="不修改"></label><label class="catalog-field" for="batchValue1"><span>产品成本（RMB）</span><input id="batchValue1" type="text" maxlength="32" inputmode="decimal" placeholder="不修改"></label><label class="catalog-field" for="batchValue2"><span>头程（RMB）</span><input id="batchValue2" type="text" maxlength="32" inputmode="decimal" placeholder="不修改"></label><label class="catalog-field" for="batchValue3"><span>FBA 费用（USD）</span><input id="batchValue3" type="text" maxlength="32" inputmode="decimal" placeholder="不修改"></label><label class="catalog-field" for="batchValue4"><span>佣金率（%）</span><input id="batchValue4" type="text" maxlength="32" inputmode="decimal" placeholder="不修改"></label><label class="catalog-field" for="batchValue5"><span>VAT 税率（%）</span><input id="batchValue5" type="text" maxlength="32" inputmode="decimal" placeholder="不修改"></label></div>
+          </div>
+          <label class="catalog-field batch-file" id="batchFileField" for="batchFile"><span>选择 CSV 文件</span><input type="file" id="batchFile" accept=".csv,text/csv" required></label>
+          <div id="batchRatePanel">
+            <label class="catalog-field" for="batchRateMode"><span>CSV 中不带 % 的费率</span><select id="batchRateMode">
+              <option value="auto" selected>自动识别；遇到 0.205 这类写法先问我</option>
+              <option value="percent">百分数：0.205 = 0.205%，15 = 15%</option>
+              <option value="fraction">小数比例：0.205 = 20.5%，1 = 100%</option>
+            </select></label>
+            <p class="catalog-cost-help">只影响佣金率和 VAT 税率。文件里明确写作 20.5% 的值始终按 20.5% 读取。</p>
+          </div>
+          <button type="submit" class="catalog-button catalog-button-primary" id="batchPreview" disabled>预览变更</button>
+        </form>
+        <p class="catalog-status" id="batchStatus" role="status" aria-atomic="true" hidden></p>
+      </section>
+      <section class="catalog-cost-panel batch-step" id="batchReview" aria-labelledby="batchReviewTitle" hidden>
+        <h2 id="batchReviewTitle">核对并保存</h2>
+        <p class="catalog-summary" id="batchSummary"></p>
+        <p class="catalog-cost-help" id="batchSampleInfo" hidden></p>
+        <div class="catalog-items batch-table" tabindex="0" role="region" aria-label="批量成本变更明细">
+          <table class="catalog-table" aria-label="批量成本变更明细">
+            <thead><tr><th scope="col" id="batchInputHeading">CSV 行</th><th scope="col">日期（美西）</th><th scope="col">子 ASIN</th><th scope="col">动作</th><th scope="col">成本变更</th></tr></thead>
+            <tbody id="batchRows"></tbody>
+          </table>
+        </div>
+        <nav class="catalog-pager" id="batchPager" aria-label="批量预览分页" hidden>
+          <button class="catalog-button" type="button" id="batchPrevious">上一页</button>
+          <span id="batchPageInfo" aria-live="polite"></span>
+          <button class="catalog-button" type="button" id="batchNext">下一页</button>
+        </nav>
+        <div class="catalog-cost-actions">
+          <label id="batchOverwriteField" class="batch-overwrite" hidden><input id="batchOverwriteCheck" type="checkbox"> 我已核对日期和变更，确认覆盖本次填写的成本字段</label>
+          <button class="catalog-button catalog-button-primary" type="button" id="batchSave" disabled>确认批量保存</button>
+        </div>
+        <p class="catalog-cost-help batch-save-help">只保存本次确认的变更。若任一记录在预览后被他人修改，本批不会写入；重新预览后再确认。</p>
+      </section>
       <section class="catalog-cost-panel batch-step" aria-labelledby="batchCoverageTitle">
         <h2 id="batchCoverageTitle">检查成本缺项</h2>
         <p class="catalog-cost-help" id="batchCoverageHelp">按全店已入库的订单、交易及 SP 广告检查对应日期所需的成本。一次最多查 31 个已结束的美西日期；报表未到齐或商品归属无法确认时会单独提示。</p>
@@ -109,44 +187,6 @@
           </nav>
         </div>
       </section>
-      <section class="catalog-cost-panel batch-step" aria-labelledby="batchTemplateTitle">
-        <h2 id="batchTemplateTitle">1. 下载模板</h2>
-        <form id="batchTemplateForm" class="catalog-cost-date">
-          <label class="catalog-field" for="batchTemplateDate"><span>模板日期（美西）</span><input type="date" id="batchTemplateDate" min="2000-01-01" required></label>
-          <button type="submit" class="catalog-button" id="batchDownloadCatalog">下载目录模板</button>
-          <button type="button" class="catalog-button" id="batchDownloadBlank">下载空白模板</button>
-        </form>
-        <p class="catalog-cost-help">目录模板会带入所选日期和当前目录中的子 ASIN，可直接删除不需要的行。空白模板适合自己选择 ASIN 或填写多个日期。</p>
-        <p class="catalog-status" id="batchTemplateStatus" role="status" aria-atomic="true" hidden></p>
-      </section>
-      <section class="catalog-cost-panel batch-step" aria-labelledby="batchUploadTitle">
-        <h2 id="batchUploadTitle">2. 上传并预览</h2>
-        <p class="catalog-cost-help" id="batchHelp">每批最多 1,000 条有效记录。同一个子 ASIN 和日期只能出现一次。空白成本字段保留原值，填 0 才会写入零；六项都留空的行会跳过。汇率填每 1 美元对应的人民币金额；佣金率、VAT 税率填写百分比数值，例如 15% 填 15。</p>
-        <form id="batchPreviewForm" class="catalog-cost-date" aria-describedby="batchHelp">
-          <label class="catalog-field batch-file" for="batchFile"><span>选择 CSV 文件</span><input type="file" id="batchFile" accept=".csv,text/csv" required></label>
-          <button type="submit" class="catalog-button catalog-button-primary" id="batchPreview" disabled>预览变更</button>
-        </form>
-        <p class="catalog-status" id="batchStatus" role="status" aria-atomic="true" hidden></p>
-      </section>
-      <section class="catalog-cost-panel batch-step" id="batchReview" aria-labelledby="batchReviewTitle" hidden>
-        <h2 id="batchReviewTitle">3. 核对并保存</h2>
-        <p class="catalog-summary" id="batchSummary"></p>
-        <div class="catalog-items batch-table" tabindex="0" role="region" aria-label="批量成本变更明细">
-          <table class="catalog-table" aria-label="批量成本变更明细">
-            <thead><tr><th scope="col">CSV 行</th><th scope="col">日期（美西）</th><th scope="col">子 ASIN</th><th scope="col">动作</th><th scope="col">成本变更</th></tr></thead>
-            <tbody id="batchRows"></tbody>
-          </table>
-        </div>
-        <nav class="catalog-pager" id="batchPager" aria-label="批量预览分页" hidden>
-          <button class="catalog-button" type="button" id="batchPrevious">上一页</button>
-          <span id="batchPageInfo" aria-live="polite"></span>
-          <button class="catalog-button" type="button" id="batchNext">下一页</button>
-        </nav>
-        <div class="catalog-cost-actions">
-          <button class="catalog-button catalog-button-primary" type="button" id="batchSave" disabled>确认批量保存</button>
-        </div>
-        <p class="catalog-cost-help batch-save-help">只保存本次确认的变更。若任一记录在预览后被他人修改，本批不会写入；重新预览后再确认。</p>
-      </section>
     </main>
   </div>
 </div>
@@ -154,7 +194,7 @@
 <noscript><style>#loading{display:none}</style><p class="auth-loading">请启用 JavaScript 后批量更新产品成本。</p></noscript>
 <script src="../assets/config.js"></script>
 <script src="../assets/auth-client.js"></script>
-<script src="../assets/mc-product-cost-csv.js?v=20261117-batch1"></script>
-<script src="../assets/mc-product-cost-batch.js?v=20261117-coverage1"></script>
+<script src="../assets/mc-product-cost-csv.js?v=20261118-range2"></script>
+<script src="../assets/mc-product-cost-batch.js?v=20261118-range2"></script>
 </body>
 </html>
