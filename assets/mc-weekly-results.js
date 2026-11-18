@@ -11,7 +11,8 @@
     'resultEndDate','resultDateFeedback','weekTimeZone','resultsSummaryTitle','resultsSummaryHint',
     'resultTabSummary','resultTabAds','resultsAdsTitle','resultsWeeklyListHint','resultsDailyListHint',
     'dailyFeesForm','dailyFeesDate','dailyReviewFee','dailyOffsiteFee','dailyOtherFee','saveDailyFees',
-    'reloadDailyFees','dailyFeesStatus','dailyFeesHint','weeklyNotesHint','skuPreviewNotice'];
+    'reloadDailyFees','dailyFeesStatus','dailyFeesHint','weeklyNotesHint','skuPreviewNotice',
+    'resultWeekOptions','resultWeekSummary','applyResultWeeks','resultWeekCount','resultFeeWeek','resultFeeWeekField'];
   const ui = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
   const tabs = [...document.querySelectorAll('[data-result-tab]')];
   const weeklyElements = [...document.querySelectorAll('[data-week-only]')];
@@ -21,17 +22,12 @@
   const config = window.KB_CONFIG;
   const origin = 'https://peykqsnlistkhrqsiulx.supabase.co';
   const login = '../index.html';
-  const allowedRpc = new Set(['mc_product_catalog_read','mc_weekly_results_weeks','mc_weekly_results_read',
-    'mc_weekly_results_notes_save','mc_weekly_results_sp_read','mc_weekly_results_search','mc_weekly_results_daily_read',
-    'mc_weekly_results_sp_daily_read','mc_weekly_results_search_daily_read','mc_weekly_results_other_ads_read',
-    'mc_weekly_results_daily_profit_read','mc_daily_fba_returns_read','mc_daily_results_fees_read','mc_daily_results_fees_save',
-    'mc_weekly_results_weekly_metrics_read','mc_weekly_results_sku_read']);
+  const allowedRpc = new Set(['mc_product_catalog_read','mc_weekly_results_weeks','mc_weekly_results_notes_read',
+    'mc_weekly_results_notes_save','mc_weekly_results_search_daily_read',
+    'mc_weekly_results_other_ads_read','mc_daily_fba_returns_read','mc_daily_results_fees_read','mc_daily_results_fees_save',
+    'mc_weekly_results_sku_list','mc_weekly_results_sku_read']);
   const previewParams = new URLSearchParams(window.location?.search ?? '');
-  const skuPreference = previewParams.get('sku');
-  const skuPreview = skuPreference === '1';
-  const skuAuto = skuPreference !== '0' && !skuPreview;
   const skuSources = ['br','sp','orders','transactions'];
-  const skuRequiredMetricKeys = ['br_sales','sp_cost','order_sales','order_units','txn_total'];
   const skuMetricKeys = ['sessions_browser','sessions_app','sessions','br_orders','br_units','br_sales',
     'sp_impressions','sp_clicks','sp_cost','sp_orders','sp_units','sp_sales','order_orders','order_units',
     'order_sales','order_profit','order_profit_cny','txn_orders','txn_units','txn_sales','txn_total',
@@ -62,6 +58,7 @@
   let saveRequest;
   let parents = new Map();
   let week = '';
+  let chosenWeeks=[],availableWeeks=[],weekChecks=[];
   let mode = 'week';
   let dayStart = '';
   let dayEnd = '';
@@ -69,13 +66,13 @@
   let selectedTab = 'summary';
   let listRows = new Map();
   let listAds = new Map();
+  let listVisible = null;
   let detail = null;
   let hasList = false;
   let loadedContext = false;
   let activeNoteKey = '';
   let activeRevision = 0;
   let noteBase = null;
-  let adUnavailable = false;
   let retryAction = null;
   let focusDetail = false;
   let returnParent = '';
@@ -84,7 +81,8 @@
   const dailyFeeUnconfirmed = new Set();
   let dailyFeeRefreshing = false;
 
-  const noteKey = () => `${week}/${parent}`;
+  const feeWeek = () => detail?.periods ? ui.resultFeeWeek.value : week;
+  const noteKey = () => `${feeWeek()}/${parent}`;
   const validDay = value => {
     if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
     const parsed = new Date(`${value}T00:00:00Z`);
@@ -95,7 +93,7 @@
   const weekOf = day => shiftDay(day,-((new Date(`${day}T00:00:00Z`).getUTCDay()+6)%7));
   const dayCount = (start, end) => (Date.parse(`${end}T00:00:00Z`) - Date.parse(`${start}T00:00:00Z`)) / dayMs + 1;
   const rangeLabel = (start, end) => start === end ? start : `${start} 至 ${end}`;
-  const weekLabel = value => rangeLabel(value, shiftDay(value, 6));
+  const weekLabel = value => window.MCWeeklyResultTables.weekLabel(value);
   const pacificToday = () => {
     const parts = Object.fromEntries(pacificCalendar.formatToParts(new Date()).map(({ type,value }) => [type,value]));
     return `${parts.year}-${parts.month}-${parts.day}`;
@@ -174,7 +172,7 @@
     if (data === null) throw new Error('还没有导入产品目录，请先导入 MC 美国站产品表。');
     if (data?.store !== 'MC' || data.marketplace !== 'amazon.com' ||
         typeof data.snapshot_date !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(data.snapshot_date) ||
-        !Array.isArray(data.products) || !data.products.length || data.products.length > 10000) {
+        !Array.isArray(data.products) || data.products.length > 10000) {
       throw new Error('产品目录格式有误，请联系管理员。');
     }
     const grouped = new Map();
@@ -189,7 +187,7 @@
       group.children.push({ owners: item.owners, searchText: normalize([item.parent_asin,item.asin,item.sku,...item.owners].join(' ')) });
       grouped.set(item.parent_asin, group);
     }
-    // The optional list is sourced from approved reporting overrides. Add
+    // The optional list is sourced from past directories and approved overrides. Add
     // navigation entries only for parents absent from the original catalog.
     if (Array.isArray(data.report_parent_choices) && data.report_parent_choices.length <= 10000) {
       for (const value of data.report_parent_choices) {
@@ -203,6 +201,124 @@
       groups: new Map([...grouped].sort(([a],[b]) => compare(a,b)).map(([key,group]) => [key, {...group, owners:[...group.owners].sort(compare)}])),
       owners:[...allOwners].sort(compare),
     };
+  }
+
+  function selectedWeekText() {
+    if (chosenWeeks.length < 2) return week ? weekLabel(week) : '选择周次';
+    const compact = chosenWeeks.map(w => weekLabel(w).split(' | ')[0].replace('US·',''));
+    return `已选 ${chosenWeeks.length} 周 · ${compact.slice(0,3).join('、')}${compact.length>3?'…':''}`;
+  }
+  function setChosenWeeks(values) {
+    const wanted = new Set(values);
+    chosenWeeks = availableWeeks.filter(value=>wanted.has(value));
+    if (!chosenWeeks.length) return;
+    week = chosenWeeks[0];
+    ui.resultWeekSummary.textContent = selectedWeekText();
+    ui.resultWeekSummary.title = chosenWeeks.map(weekLabel).join('；');
+    weekChecks.forEach(check=>{check.checked=wanted.has(check.value);});
+    updateWeekCount();
+  }
+  function updateWeekCount() {
+    const count = weekChecks.filter(check=>check.checked).length;
+    ui.resultWeekCount.textContent = count ? `已勾选 ${count} 周` : '请至少选择一周';
+    ui.applyResultWeeks.disabled = !count || !!saveRequest;
+  }
+  function buildWeekPicker(values) {
+    availableWeeks = values.slice();
+    weekChecks = [];
+    const fragment = document.createDocumentFragment();
+    for (const value of values) {
+      const label = document.createElement('label'); label.className='results-week-option';
+      const box = document.createElement('input'); box.type='checkbox'; box.value=value;
+      const text = document.createElement('span'); text.textContent=weekLabel(value);
+      label.append(box,text); fragment.append(label); weekChecks.push(box);
+    }
+    ui.resultWeekOptions.replaceChildren(fragment);
+  }
+  function dismissWeeks() {
+    setChosenWeeks(chosenWeeks);
+    ui.resultWeek.open=false;
+  }
+  function lockWeeks(locked) {
+    ui.resultWeek.inert = locked;
+    ui.resultFeeWeek.disabled = locked;
+    if (locked) dismissWeeks();
+    updateWeekCount();
+  }
+  async function mapWeeks(weeks,controller,fn) {
+    const results = Array(weeks.length);
+    let index=0;
+    async function worker() {
+      while (index<weeks.length && context===controller && !controller.signal.aborted) {
+        const n=index++; results[n]=await fn(weeks[n]);
+      }
+    }
+    await Promise.all(Array.from({length:Math.min(2,weeks.length)},worker));
+    return results;
+  }
+  function weekSection(target,start) {
+    const section = document.createElement('section');
+    section.className='results-week-block'; section.dataset.resultWeekSection=start;
+    const heading = document.createElement('h4'); heading.textContent=weekLabel(start);
+    const body = document.createElement('div');
+    section.append(heading,body); target.append(section);
+    return body;
+  }
+  function renderMultiDetail() {
+    for (const period of detail.periods) {
+      const w=period.week;
+      if (!period.targets) period.targets=Object.fromEntries(
+        Object.entries(tables).map(([key,target])=>[key,weekSection(target,w)]));
+      window.MCWeeklyResultTables.renderSku({summary:period.targets.summary,ads:period.targets.ads},{
+        sku:period.sku,week:w,otherAds:period.otherAds,returns:period.returns,weeklyNotes:period.rows[0]});
+    }
+    selectTab(selectedTab);
+  }
+  function changeFeeWeek() {
+    if (!detail?.periods || saveRequest) return;
+    const w=ui.resultFeeWeek.value, row=detail.rows.find(r=>r.week_start===w);
+    if (!row) {
+      activeNoteKey=''; noteBase=null;
+      feeFields.forEach(id=>ui[id].value=''); updateFormState();
+      notice(ui.notesStatus,'所选周的费用暂时无法读取，不能保存。','error');return;
+    }
+    renderNotes(row);
+  }
+  async function loadMultiWeeks(controller,weeks,parentAsin) {
+    const values=await mapWeeks(weeks,controller,w=>parentAsin
+      ? fetchSkuPeriod(controller,false,w,w,shiftDay(w,6),parentAsin)
+      : fetchSkuList(controller,w,shiftDay(w,6)));
+    if (context!==controller || controller.signal.aborted || !auth) return;
+    loadedContext=true;
+    if (!parentAsin) {
+      const sumMap=(prop,fields)=>new Map([...parents.keys()].map(key=>[key,
+        Object.fromEntries(fields.map(field=>{
+          const nums=values.map(part=>number(part[prop].get(key)?.[field]));
+          return [field,nums.every(v=>v!==null)?nums.reduce((a,b)=>a+b,0):null];
+        }))]));
+      listVisible=values.every(v=>v.visibleParents instanceof Set)
+        ?new Set(values.flatMap(v=>[...v.visibleParents])):null;
+      listRows=sumMap('listRows',['sales','orders','units','visits']);
+      listAds=sumMap('listAds',['sp_cost','sp_sales','sp_orders']);
+      hasList=true;renderList();
+      if(returnParent){ui.parentResults.querySelector(`[data-result-parent="${returnParent}"]`)?.focus();returnParent='';}
+      const missing=weeks.filter((w,i)=>values[i].error);
+      pageStatus(`父款列表合计所选 ${weeks.length} 周；任一选中周缺值，对应合计显示「—」。`+
+        (missing.length ? ' 待读取：'+missing.map(w=>weekLabel(w)).join('；') : ''),missing.length?'warning':'',
+        missing.length?loadContext:null);
+      return;
+    }
+    detail={periods:weeks.map((w,i)=>({...values[i],week:w})),rows:values.flatMap(v=>v.rows),search:{state:'idle'}};
+    renderMultiDetail();
+    ui.resultFeeWeekField.hidden=false;
+    ui.resultFeeWeek.replaceChildren(...weeks.map(w=>new Option(weekLabel(w),w)));
+    ui.resultFeeWeek.value=weeks[0];ui.weeklyNotesForm.hidden=false;
+    changeFeeWeek();
+    notice(ui.productStatus,`已选 ${weeks.length} 周；各表按所选周分别展示，费用只保存到指定周。`);
+    if(focusDetail){(focusDetail==='notes'?ui.resultFeeWeek:ui.selectedParent).focus();focusDetail=false;}
+    const failed=weeks.filter((w,i)=>values[i].sku?.error);
+    pageStatus(failed.length ? '部分周经营明细读取失败：'+failed.map(weekLabel).join('；') : '',
+      failed.length?'warning':'',failed.length?loadContext:null);
   }
 
   function selectTab(key, focus = false) {
@@ -232,9 +348,9 @@
     button.className = 'results-link-button';
     button.dataset.resultParent = parentAsin;
     button.textContent = label;
-    if (label !== parentAsin) {
+    if (label !== parentAsin) button.setAttribute('aria-label', `${parentAsin} ${label}`);
+    if (label === '管理费用' || label === '费用未保存') {
       button.dataset.resultNotes = 'true';
-      button.setAttribute('aria-label', `${parentAsin} ${label}`);
     }
     return button;
   }
@@ -243,9 +359,10 @@
     if (!hasList) return;
     const owner = ui.resultOwner.value;
     const tokens = normalize(ui.resultSearch.value.trim()).split(/\s+/).filter(Boolean);
-    const groupRows = [...parents.values()].filter(group => group.children.some(child =>
+    const eligible = [...parents.values()].filter(g=>!listVisible || listVisible.has(g.parent));
+    const groupRows = eligible.filter(group => group.children.some(child =>
       (!owner || child.owners.includes(owner)) && tokens.every(token => child.searchText.includes(token))));
-    ui.resultsCount.textContent = `显示 ${groupRows.length} / ${parents.size} 个父款`;
+    ui.resultsCount.textContent = `显示 ${groupRows.length} / ${eligible.length} 个父款`;
     ui.clearResultFilters.disabled = !owner && !ui.resultSearch.value;
     ui.parentEmpty.hidden = groupRows.length !== 0;
     ui.parentTable.hidden = groupRows.length === 0;
@@ -258,7 +375,7 @@
       parentCell.append(productButton(group.parent, group.parent));
       if (group.ruleOnly) {
         const label = document.createElement('small');
-        label.textContent = ' · 归属维护';
+        label.textContent = ' · 历史或指定归属';
         parentCell.append(label);
       }
       makeCell(tr, groupLabel(group));
@@ -275,11 +392,9 @@
       const adSales = number(ad?.sp_sales);
       const adCost = number(ad?.sp_cost);
       makeCell(tr, adSales > 0 && adCost !== null ? pct.format(adCost / adSales) : empty, true);
-      makeCell(tr, empty, true);
-      const filled = line?.notes && [line.notes.review_fee,line.notes.offsite_fee,line.notes.other_fee]
-        .some(value => value !== null && value !== undefined && value !== '');
-      const draft = drafts.has(`${week}/${group.parent}`);
-      makeCell(tr, '').append(productButton(group.parent, draft ? '费用未保存' : filled ? '编辑费用' : '填写费用'));
+      makeCell(tr, '', true).append(productButton(group.parent, '查看毛利'));
+      const draft = chosenWeeks.some(w=>drafts.has(`${w}/${group.parent}`));
+      makeCell(tr, '').append(productButton(group.parent, draft ? '费用未保存' : '管理费用'));
       fragment.append(tr);
     }
     ui.parentResults.replaceChildren(fragment);
@@ -321,21 +436,10 @@
     ui.saveWeeklyNotes.disabled = busy || sameForm(formValues(), noteBase);
   }
 
-  function trafficMessage(days) {
-    if (days === 7) return '';
-    if (!days) return '这个周次还没有销售与流量数据，仍可填写本周费用。';
-    return `销售与流量只到齐 ${days} / 7 天，销售指标暂以「—」显示。`;
-  }
-
   function renderDetail() {
     if (!detail) return;
-    if (detail.sku) {
-      renderSkuPanels(tables);
-      selectTab(selectedTab);
-      return;
-    }
-    window.MCWeeklyResultTables.render(tables, { rows: detail.rows, week, adRows: detail.ads,
-      otherAds: detail.otherAds, spError:detail.spError, weeklyMetrics:detail.weeklyMetrics });
+    if (detail.periods) { renderMultiDetail(); return; }
+    renderSkuPanels(tables);
     selectTab(selectedTab);
   }
 
@@ -353,29 +457,17 @@
     ui.resultTabAds.textContent = daily ? '每日广告' : '产品广告结构';
     ui.resultsAdsTitle.textContent = daily ? '每日广告表现' : '产品广告结构';
     ui.resultsSummaryTitle.textContent = daily ? '每日明细' : '每周复盘';
-    if (skuPreview) {
-      ui.resultStartDate.min = ui.resultEndDate.min = earliestSkuDay;
-      ui.weekTimeZone.textContent = daily ? '日期按美国太平洋时间计算，可查询最近已结束日期，最多 92 天。' : '周次按美国太平洋时间计算，周一至周日。';
-    }
+    ui.resultStartDate.min = ui.resultEndDate.min = earliestSkuDay;
     renderSkuSource();
   }
 
-  function renderSkuSource(released = false, fallback = '') {
+  function renderSkuSource() {
     const daily = mode === 'day';
-    const usesSku = skuPreview || released;
-    if (skuPreview) notice(ui.skuPreviewNotice,'SKU 数据核对预览。打开父 ASIN 后，「每日明细／周总结」和「每日广告／产品广告结构」显示新口径。父款列表、关键词分析、属性分析沿用正式数据。','warning');
-    else if (fallback) notice(ui.skuPreviewNotice,fallback,'warning');
-    else if (released) notice(ui.skuPreviewNotice,'本期明细与广告使用每日经营明细的数据。');
-    else notice(ui.skuPreviewNotice);
-    ui.resultsSummaryHint.textContent = usesSku
-      ? (daily ? '每日 SKU 数据按父 ASIN 汇总，每天一行。「—」表示还没有可核对的数值。' :
-        '周数据由每日 SKU 数据汇总。某项指标缺任意一天就显示「—」。')
-      : (daily ? '每个自然日一行。「—」表示当天没有可核验的数据。每日费用按填写日期扣除。' :
-        '选中的周高亮。「—」表示缺少数据。未填写的三项手动费用按 0 显示。');
-    ui.dailyFeesHint.textContent = usesSku ? '按父 ASIN 和美国太平洋日期保存，单位为 USD。保存后从当天的订单毛利估算中扣除。' :
-      '按当前父 ASIN 和美国太平洋日期保存，单位为 USD。默认 0，保存后从当天的预估利润中扣除。';
-    ui.weeklyNotesHint.textContent = usesSku ? '按父 ASIN 与周次保存，单位为 USD。保存后从本周的订单毛利估算中扣除。' :
-      '按父 ASIN 和周次保存，单位为 USD。默认 0，保存后从该周的预估利润中扣除。';
+    notice(ui.skuPreviewNotice,'销售、流量、SP、订单和交易均来自每日经营明细。');
+    ui.resultsSummaryHint.textContent = daily ? '每个美西自然日一行；未到齐的指标显示「—」。' :
+      '按周汇总每日经营明细；某项指标缺任意一天，只留空该项。';
+    ui.dailyFeesHint.textContent = '按父 ASIN 和美西日期保存，单位 USD，计入当天的订单毛利估算。';
+    ui.weeklyNotesHint.textContent = '按父 ASIN 和周次保存，单位 USD，计入对应周的订单毛利估算。';
   }
 
   function changeMode(next) {
@@ -384,25 +476,24 @@
     notice(ui.resultDateFeedback);
     if (mode === 'day') {
       const weekEnd = shiftDay(week,6);
-      if (skuAuto && parents.has(parent) && validSkuRange(week,weekEnd) && weekEnd < pacificToday()) {
+      if (parents.has(parent) && validSkuRange(week,weekEnd) && weekEnd < pacificToday()) {
         dayStart = week;
         dayEnd = weekEnd;
       }
       setDateControls();
       selectedTab = 'summary';
-    } else if (skuAuto && parents.has(parent) && validDay(dayEnd)) {
-      const dayWeek = weekOf(dayEnd);
-      if (Array.from(ui.resultWeek.options ?? ui.resultWeek.children).some(option=>option.value === dayWeek)) {
-        week = ui.resultWeek.value = dayWeek;
-      }
+    } else if (chosenWeeks.length===1 && parents.has(parent) && validDay(dayEnd)) {
+      const dayWeek=weekOf(dayEnd);
+      if (availableWeeks.includes(dayWeek)) setChosenWeeks([dayWeek]);
     }
+    dismissWeeks();
     renderMode();
     void loadContext();
   }
 
   function setDateControls() {
     const today = pacificToday();
-    const latest = skuPreview ? shiftDay(today,-1) : today;
+    const latest = shiftDay(today,-1);
     if (!dayStart) {
       dayStart = dayEnd = shiftDay(today,-1);
     }
@@ -417,11 +508,10 @@
     const start = ui.resultStartDate.value;
     const end = ui.resultEndDate.value;
     const today = pacificToday();
-    const latest = skuPreview ? shiftDay(today,-1) : today;
+    const latest = shiftDay(today,-1);
     ui.resultStartDate.max = ui.resultEndDate.max = latest;
-    if (!validDay(start) || !validDay(end) || start < (skuPreview ? earliestSkuDay : earliestDay) || end < start || end > latest) {
-      notice(ui.resultDateFeedback,skuPreview ? '请选择有效日期，结束日期不能早于开始日期或晚于美西昨天。' :
-        '请选择有效的开始和结束日期，结束日期不能早于开始日期或晚于今天。','error');
+    if (!validDay(start) || !validDay(end) || start < earliestSkuDay || end < start || end > latest) {
+      notice(ui.resultDateFeedback,'请选择有效日期，结束日期不能早于开始日期或晚于美西昨天。','error');
       return;
     }
     if (dayCount(start,end) > dayLimit) {
@@ -434,67 +524,8 @@
     void loadContext();
   }
 
-  function dailyRowsFrom(payload, start, end, parentAsin) {
-    const days = dayCount(start,end);
-    const rows = payload?.rows;
-    const inRange = (value, max) => Number.isInteger(value) && value >= 0 && value <= max;
-    if (payload?.start_date !== start || payload?.end_date !== end || payload.days_total !== days ||
-        !inRange(payload.traffic_days,days) || !Array.isArray(rows) ||
-        (parentAsin ? rows.length !== days : rows.length > 10000) ||
-        rows.some((row, index) => !row || !asin.test(row.parent_asin ?? '') ||
-          !inRange(row.traffic_days,parentAsin ? 1 : days) ||
-          (parentAsin ? row.parent_asin !== parentAsin || row.report_date !== shiftDay(end,-index) :
-            !parents.has(row.parent_asin) || row.traffic_days !== payload.traffic_days))) {
-      throw new Error('每日销售与流量的数据格式有误，请联系管理员。');
-    }
-    if (parentAsin && rows.reduce((total, row) => total + row.traffic_days,0) !== payload.traffic_days) {
-      throw new Error('每日销售与流量的覆盖日期有误，请联系管理员。');
-    }
-    if (!parentAsin && new Set(rows.map(row => row.parent_asin)).size !== rows.length) {
-      throw new Error('每日销售与流量的父 ASIN 重复，请联系管理员。');
-    }
-    return rows;
-  }
-
-  function renderWeeklyFallback(target, text) {
-    const message = document.createElement('p');
-    message.className = 'results-empty results-period-message';
-    message.textContent = text;
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = 'results-button';
-    button.textContent = '切换到按周';
-    button.addEventListener('click', () => {
-      if (mode === 'day' && validDay(dayEnd)) {
-        const endWeek = weekOf(dayEnd);
-        if (Array.from(ui.resultWeek.options ?? ui.resultWeek.children).some(option=>option.value === endWeek)) {
-          week = ui.resultWeek.value = endWeek;
-        }
-      }
-      changeMode('week');
-      ui.resultView.focus();
-    });
-    target.replaceChildren(message,button);
-  }
-
   function renderDailySummary() {
-    if (detail?.sku) {
-      renderSkuPanels({summary:tables.summary});
-      return;
-    }
-    if (typeof window.MCWeeklyResultTables.renderDaily !== 'function') throw new Error('每日明细组件未加载，请刷新页面。');
-    window.MCWeeklyResultTables.renderDaily(tables.summary, { rows:detail.rows, adRows:detail.ads, otherAds:detail.otherAds,
-      spError:detail.spError, profit:detail.profit, returns:detail.returns, dailyFees:detail.dailyFees });
-  }
-
-  function renderDailyPanels(rows, ads, otherAds) {
-    renderDailySummary();
-    if (ads.rows?.length || otherAds.rows.length || otherAds.coverage.length || otherAds.error) {
-      window.MCWeeklyResultTables.renderDailyAds(tables.ads,{ rows, adRows:ads.rows, otherAds, spError:ads.error });
-    } else {
-      renderWeeklyFallback(tables.ads, ads.error ? '暂时无法读取每日广告数据。' : '这个父 ASIN 在所选日期范围内暂无已发布的广告日报。');
-    }
-    selectTab(selectedTab);
+    if (detail?.sku) renderSkuPanels({summary:tables.summary});
   }
 
   function renderSkuPanels(targets) {
@@ -504,19 +535,15 @@
       weeklyNotes:detail.rows.find(row=>row.week_start === week) });
   }
 
-  function renderSearchState(search) {
+  function renderSearchState(search, targets=tables, retryAction=loadSearchAnalysis) {
     if (search.state === 'ready') {
-      window.MCWeeklyResultTables.renderSearch(tables, search.data ?? {});
-      return;
-    }
-    if (search.state === 'weekly-only') {
-      for (const target of [tables.keywords, tables.attributes]) renderWeeklyFallback(target,search.message);
+      window.MCWeeklyResultTables.renderSearch(targets, search.data ?? {});
       return;
     }
     const loading = search.state === 'loading';
     const canRetry = search.state === 'waiting' || search.state === 'error';
     const message = loading ? '正在读取搜索词分析…' : search.message;
-    for (const target of [tables.keywords, tables.attributes]) {
+    for (const target of [targets.keywords, targets.attributes]) {
       const status = document.createElement('p');
       status.className = 'results-state';
       status.setAttribute('role', 'status');
@@ -528,7 +555,7 @@
         retry.type = 'button';
         retry.className = 'results-button';
         retry.textContent = '重新加载分析';
-        retry.addEventListener('click', () => { if (detail?.search === search) void loadSearchAnalysis(); });
+        retry.addEventListener('click',()=>void retryAction());
         target.append(retry);
       }
     }
@@ -553,148 +580,63 @@
     return dates.length;
   }
 
-  async function loadSearchAnalysis() {
-    const controller = context;
-    const current = detail;
-    if (!auth || !controller || controller.signal.aborted || !current || !parent || !week ||
-        !['idle','error','waiting'].includes(current.search.state)) return;
-    const daily = mode === 'day';
-    const start = daily ? dayStart : week, end = daily ? dayEnd : shiftDay(week,6);
-    const rangeArgs = { p_start_date: start, p_end_date: end, p_parent_asin: parent };
-    const args = daily ? rangeArgs : { p_week_start: start, p_parent_asin: parent };
-    const endpoint = daily ? 'mc_weekly_results_search_daily_read' : 'mc_weekly_results_search';
-    const total = dayCount(start,end);
-    const stillCurrent = () => context === controller && detail === current && !!auth && !controller.signal.aborted;
-    let checkingWeeklyCoverage = false;
-    current.search = { state: 'loading' };
-    renderSearchState(current.search);
+  async function readSearchPeriod(controller,start,end,parentAsin,daily) {
+    const lastClosed=shiftDay(pacificToday(),-1);
+    if (!daily && end>lastClosed) return {state:'open-week',message:'本周按美西时间尚未结束。可切换到按日查看已发布的搜索词日报。'};
+    const wanted = dayCount(start,end);
     try {
-      const data = await rpc(endpoint, args, controller.signal);
-      if (!stillCurrent()) return;
+      const data=await rpc('mc_weekly_results_search_daily_read',{
+        p_start_date:start,p_end_date:end,p_parent_asin:parentAsin},controller.signal);
       validateSearchRows(data);
-      if (!daily) {
-        if (data !== null) current.search = { state: 'ready', data };
-        else if (end >= pacificToday()) {
-          current.search = { state: 'open-week', message: '所选周按美西时间尚未结束。周汇总会在搜索词日报齐备后显示；要看已更新的日期，可以切换到按日。' };
-        } else {
-          checkingWeeklyCoverage = true;
-          const reports = await rpc('mc_weekly_results_search_daily_read', rangeArgs, controller.signal);
-          if (!stillCurrent()) return;
-          validateSearchRows(reports);
-          const covered = searchCoveredDays(reports,start,end);
-          current.search = covered === total
-            ? { state: 'ready', data: { ...reports,rangeNotice: `搜索词日报已齐（${covered}/${total} 天），按所选周汇总。` } }
-            : { state: 'waiting', message: `本周搜索词日报待同步（${covered}/${total} 天）。齐备后将显示关键词分析和属性分析。` };
-        }
-      } else if (data === null) {
-        current.search = { state: 'weekly-only', message: '所选日期范围暂无已发布的搜索词日报。' };
-      } else {
-        const covered = searchCoveredDays(data,start,end);
-        const rangeNotice = covered === total ? `按所选日期范围汇总（${covered} 天）。` :
-          `只汇总已发布的搜索词日报（${covered} / ${total} 天），其余日期未计入。`;
-        current.search = { state: 'ready', data: { ...data,rangeNotice,period:'day' } };
+      const covered=searchCoveredDays(data,start,end);
+      if (!covered || (!daily && covered<wanted)) return {state:'waiting',
+        message:`搜索词日报待同步（${covered}/${wanted} 天）。${daily?'':'七天齐备后显示本周分析。'}`};
+      return {state:'ready',data:{...data,period:daily?'day':'week',rangeNotice:
+        covered===wanted ? `按已发布的搜索词日报汇总（${covered}/${wanted} 天）。` :
+        `只汇总已发布的搜索词日报（${covered}/${wanted} 天），其余日期未计入。`}};
+    } catch(e) {
+      return {state:'error',message:['PGRST202','42883'].includes(e.code)||e.status===404
+        ? '搜索词日报读取接口尚未启用。' : explain(e)};
+    }
+  }
+  async function loadSearchAnalysis() {
+    const controller=context, current=detail;
+    if (!auth || !controller || controller.signal.aborted || !current || !parent ||
+        !['idle','error','waiting'].includes(current.search.state)) return;
+    const stillCurrent=()=>context===controller && detail===current && !!auth && !controller.signal.aborted;
+    const parentAsin=parent;
+    if (current.periods) {
+      current.search.state='loading';
+      const map=new Map(current.periods.map(p=>[p.week,p]));
+      async function refresh(w) {
+        const period=map.get(w);
+        period.search={state:'loading'};
+        renderSearchState(period.search,period.targets,()=>{});
+        period.search=await readSearchPeriod(controller,w,shiftDay(w,6),parentAsin,false);
+        if(stillCurrent())renderSearchState(period.search,period.targets,()=>{if(stillCurrent())void refresh(w);});
       }
-    } catch (error) {
-      if (!stillCurrent()) return;
-      const unavailable = error.status === 404 || error.code === 'PGRST202';
-      current.search = unavailable && daily
-        ? { state:'weekly-only', message:'按日期筛选的搜索词分析尚未启用。' }
-        : { state:'error', message:unavailable
-          ? (checkingWeeklyCoverage ? '搜索词日报读取尚未启用，暂时无法确认本周的覆盖日期。' : '搜索词分析尚未启用。')
-          : explain(error) };
+      await mapWeeks([...map.keys()],controller,refresh);
+      if(stillCurrent())current.search.state='ready';
+      return;
     }
-    renderSearchState(current.search);
+    const daily=mode==='day';const start=daily?dayStart:week,end=daily?dayEnd:shiftDay(week,6);
+    current.search={state:'loading'};renderSearchState(current.search);
+    const search=await readSearchPeriod(controller,start,end,parentAsin,daily);
+    if(!stillCurrent())return;
+    current.search=search;renderSearchState(search);
   }
 
-  function rowsFrom(payload, weekStart, parentAsin) {
-    if (payload?.week_start !== weekStart || !Array.isArray(payload.rows) || payload.rows.length > 10000 ||
-        !payload.rows.some(row => row?.week_start === weekStart) || payload.rows.some(row => !row || !asin.test(row.parent_asin ?? '') ||
-          !validWeek(row.week_start) || (parentAsin ? row.parent_asin !== parentAsin || row.week_start > weekStart : row.week_start !== weekStart) ||
-          !Number.isInteger(row.traffic_days) || row.traffic_days < 0 || row.traffic_days > 7)) {
-      throw new Error('周结果数据格式有误，请联系管理员。');
-    }
-    return payload.rows;
-  }
 
-  async function optionalAds(weekStart, parentAsin, signal) {
-    if (adUnavailable) return { rows: null, error: false };
+
+  async function readFbaMovements(start,end,parentAsin,signal) {
+    const validCount = n => n === null || (Number.isSafeInteger(n) && n >= 0);
     try {
-      const rows = await rpc('mc_weekly_results_sp_read', { p_week_start: weekStart, p_parent_asin: parentAsin }, signal);
-      if (!Array.isArray(rows) || rows.length > (parentAsin ? 26 : 10000) || rows.some(row =>
-          row?.source_status !== 'sp_advertised_7d' || !asin.test(row.parent_asin ?? '') || !validWeek(row.week_start) ||
-          (parentAsin ? row.parent_asin !== parentAsin || row.week_start > weekStart : row.week_start !== weekStart))) {
-        throw new Error('Invalid SP data');
-      }
-      return { rows, error: false };
-    } catch (error) {
-      if (error.status === 404 || error.code === 'PGRST202') adUnavailable = true;
-      return { rows: null, error: !signal.aborted && !adUnavailable };
-    }
-  }
-
-  async function optionalDailyAds(start,end,parentAsin,signal) {
-    if (!parentAsin) return {rows:[],error:false};
-    try {
-      const rows = await rpc('mc_weekly_results_sp_daily_read',{
-        p_start_date:start,p_end_date:end,p_parent_asin:parentAsin,
-      },signal);
-      if (!Array.isArray(rows) || rows.length > dayCount(start,end) ||
-          new Set(rows.map(row=>row?.report_date)).size !== rows.length || rows.some(row=>
-            !row || row.parent_asin !== parentAsin || !validDay(row.report_date) || row.report_date < start || row.report_date > end ||
-            ['sp_cost','sp_sales','sp_orders','sp_impressions','sp_clicks'].some(key=>number(row[key]) === null || number(row[key]) < 0))) {
-        throw new Error('每日商品推广数据格式有误。');
-      }
+      const rows = await rpc('mc_daily_fba_returns_read',{p_start_date:start,p_end_date:end,p_parent_asin:parentAsin},signal);
+      if (!Array.isArray(rows) || rows.length !== dayCount(start,end) || new Set(rows.map(r=>r?.report_date)).size !== rows.length ||
+          rows.some(r=>!validDay(r?.report_date) || r.report_date < start || r.report_date > end ||
+            !validCount(r.return_units) || !validCount(r.shipped_units))) throw new Error('退货或发货的格式有误。');
       return {rows,error:false};
-    } catch (error) {
-      return {rows:[],error:!signal.aborted && error.status !== 404 && error.code !== 'PGRST202'};
-    }
-  }
-
-  async function optionalDailyMetrics(source,start,end,parentAsin,signal) {
-    if (!parentAsin) return {rows:[],error:false};
-    const profit = source === 'profit';
-    const endpoint = profit ? 'mc_weekly_results_daily_profit_read' : 'mc_daily_fba_returns_read';
-    const validValue = (value, min, whole = false) => value === null ||
-      (typeof value === 'number' && Number.isFinite(value) && value >= min && Math.abs(value) <= Number.MAX_SAFE_INTEGER &&
-        (!whole || Number.isSafeInteger(value)));
-    try {
-      const rows = await rpc(endpoint,{p_start_date:start,p_end_date:end,p_parent_asin:parentAsin},signal);
-      if (!Array.isArray(rows) || rows.length !== dayCount(start,end) ||
-          new Set(rows.map(row=>row?.report_date)).size !== rows.length || rows.some(row=>
-            !validDay(row?.report_date) || row.report_date < start || row.report_date > end ||
-            (profit ? row.parent_asin !== parentAsin || !validValue(row.profit_before_ads,-Number.MAX_SAFE_INTEGER) ||
-              !validValue(row.sales_basis,0) || (row.sales_basis === null && row.profit_before_ads !== null) :
-              !validValue(row.return_units,0,true) || !validValue(row.shipped_units,0,true)))) {
-        throw new Error('每日补充指标格式有误。');
-      }
-      return {rows,error:false};
-    } catch (error) {
-      return {rows:[],error:!signal.aborted && error.status !== 404 && error.code !== 'PGRST202'};
-    }
-  }
-
-  async function optionalWeeklyMetrics(weekStart,parentAsin,signal) {
-    if (!parentAsin || weekStart < '2000-01-03') return {rows:[],error:false};
-    const validAmount = (value, min) => value === null ||
-      (typeof value === 'number' && Number.isFinite(value) && value >= min && Math.abs(value) <= Number.MAX_SAFE_INTEGER);
-    const validMovement = (days,units) => Number.isInteger(days) && days >= 0 && days <= 7 &&
-      (days === 7 ? Number.isSafeInteger(units) && units >= 0 : units === null);
-    const expectedWeeks = Math.min(weekLimit,1+Math.floor((dayCount('2000-01-03',weekStart)-1)/7));
-    try {
-      const rows = await rpc('mc_weekly_results_weekly_metrics_read',{
-        p_week_start:weekStart,p_parent_asin:parentAsin,
-      },signal);
-      if (!Array.isArray(rows) || rows.length !== expectedWeeks || rows.some((row,index)=>
-        !row || row.week_start !== shiftDay(weekStart,-7*index) || row.parent_asin !== parentAsin ||
-        !validAmount(row.sales_basis,0) || !validAmount(row.profit_before_ads,-Number.MAX_SAFE_INTEGER) ||
-        (row.sales_basis === null && row.profit_before_ads !== null) ||
-        !validMovement(row.returns_days,row.return_units) || !validMovement(row.shipments_days,row.shipped_units))) {
-        throw new Error('每周利润和退货数据格式有误。');
-      }
-      return {rows,error:false};
-    } catch {
-      return {rows:[],error:!signal.aborted};
-    }
+    } catch { return {rows:[],error:!signal.aborted}; }
   }
 
   function validDailyFees(row, expectedDate, expectedParent) {
@@ -756,29 +698,11 @@
       }
       return {rows,coverage,pending:coverage.filter(row=>!['empty','mapped'].includes(row.status)),error:false};
     } catch (error) {
-      return {...blank,error:!signal.aborted && error.status !== 404 && error.code !== 'PGRST202'};
+      return {...blank,error:!signal.aborted};
     }
   }
 
-  async function weeklyOtherAds(weeks,parentAsin,signal) {
-    const ranges = [];
-    const today = pacificToday();
-    for (const day of [...new Set(weeks)].filter(day=>validWeek(day)&&day>=earliestDay&&day<=today).sort()) {
-      const proposedEnd = shiftDay(day,6);
-      const end = proposedEnd <= today ? proposedEnd : today;
-      const last = ranges.at(-1);
-      if (last && dayCount(last.start,end) <= 182) last.end = end;
-      else ranges.push({start:day,end});
-    }
-    const snapshots = [];
-    for (let i = 0; i < ranges.length && !signal.aborted; i += 3) {
-      snapshots.push(...await Promise.all(ranges.slice(i,i+3).map(({start,end})=>optionalOtherAds(start,end,parentAsin,signal))));
-    }
-    return {rows:snapshots.flatMap(value=>value.rows),coverage:snapshots.flatMap(value=>value.coverage),
-      pending:snapshots.flatMap(value=>value.pending),error:snapshots.some(value=>value.error)};
-  }
-
-  async function readSkuPreview(start,end,lastClosed,parentAsin,signal) {
+  async function readSkuPeriod(start,end,lastClosed,parentAsin,signal) {
     const dates = Array.from({length:dayCount(start,end)},(_,index)=>shiftDay(end,-index));
     const days = new Map();
     const completeEnd = end <= lastClosed ? end : lastClosed;
@@ -819,35 +743,59 @@
 
   async function readSkuWeeklyNotes(weekStart,parentAsin,signal) {
     try {
-      const main = await rpc('mc_weekly_results_read',{p_week_start:weekStart,p_parent_asin:parentAsin},signal);
-      return rowsFrom(main,weekStart,parentAsin).filter(row=>row.week_start === weekStart);
-    } catch {
-      return [];
+      const p = await rpc('mc_weekly_results_notes_read',{p_week_start:weekStart,p_parent_asin:parentAsin},signal);
+      if (!p || p.week_start!==weekStart || p.parent_asin!==parentAsin) return [];
+      const n=p.notes;
+      if (n!==null && (!n || !Number.isSafeInteger(n.revision) || n.revision<1 ||
+          (n.operation!==null && typeof n.operation!=='string') ||
+          Object.values(dailyFeeFields).some(k=>!(k in n) || (n[k]!==null &&
+            (number(n[k])===null || number(n[k])<0 || number(n[k])>9999999999.99))))) return [];
+      return [p]; // notes:null is a confirmed empty record; a failed read returns [].
+    } catch { return []; }
+  }
+
+  async function fetchSkuList(controller,start,end) {
+    const emptyList = (error,visibleParents=null) => ({listRows:new Map(),listAds:new Map(),visibleParents,error});
+    if (end >= pacificToday()) return emptyList('所选期间尚未结束，整期合计待齐。点开父 ASIN 可查看各数据源进度。',
+      new Set([...parents.values()].filter(g=>!g.ruleOnly).map(g=>g.parent)));
+    try {
+      const entries=await rpc('mc_weekly_results_sku_list',{p_start_date:start,p_end_date:end},controller.signal);
+      const fields=['br_sales','br_orders','br_units','sessions','sp_cost','sp_orders','sp_sales'];
+      if (!Array.isArray(entries) || entries.length>10000 || new Set(entries.map(v=>v?.parent_asin)).size!==entries.length ||
+          entries.some(r=>!r || !asin.test(r.parent_asin ?? '') || fields.some(k=>!(k in r) || (r[k]!==null && number(r[k])===null)))) {
+        throw new Error('父款经营明细列表格式有误。');
+      }
+      return {listRows:new Map(entries.map(r=>[r.parent_asin,{sales:r.br_sales,orders:r.br_orders,units:r.br_units,visits:r.sessions}])),
+        listAds:new Map(entries.map(r=>[r.parent_asin,{sp_cost:r.sp_cost,sp_orders:r.sp_orders,sp_sales:r.sp_sales}])),visibleParents:new Set(entries.map(r=>r.parent_asin)),error:''};
+    } catch (e) {
+      if (e.status===401 || e.status===403) throw e;
+      return emptyList(e.status===404 || e.code==='PGRST202' ? '父款经营明细列表接口尚未安装；可打开父 ASIN 查看明细。' :
+        '暂时无法读取父款汇总。可重试，或点开父 ASIN 查看明细。');
     }
   }
 
-  async function loadSkuContext(controller, daily, weekStart, start, end, parentAsin, released = false) {
+  async function fetchSkuPeriod(controller,daily,weekStart,start,end,parentAsin) {
     const lastClosed = shiftDay(pacificToday(),-1);
     const from = daily ? start : weekStart;
     const to = daily ? end : shiftDay(weekStart,6);
-    const subsidiaryEnd = to < lastClosed ? to : lastClosed;
-    const subsidiary = from <= subsidiaryEnd;
+    const closed = to < lastClosed ? to : lastClosed;
+    const subsidiary = from <= closed;
     const signal = controller.signal;
-    const current = () => context === controller && !signal.aborted && !!auth;
-    const sku = await readSkuPreview(from,to,lastClosed,parentAsin,signal);
-    if (!current()) return;
-    const missingPrimary = values => skuRequiredMetricKeys.some(key=>number(values[key]) === null);
-    if (released && (sku.error || !sku.totals || sku.totals.conflict_count !== 0 || missingPrimary(sku.totals) ||
-      sku.days.some(day=>day.conflict_count !== 0 || skuSources.some(source=>day.coverage[source] !== 'ready') || missingPrimary(day)))) return 'legacy';
-    const [otherAds,returns,dailyFees,rows] = await Promise.all([
-      subsidiary ? optionalOtherAds(from,subsidiaryEnd,parentAsin,signal) : blankOtherAds(),
-      subsidiary ? optionalDailyMetrics('returns',from,subsidiaryEnd,parentAsin,signal) : {rows:[],error:false},
+    const [sku,otherAds,returns,dailyFees,rows] = await Promise.all([
+      readSkuPeriod(from,to,lastClosed,parentAsin,signal),
+      subsidiary ? optionalOtherAds(from,closed,parentAsin,signal) : blankOtherAds(),
+      subsidiary ? readFbaMovements(from,closed,parentAsin,signal) : {rows:[],error:false},
       daily ? readDailyFees(from,to,parentAsin,signal) : null,
       daily ? [] : readSkuWeeklyNotes(weekStart,parentAsin,signal),
     ]);
-    if (!current()) return;
-    renderSkuSource(released);
-    detail = {sku,otherAds,returns,dailyFees,rows,search:{state:'idle'}};
+    return {sku,otherAds,returns,dailyFees,rows,search:{state:'idle'}};
+  }
+
+  async function loadSkuContext(controller,daily,weekStart,start,end,parentAsin) {
+    const loaded = await fetchSkuPeriod(controller,daily,weekStart,start,end,parentAsin);
+    if (context !== controller || controller.signal.aborted || !auth) return;
+    const {rows,sku} = loaded;
+    detail = loaded;
     loadedContext = true;
     renderDetail();
     if (daily) showDailyFees();
@@ -870,17 +818,13 @@
     const start = dayStart;
     const end = dayEnd;
     const parentAsin = parent || null;
-    const skuStart = daily ? start : weekStart;
-    const skuEnd = daily ? end : shiftDay(weekStart,6);
-    const skuCandidate = skuAuto && parents.has(parentAsin) && validSkuRange(skuStart,skuEnd);
-    const released = skuCandidate && skuEnd < pacificToday();
-    renderSkuSource(false,skuCandidate && !released ? '所选日期尚未全部结束，本次显示原版数据。' : '');
+    renderSkuSource();
     loadedContext = false;
     hasList = false;
     detail = null;
     activeNoteKey = '';
     noteBase = null;
-    ui.resultWeek.disabled = false;
+    lockWeeks(false);
     ui.productList.hidden = !!parentAsin;
     ui.resultProductFilters.hidden = !!parentAsin;
     ui.productResults.hidden = !parentAsin;
@@ -890,6 +834,7 @@
     ui.resultsCount.textContent = '';
     ui.resultsDailyListHint.hidden = true;
     ui.weeklyNotesForm.hidden = true;
+    ui.resultFeeWeekField.hidden = true;
     resetDailyFees();
     for (const table of Object.values(tables)) table.replaceChildren();
     for (const id of feeFields) ui[id].value = '0';
@@ -899,95 +844,29 @@
     if (parentAsin) {
       ui.selectedParent.textContent = parentAsin;
       ui.selectedOwner.textContent = groupLabel(parents.get(parentAsin));
-      ui.selectedWeek.textContent = daily ? rangeLabel(start,end) : weekLabel(weekStart);
+      ui.selectedWeek.textContent = daily ? rangeLabel(start,end) : selectedWeekText();
       selectTab(selectedTab);
     }
     pageStatus(daily ? '正在读取所选日期的结果…' : '正在读取所选周的结果…');
     try {
-      if ((skuPreview && parentAsin) || released) {
-        const result = await loadSkuContext(controller,daily,weekStart,start,end,parentAsin,released);
-        if (result !== 'legacy' || context !== controller || controller.signal.aborted || !auth) return;
-        renderSkuSource(false,'所选范围的每日经营明细未齐或暂不可用，本次显示原版数据。');
-      }
-      if (daily) {
-        const [main,ads,otherAds,profit,returns,dailyFees] = await Promise.all([
-          rpc('mc_weekly_results_daily_read',{
-            p_start_date: start, p_end_date: end, p_parent_asin: parentAsin,
-          },controller.signal),
-          optionalDailyAds(start,end,parentAsin,controller.signal),
-          optionalOtherAds(start,end,parentAsin,controller.signal),
-          optionalDailyMetrics('profit',start,end,parentAsin,controller.signal),
-          optionalDailyMetrics('returns',start,end,parentAsin,controller.signal),
-          readDailyFees(start,end,parentAsin,controller.signal),
-        ]);
-        if (context !== controller || controller.signal.aborted || !auth) return;
-        const rows = dailyRowsFrom(main,start,end,parentAsin);
-        const coverage = `销售和流量报表已到齐 ${main.traffic_days} / ${main.days_total} 天。`;
-        if (!parentAsin) {
-          listRows = new Map(rows.map(row => [row.parent_asin,row]));
-          listAds = new Map();
-          hasList = true;
-          renderList();
-          notice(ui.resultsDailyListHint,`${rangeLabel(start,end)} · ${coverage} 日期范围未到齐时不显示合计，点开父 ASIN 可看已到齐的每日数据。`);
-          if (returnParent) {
-            ui.parentResults.querySelector(`[data-result-parent="${returnParent}"]`)?.focus();
-            returnParent = '';
-          }
-        } else {
-          detail = { rows, ads:ads.rows, otherAds, spError:ads.error, profit, returns, dailyFees, search: { state:'idle' } };
-          renderDailyPanels(rows,ads,otherAds);
-          showDailyFees();
-          notice(ui.productStatus,coverage);
-          if (focusDetail) {
-            ui.selectedParent.focus();
-            focusDetail = false;
-          }
-        }
-        pageStatus();
+      if (!daily && chosenWeeks.length > 1) { await loadMultiWeeks(controller,chosenWeeks.slice(),parentAsin); return; }
+      if (parentAsin) {
+        await loadSkuContext(controller,daily,weekStart,start,end,parentAsin);
         return;
       }
-      const [main, ad, weeklyMetrics] = await Promise.all([
-        rpc('mc_weekly_results_read',{ p_week_start: weekStart, p_parent_asin: parentAsin },controller.signal),
-        optionalAds(weekStart, parentAsin, controller.signal),
-        optionalWeeklyMetrics(weekStart,parentAsin,controller.signal),
-      ]);
-      if (context !== controller || !auth) return;
-      const rows = rowsFrom(main, weekStart, parentAsin);
-      const line = rows.find(row => row.week_start === weekStart);
-      const otherAds = parentAsin
-        ? await weeklyOtherAds([
-          ...Array.from({length:weekLimit},(_,i)=>shiftDay(weekStart,-i*7)),
-          ...rows.map(row=>row.week_start),...(ad.rows ?? []).map(row=>row.week_start),
-        ],parentAsin,controller.signal)
-        : blankOtherAds();
+      const from = daily ? start : weekStart, to = daily ? end : shiftDay(weekStart,6);
+      const loaded = await fetchSkuList(controller,from,to);
       if (context !== controller || controller.signal.aborted || !auth) return;
-      loadedContext = true;
-      if (!parentAsin) {
-        listRows = new Map(rows.map(row => [row.parent_asin,row]));
-        listAds = new Map((ad.rows ?? []).map(row => [row.parent_asin,row]));
-        hasList = true;
-        renderList();
-        if (returnParent) {
-          ui.parentResults.querySelector(`[data-result-parent="${returnParent}"]`)?.focus();
-          returnParent = '';
-        }
-      } else {
-        detail = { rows, ads: ad.rows, otherAds, spError:ad.error, weeklyMetrics, search: { state: 'idle' } };
-        renderDetail();
-        renderNotes(line);
-        if (focusDetail) {
-          (focusDetail === 'notes' ? ui.reviewFee : ui.selectedParent).focus();
-          focusDetail = false;
-        }
+      listVisible = loaded.visibleParents; listRows = loaded.listRows; listAds = loaded.listAds; hasList = loadedContext = true;
+      renderList();
+      if (daily) notice(ui.resultsDailyListHint,'销售和流量按所选日汇总；缺日的指标留空，点开父 ASIN 可查看每日明细。');
+      if (returnParent) {
+        ui.parentResults.querySelector(`[data-result-parent="${returnParent}"]`)?.focus();
+        returnParent = '';
       }
-      const messages = [trafficMessage(line?.traffic_days), ad.error ? 'SP 广告数据暂时无法读取。' : ''].filter(Boolean);
-      notice(ui.productStatus, parentAsin ? messages.join(' ') : '');
-      pageStatus(parentAsin ? '' : messages.join(' '));
+      pageStatus(loaded.error,loaded.error ? 'warning' : '',loaded.error && to < pacificToday() ? loadContext : null);
     } catch (error) {
-      if (context === controller && !controller.signal.aborted && auth) {
-        const missingDaily = daily && (error.status === 404 || error.code === 'PGRST202');
-        pageStatus(missingDaily ? '每日明细尚未启用。可以切回按周查看。' : explain(error), 'error',loadContext);
-      }
+      if (context === controller && !controller.signal.aborted && auth) pageStatus(explain(error),'error',loadContext);
     }
   }
 
@@ -1186,16 +1065,18 @@
     const values = formValues();
     if (sameForm(values, noteBase)) return;
     let params;
-    const line = detail.rows.find(row => row.week_start === week);
+    const selectedFeeWeek=feeWeek();
+    const line = detail.rows.find(row => row.week_start === selectedFeeWeek);
+    if(!line)return;
     try {
       // The existing RPC writes all fields. Preserve the stored text while editing fees only.
-      params = { p_week_start: week, p_parent_asin: parent, p_operation: line?.notes?.operation ?? null,
+      params = { p_week_start: selectedFeeWeek, p_parent_asin: parent, p_operation: line?.notes?.operation ?? null,
         p_review_fee: readFee(values.reviewFee), p_offsite_fee: readFee(values.offsiteFee),
         p_other_fee: readFee(values.otherFee), p_revision: activeRevision };
     } catch (error) { notice(ui.notesStatus,error.message,'error'); return; }
     const controller = new AbortController();
     saveRequest = controller;
-    ui.resultWeek.disabled = true;
+    lockWeeks(true);
     ui.resultView.disabled = true;
     ui.backToProducts.disabled = true;
     updateFormState();
@@ -1210,7 +1091,7 @@
       activeRevision = saved.revision;
       for (const id of feeFields) ui[id].value = noteBase[id];
       renderDetail();
-      notice(ui.notesStatus, '已保存本周费用。', 'success');
+      notice(ui.notesStatus, `${weekLabel(selectedFeeWeek)} 费用已保存。`, 'success');
     } catch (error) {
       if (saveRequest !== controller || controller.signal.aborted) return;
       if (error.code === '40001' || error.status === 409) {
@@ -1222,7 +1103,7 @@
     } finally {
       if (saveRequest === controller) {
         saveRequest = null;
-        ui.resultWeek.disabled = false;
+        lockWeeks(false);
         ui.resultView.disabled = false;
         ui.backToProducts.disabled = false;
         updateFormState();
@@ -1235,19 +1116,20 @@
     bootstrap?.abort(); context?.abort(); saveRequest?.abort();
     bootstrap = context = saveRequest = null;
     auth = null;
-    parents.clear(); listRows.clear(); listAds.clear(); drafts.clear();
+    parents.clear(); listRows.clear(); listAds.clear(); listVisible=null; drafts.clear();
     dailyFeeDrafts.clear(); dailyFeeUnconfirmed.clear();
     week = parent = activeNoteKey = dayStart = dayEnd = '';
     mode = 'week';
     selectedTab = 'summary';
     detail = noteBase = null;
-    loadedContext = hasList = adUnavailable = focusDetail = false;
+    loadedContext = hasList = focusDetail = false;
     returnParent = '';
     ui.results.hidden = ui.productResults.hidden = ui.appShell.hidden = true;
     ui.userEmail.textContent = '';
     ui.resultSearch.value = '';
     ui.resultOwner.replaceChildren(new Option('全部负责人',''));
-    ui.resultWeek.replaceChildren();
+    chosenWeeks=[]; availableWeeks=[]; weekChecks=[]; ui.resultWeekOptions.replaceChildren();
+    ui.resultWeek.open=false;ui.resultWeek.inert=false;ui.resultWeekSummary.textContent='选择周次';ui.resultFeeWeek.replaceChildren();
     ui.resultStartDate.value = ui.resultEndDate.value = '';
     for (const input of [ui.resultStartDate,ui.resultEndDate,...ui.resultDateFilter.querySelectorAll('button')]) input.disabled = false;
     ui.resultView.disabled = false;
@@ -1282,7 +1164,7 @@
       const available = [...new Set(dates)].sort().reverse();
       const parsed = catalogGroups(catalog);
       parents = parsed.groups;
-      ui.resultWeek.replaceChildren(...available.map(value => new Option(weekLabel(value),value)));
+      buildWeekPicker(available);
       ui.resultOwner.replaceChildren(new Option('全部负责人',''),...parsed.owners.map(value => new Option(value,value)));
       ui.resultsCatalogDate.textContent = catalog.snapshot_date;
       ui.resultsCatalogDate.dateTime = catalog.snapshot_date;
@@ -1293,9 +1175,9 @@
       const linkedParent = previewParams.get('parent');
       const weekLink = validWeek(linkedWeek) && available.includes(linkedWeek);
       const today = pacificToday();
-      const dayLink = validDay(linkedDate) && linkedDate >= (skuPreview ? earliestSkuDay : earliestDay) &&
-        linkedDate <= (skuPreview ? shiftDay(today,-1) : today);
-      if (skuPreview || (parents.has(linkedParent) && (weekLink || dayLink))) {
+      const dayLink = validDay(linkedDate) && linkedDate >= earliestSkuDay &&
+        linkedDate <= shiftDay(today,-1);
+      if (weekLink || dayLink) {
         if (weekLink) {
           week = linkedWeek;
           mode = 'week';
@@ -1304,7 +1186,7 @@
         }
         if (parents.has(linkedParent)) parent = linkedParent;
       }
-      ui.resultWeek.value = week;
+      setChosenWeeks([week]);
       setDateControls();
       renderMode();
       ui.results.hidden = false;
@@ -1320,7 +1202,7 @@
     ui.loading.textContent = '正在验证登录状态…';
     if (![origin,`${origin}/`].includes(config?.SUPABASE_URL) ||
         !/^sb_publishable_[A-Za-z0-9_-]+$/.test(config?.SUPABASE_PUBLISHABLE_KEY ?? '') ||
-        typeof window.KBAuth?.requireAuth !== 'function' || typeof window.MCWeeklyResultTables?.render !== 'function' ||
+        typeof window.KBAuth?.requireAuth !== 'function' || typeof window.MCWeeklyResultTables?.renderSku !== 'function' ||
         typeof window.MCWeeklyResultTables?.renderSearch !== 'function') {
       ui.loading.textContent = '周结果页面配置未加载，请刷新或联系管理员。';
       return;
@@ -1339,11 +1221,23 @@
     }
   }
 
-  ui.resultWeek.addEventListener('change', () => {
-    if (mode !== 'week' || saveRequest || !validWeek(ui.resultWeek.value)) return;
-    week = ui.resultWeek.value;
-    void loadContext();
+  ui.resultWeekOptions.addEventListener('change',updateWeekCount);
+  ui.resultWeek.addEventListener('toggle',()=>{ if(!ui.resultWeek.open && chosenWeeks.length) setChosenWeeks(chosenWeeks); });
+  ui.resultWeek.addEventListener('keydown',event=>{
+    if(event.key==='Escape'){event.preventDefault();dismissWeeks();ui.resultWeekSummary.focus();}
   });
+  document.addEventListener?.('click',event=>{
+    if(ui.resultWeek.open && !ui.resultWeek.contains(event.target)) dismissWeeks();
+  });
+  ui.applyResultWeeks.addEventListener('click',()=>{
+    if(mode!=='week' || saveRequest) return;
+    const wanted=weekChecks.filter(check=>check.checked).map(check=>check.value);
+    if(!wanted.length)return;
+    const changed=chosenWeeks.join(',')!==wanted.join(',');
+    setChosenWeeks(wanted);ui.resultWeek.open=false;ui.resultWeekSummary.focus();
+    if(changed)void loadContext();
+  });
+  ui.resultFeeWeek.addEventListener('change',changeFeeWeek);
   ui.resultView.addEventListener('change',() => changeMode(ui.resultView.value));
   ui.resultDateFilter.addEventListener('submit',queryDays);
   ui.resultSearch.addEventListener('input',renderList);

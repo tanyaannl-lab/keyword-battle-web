@@ -8,7 +8,8 @@
   <link rel="stylesheet" href="../assets/styles.css">
   <link rel="stylesheet" href="../assets/workspace-nav.css?v=20261110">
   <link rel="stylesheet" href="../assets/mc-weekly-source-nav.css?v=20261113-1">
-  <link rel="stylesheet" href="../assets/mc-weekly-results.css?v=20261113-1">
+  <link rel="stylesheet" href="../assets/mc-weekly-results.css?v=20261118-week46">
+  <link rel="stylesheet" href="../assets/mc-results-weeks.css?v=20261118-week46">
 </head>
 <body>
 <div class="shell workspace-shell workspace-sales" id="appShell" hidden>
@@ -81,10 +82,19 @@
                 <option value="week">按周</option>
               </select>
             </label>
-            <label id="resultWeeklyFilter" class="results-field" for="resultWeek">
-              <span>选择周次</span>
-              <select id="resultWeek" aria-describedby="weekTimeZone"></select>
-            </label>
+            <div id="resultWeeklyFilter" class="results-field results-week-field">
+              <span id="resultWeekLabel">选择周次（可多选）</span>
+              <details id="resultWeek" class="results-week-picker">
+                <summary id="resultWeekSummary" aria-labelledby="resultWeekLabel resultWeekSummary" aria-describedby="weekTimeZone">选择周次</summary>
+                <div class="results-week-menu">
+                  <div id="resultWeekOptions" class="results-week-options" role="group" aria-labelledby="resultWeekLabel"></div>
+                  <div class="results-week-apply">
+                    <span id="resultWeekCount" role="status"></span>
+                    <button id="applyResultWeeks" type="button" class="results-button results-button-primary">应用周次</button>
+                  </div>
+                </div>
+              </details>
+            </div>
             <form id="resultDateFilter" class="results-day-filters" aria-label="选择日期范围" hidden>
               <label class="results-field" for="resultStartDate">
                 <span>开始日期</span>
@@ -111,7 +121,7 @@
           </div>
         </div>
         <p class="results-timezone" id="weekTimeZone">周次按美国太平洋时间计算，周一至周日。</p>
-        <p id="skuPreviewNotice" class="results-state" data-state="warning" hidden>SKU 数据核对预览。打开父 ASIN 后，「每日明细／周总结」和「每日广告／产品广告结构」显示新口径。父款列表、关键词分析、属性分析沿用正式数据。</p>
+        <p id="skuPreviewNotice" class="results-state" data-state="warning" hidden>销售、流量、SP、订单和交易均来自每日经营明细。</p>
 
         <section id="productList" class="results-list" aria-label="筛选期间的父款">
           <div class="results-overview">
@@ -133,7 +143,7 @@
               <tbody id="parentResults"></tbody>
             </table>
           </div>
-          <p class="results-table-note" id="resultsWeeklyListHint">按当前产品目录列出父款。销售指标在七天报表齐全后展示。点击父 ASIN 查看周预估利润和 FBA 退货率。</p>
+          <p class="results-table-note" id="resultsWeeklyListHint">金额按勾选的周次合计。点击父 ASIN 可逐周对照毛利、广告和 FBA 退货率。</p>
           <p class="results-table-note results-daily-note" id="resultsDailyListHint" hidden></p>
           <p id="parentEmpty" class="results-empty" hidden>没有符合条件的父款，请调整筛选。</p>
         </section>
@@ -162,7 +172,7 @@
           <section id="resultSummary" class="results-panel" role="tabpanel" aria-labelledby="resultTabSummary" tabindex="0">
             <header class="results-panel-head">
               <h3 id="resultsSummaryTitle">每周复盘</h3>
-              <p id="resultsSummaryHint">选中的周高亮。「—」表示缺少数据。未填写的三项手动费用按 0 显示。</p>
+              <p id="resultsSummaryHint">每周按日汇总。某项指标缺任意一天，该周的这一项显示「—」。</p>
             </header>
             <form id="dailyFeesForm" class="results-notes" aria-labelledby="dailyFeesTitle" autocomplete="off" hidden>
               <header class="results-panel-head">
@@ -198,6 +208,10 @@
             <form id="weeklyNotesForm" class="results-notes" aria-labelledby="weeklyNotesTitle" autocomplete="off">
               <header class="results-panel-head">
                 <h3 id="weeklyNotesTitle">本周费用</h3>
+                <label class="results-field results-fee-week" for="resultFeeWeek" id="resultFeeWeekField" hidden>
+                  <span>编辑哪一周的费用</span>
+                  <select id="resultFeeWeek"></select>
+                </label>
                 <p id="weeklyNotesHint">按父 ASIN 和周次保存，单位为 USD。默认 0，保存后从该周的预估利润中扣除。</p>
               </header>
               <div class="results-note-fees">
@@ -245,8 +259,8 @@
 <noscript><style>#loading{display:none}</style><p class="auth-loading">请启用 JavaScript 后查看周结果。</p></noscript>
 <script src="../assets/config.js"></script>
 <script src="../assets/auth-client.js"></script>
-<script src="../assets/mc-weekly-results-tables.js?v=20261117-daily-cost1"></script>
-<script src="../assets/mc-weekly-results.js?v=20261117-parent1"></script>
+<script src="../assets/mc-weekly-results-tables.js?v=20261118-week46"></script>
+<script src="../assets/mc-weekly-results.js?v=20261118-week46"></script>
 </body>
 </html>
 

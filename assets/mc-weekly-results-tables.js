@@ -7,9 +7,7 @@
   const decimal = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
   const dollars = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
   const percent = new Intl.NumberFormat('en-US', { style: 'percent', maximumFractionDigits: 2 });
-  const sourceNotice = '同一父 ASIN 的周数据。销售额为已订购商品销售额，订单商品数不等于独立订单数；会话数为各子 ASIN 会话数之和。周报未齐时暂不汇总。';
   const spNotice = 'SP 指商品推广，订单和销售额采用 7 天归因，可能包含其他 SKU。仅展示明确归属当前父 ASIN 的数据。';
-  const weeklyProfitNotice = '周利润按各子 ASIN 每天的成本逐日估算后汇总，再扣除本周已归属广告费和本表的三项周费用。每日费用只用于每日明细；未纳入独立促销、退款或结算调整。缺少必要成本或其他数据时显示「—」。';
   const weeklyReturnsNotice = 'FBA 周退货率 = 全周收退件数 ÷ 全周发货件数。退货和发货数据都需齐全 7 天；当周无发货时显示「—」。该比率反映当周进出量。';
   const channelOrder = ['SP', 'SB', 'SD'];
   const otherAdChannels = channelOrder.slice(1);
@@ -91,28 +89,6 @@
     col('order_label', '出单标识'),
   ]);
 
-  const summaryColumns = [
-    col('week_start', '周期', 'week'),
-    col('sales', '销售额', 'usd'),
-    col('profit', '利润（估算）', 'usd'),
-    col('orders', '订单商品数', 'int'),
-    col('units', '已订购商品数量', 'int'),
-    col('visits', '会话数', 'int'),
-    col('unit_session_rate', '订购件数 / 会话数', 'pct'),
-    col('returns_rate', 'FBA 周退货率', 'pct'),
-    col('total_ad_cost', '总广告费', 'usd'),
-    col('sp_cost', 'SP 广告费', 'usd'),
-    col('sp_orders', 'SP 归因订单', 'int'),
-    col('sp_acos', 'SP ACOS', 'pct'),
-    col('sbv_cost', 'SBV 广告费', 'usd'),
-    col('sb_cost', 'SB 广告费', 'usd'),
-    col('sd_cost', 'SD 广告费', 'usd'),
-    col('traffic_days', '周报到齐', 'coverage'),
-    col('review_fee', '测评费用原币', 'usd'),
-    col('offsite_fee', '站外费用原币', 'usd'),
-    col('other_fee', '其他费用原币', 'usd'),
-  ];
-
   const spMetricColumns = [
     col('sp_sales', 'SP 归因销售额', 'usd'),
     col('sp_sales_share', 'SP 归因销售额占比（参考）', 'pct'),
@@ -138,28 +114,6 @@
     col('organic_terms', '自然流量词', 'int'),
     col('sp_terms', 'SP 广告词', 'int'),
     col('ac_terms', 'AC 推荐词', 'int'),
-  ];
-
-  const dailyColumns = [
-    col('report_date', '日期', 'date'),
-    col('profit', '利润（估算）', 'usd'),
-    col('gross_margin', '毛利率（估算）', 'pct'),
-    col('sales', '销售额', 'usd'),
-    col('ad_sales', '广告销售额', 'usd'),
-    col('orders', '订单', 'int'),
-    col('organic_orders', '自然订单（估算）', 'int'),
-    col('ad_orders', '广告订单', 'int'),
-    col('organic_order_share', '自然单占比（估算）', 'pct'),
-    col('ad_order_share', '广告单占比（估算）', 'pct'),
-    col('ad_cost', '广告费', 'usd'),
-    col('ad_cost_of_sales', '广告费占总销售额', 'pct'),
-    col('returns_rate', 'FBA 退货率', 'pct'),
-    col('app_session_share', 'APP流量占比', 'pct'),
-    col('visits', '总访客数', 'int'),
-    col('unit_session_rate', '转化', 'pct'),
-    col('review_fee', '测评费用原币', 'usd'),
-    col('offsite_fee', '站外费用原币', 'usd'),
-    col('other_fee', '其他费用原币', 'usd'),
   ];
 
   function element(name, className, content) {
@@ -331,8 +285,12 @@
   function weekLabel(value) {
     const end = dateValue(value);
     if (!end) return missing;
+    const thursday = new Date(end);
+    thursday.setUTCDate(thursday.getUTCDate() + 3 - ((end.getUTCDay() + 6) % 7));
+    const weekNumber = 1 + Math.floor((Date.UTC(thursday.getUTCFullYear(), thursday.getUTCMonth(), thursday.getUTCDate()) -
+      Date.UTC(thursday.getUTCFullYear(), 0, 1)) / 604800000);
     end.setUTCDate(end.getUTCDate() + 6);
-    return `${value} 至 ${end.toISOString().slice(0, 10)}`;
+    return `US·周${weekNumber} | ${value} 至 ${end.toISOString().slice(0, 10)}`;
   }
 
   function own(row, key) {
@@ -369,7 +327,7 @@
     else if (low !== undefined && (direction === 'lower' ? number > low : number < low)) cell.classList.add('results-rate-low');
   }
 
-  function renderColumnHeading(column) {
+  function renderColumnHeading(column, sort) {
     const heading = element('th');
     heading.scope = 'col';
     heading.dataset.column = column.key;
@@ -384,10 +342,27 @@
       heading.title = column.label;
       heading.setAttribute('aria-label', column.label);
     }
+    if (sort) {
+      const active = sort.key === column.key;
+      const direction = active ? sort.direction : null;
+      const button = element('button', 'results-analysis-sort');
+      button.type = 'button';
+      button.dataset.analysisSort = column.key;
+      button.setAttribute('aria-label', `按${column.label}排序`);
+      const contents = [...heading.children];
+      heading.replaceChildren();
+      button.append(...contents);
+      const arrow = element('span', 'results-analysis-sort-icon', direction === 'desc' ? '▼' : direction === 'asc' ? '▲' : '↕');
+      arrow.setAttribute('aria-hidden', 'true');
+      button.append(arrow);
+      button.addEventListener('click', event => sort.choose(column, event?.detail === 0));
+      if (active) heading.setAttribute('aria-sort', direction === 'asc' ? 'ascending' : 'descending');
+      heading.append(button);
+    }
     return heading;
   }
 
-  function renderTable(target, { columns, rows, week, label, note, emptyText }) {
+  function renderTable(target, { columns, rows, week, label, note, emptyText, summary, sort }) {
     if (!target) return;
     const wrapper = element('div', 'results-table-scroll');
     wrapper.tabIndex = 0;
@@ -397,7 +372,7 @@
     table.setAttribute('aria-label', label);
     const head = element('thead');
     const headings = element('tr');
-    for (const column of columns) headings.append(renderColumnHeading(column));
+    for (const column of columns) headings.append(renderColumnHeading(column, sort));
     head.append(headings);
     const body = element('tbody');
     table.append(head, body);
@@ -413,16 +388,12 @@
 
     function draw() {
       const fragment = document.createDocumentFragment();
-      if (!rows.length) {
-        const tr = element('tr');
-        const cell = element('td', 'results-table-note', emptyText);
-        cell.colSpan = columns.length;
-        tr.append(cell);
-        fragment.append(tr);
-      }
       const start = (page - 1) * pageSize;
-      for (const row of rows.slice(start, start + pageSize)) {
+      const pageRows = rows.slice(start, start + pageSize);
+      if (summary) pageRows.unshift(summary);
+      for (const row of pageRows) {
         const tr = element('tr');
+        if (summary && row === summary) tr.dataset.summary = 'true';
         const current = Boolean(week && own(row, 'week_start') === week);
         if (current) tr.dataset.selectedWeek = 'true';
         columns.forEach((column, index) => {
@@ -441,9 +412,26 @@
           }
           if (numberKinds.has(column.kind)) cell.classList.add('results-number');
           if (formatted.text === missing) cell.classList.add('results-missing');
+          const reasons = row._missingReasons?.[column.key];
+          if (formatted.text === missing && Array.isArray(reasons) && reasons.length) {
+            const info = element('details','results-profit-details');
+            const summary = element('summary','', '— 原因');
+            summary.setAttribute('aria-label', column.label + '未计算，展开原因');
+            const list = element('ul');
+            reasons.forEach(text=>list.append(element('li','',text)));
+            info.append(summary,list);
+            cell.replaceChildren(info);
+          }
           setHighlight(cell, formatted.number, column.rule);
           tr.append(cell);
         });
+        fragment.append(tr);
+      }
+      if (!rows.length) {
+        const tr = element('tr');
+        const cell = element('td', 'results-table-note', emptyText);
+        cell.colSpan = columns.length;
+        tr.append(cell);
         fragment.append(tr);
       }
       body.replaceChildren(fragment);
@@ -465,185 +453,219 @@
     target.replaceChildren(...[notice, wrapper, pager].filter(Boolean));
   }
 
-  function buildWeeklyRows(input, ads, selected) {
-    const weeks = new Map();
-    const accept = (value) => dateValue(value) && (!selected || value <= selected);
-    if (accept(selected)) weeks.set(selected, { week_start: selected });
-    for (const row of Array.isArray(input) ? input : []) {
-      const week = own(row, 'week_start');
-      if (!accept(week)) continue;
-      const days = numeric(own(row, 'traffic_days'));
-      const complete = days === 7;
-      const notes = own(row, 'notes');
-      weeks.set(week, {
-        week_start: week,
-        parent_asin: own(row, 'parent_asin'),
-        sales: complete ? own(row, 'sales') : null,
-        orders: complete ? own(row, 'orders') : null,
-        units: complete ? own(row, 'units') : null,
-        visits: complete ? own(row, 'visits') : null,
-        unit_session_rate: complete ? ratio(own(row, 'units'), own(row, 'visits')) : null,
-        traffic_days: days,
-        review_fee: own(notes, 'review_fee'),
-        offsite_fee: own(notes, 'offsite_fee'),
-        other_fee: own(notes, 'other_fee'),
+  const analysisRatios = Object.freeze({
+    avg_order_value:['sales','orders'], cpc:['cost','clicks'], cpa:['cost','orders'],
+    ctr:['clicks','impressions'], cvr:['orders','clicks'], acos:['cost','sales'],
+  });
+  const analysisCollator = new Intl.Collator('zh-CN', { numeric:true, sensitivity:'base' });
+  const normalizeSearch = value => String(value ?? '').normalize('NFKC').toLowerCase().trim();
+
+  function analysisValue(row, column) {
+    const value = sheetValue(row,column);
+    if (numberKinds.has(column.kind)) {
+      const percentText = column.kind === 'pct' && typeof value === 'string' && value.trim().endsWith('%');
+      const n = numeric(percentText ? value.trim().slice(0,-1) : value);
+      if (n === null || (column.kind === 'int' && !Number.isSafeInteger(n))) return null;
+      return percentText ? n/100 : n;
+    }
+    if (column.kind === 'date') return dateValue(value) ? value : null;
+    return typeof value === 'string' && value.trim() ? value : null;
+  }
+
+  // Attribute rows overlap. Source membership, never splitting the displayed term, identifies which
+  // complete terms contributed. Check RPC word frequencies before using that membership to report totals.
+  function attributeIndex(keywords) {
+    const byName = new Map(), unique = new Set();
+    for (const row of keywords) {
+      if (!row || typeof row.term !== 'string' || unique.has(row.term) ||
+          !Array.isArray(row.attributes) || !row.attributes.length ||
+          row.attributes.some(a=>typeof a !== 'string' || !a.trim())) return null;
+      unique.add(row.term);
+      for (const a of new Set(row.attributes)) {
+        if (!byName.has(a)) byName.set(a,[]);
+        byName.get(a).push(row);
+      }
+    }
+    return byName;
+  }
+
+  function analysisSummary(chosen, primary, membership) {
+    const attr = primary === 'attribute';
+    const summary = { [primary]: '筛选汇总' };
+    let basis = chosen, basisColumns = keywordColumns;
+    if (attr) {
+      const matched = new Set();
+      const complete = chosen.every(row => {
+        const group = membership?.get(sheetValue(row,attributeColumns[0]));
+        const frequency = analysisValue(row,attributeColumns[1]);
+        if (!group || group.length !== frequency) return false;
+        for (const term of group) matched.add(term);
+        return true;
       });
+      if (complete) {
+        basis = [...matched];
+        summary.word_frequency = basis.length;
+      } else if (chosen.length === 1) {
+        // A single source attribute is already de-duplicated within that attribute.
+        basisColumns = attributeColumns;
+        summary.word_frequency = analysisValue(chosen[0],attributeColumns[1]);
+      } else {
+        return { summary, explanation:'这些属性缺少完整的搜索词归属明细，汇总无法去重；相关指标显示「—」。' };
+      }
     }
-    for (const row of Array.isArray(ads) ? ads : []) {
-      const week = own(row, 'week_start');
-      if (!accept(week)) continue;
-      const base = weeks.get(week) || { week_start: week };
-      for (const key of ['sp_cost', 'sp_sales', 'sp_orders', 'sp_impressions', 'sp_clicks']) base[key] = own(row, key);
-      base.sp_acos = ratio(base.sp_cost, base.sp_sales);
-      base.sp_sales_share = ratio(base.sp_sales, base.sales);
-      weeks.set(week, base);
+    const columns = Object.fromEntries(basisColumns.map(c=>[c.key,c]));
+    const value = (row,key) => columns[key] ? analysisValue(row,columns[key]) : null;
+    function total(key) {
+      if (basis.length === 0) return key === 'market_impressions' ? null : 0;
+      let sum = 0;
+      for (const row of basis) {
+        const part = value(row,key);
+        if (part === null) return null;
+        sum += part;
+      }
+      return Number.isFinite(sum) ? sum : null;
     }
-    return [...weeks.values()]
-      .map(row => ({ ...row, review_fee: row.review_fee ?? 0, offsite_fee: row.offsite_fee ?? 0, other_fee: row.other_fee ?? 0 }))
-      .sort((a, b) => b.week_start.localeCompare(a.week_start));
+    for (const key of ['occurrences','market_impressions','impressions','clicks','cost','orders','sales']) summary[key]=total(key);
+    for (const [k,[n,d]] of Object.entries(analysisRatios)) summary[k]=ratio(summary[n],summary[d]);
+    // Rank and source search share have no cross-term weighting contract.
+    if (basis.length === 1) for (const key of ['rank','share']) summary[key] = value(basis[0],key);
+    if (!attr) {
+      const days = new Set();
+      const datesKnown = basis.every(row => {
+        if (!Array.isArray(row.click_dates) || row.click_dates.length !== value(row,'click_days') ||
+            row.click_dates.some(d => !dateValue(d))) return false;
+        const one = new Set(row.click_dates);
+        if (one.size !== row.click_dates.length) return false;
+        for (const date of one) days.add(date);
+        return true;
+      });
+      summary.click_days = datesKnown ? days.size : basis.length === 1 ? value(basis[0],'click_days') : null;
+      for (const [k,num] of [['daily_clicks','clicks'],['daily_orders','orders'],['daily_spend','cost'],
+        ['daily_impressions','impressions'],['daily_market_impressions','market_impressions']]) summary[k]=ratio(summary[num],summary.click_days);
+      if (datesKnown) {
+        const sorted = [...days].sort();
+        summary.first_click = sorted[0]; summary.last_click = sorted[sorted.length-1];
+      } else {
+        for (const [key,which] of [['first_click','min'],['last_click','max']]) {
+          let date = null, complete = true;
+          for (const row of basis) {
+            if (value(row,'click_days') === 0) continue;
+            const v = value(row,key);
+            if (v === null) { complete=false; break; }
+            if (date === null || (which === 'min' ? v<date : v>date)) date=v;
+          }
+          summary[key] = complete ? date : null;
+        }
+      }
+    }
+    return { summary, explanation:attr && chosen.length
+      ? (summary.word_frequency == null ? '' : `覆盖 ${integer.format(summary.word_frequency)} 个不同搜索词。`)
+      : '' };
   }
 
-  function withWeeklyMetrics(row, ads, metrics, adError) {
-    const adCost = numeric(ads?.ad_cost);
-    const profitBasis = numeric(metrics?.profit_before_ads);
-    const salesBasis = numeric(metrics?.sales_basis);
-    const fees = sumFees(row);
-    const returned = numeric(metrics?.return_units);
-    const shipped = numeric(metrics?.shipped_units);
-    const completeReturns = numeric(metrics?.returns_days) === 7 && numeric(metrics?.shipments_days) === 7;
-    return {
-      ...row,
-      profit: !adError && profitBasis !== null && salesBasis !== null && salesBasis === numeric(row.sales) &&
-        adCost !== null && adCost >= 0 && fees !== null ? profitBasis - adCost - fees : null,
-      returns_rate: completeReturns && Number.isSafeInteger(returned) && returned >= 0 && Number.isSafeInteger(shipped)
-        ? ratio(returned, shipped) : null,
-      total_ad_cost: adCost,
-      sb_cost: ads?.sb_cost ?? null,
-      sd_cost: ads?.sd_cost ?? null,
-    };
-  }
-
-  function weeklyCoverageNote(metrics) {
-    const returnsDays = numeric(metrics?.returns_days);
-    const shipmentsDays = numeric(metrics?.shipments_days);
-    const isDayCount = value => Number.isInteger(value) && value >= 0 && value <= 7;
-    if (!isDayCount(returnsDays) || !isDayCount(shipmentsDays)) return '';
-    if (returnsDays !== 7 || shipmentsDays !== 7) return `所选周可核对的退货数据 ${returnsDays}/7 天、发货数据 ${shipmentsDays}/7 天。`;
-    return numeric(metrics?.shipped_units) === 0 ? '所选周 FBA 发货件数为 0，无法计算退货率。' : '';
-  }
-
-  function render(targets, { rows, week, adRows, otherAds, spError, weeklyMetrics } = {}) {
-    const weeklyRows = buildWeeklyRows(rows, adRows, week);
-    const byWeek = aggregateOtherAds(otherAds?.rows, monday);
-    const dates = new Set(weeklyRows.map(row => row.week_start));
-    const baseRows = [...weeklyRows, ...[...byWeek.keys()]
-      .filter(value => !dates.has(value) && (!week || value <= week))
-      .map(week_start => ({ week_start }))].sort((a, b) => b.week_start.localeCompare(a.week_start));
-    const scopedRows = advertisingRows(baseRows, 'week_start', byWeek, otherAds?.coverage ?? otherAds?.pending);
-    const adsByWeek = new Map(scopedRows.map(row => [row.week_start, row]));
-    const metricsByWeek = new Map((!weeklyMetrics?.error && Array.isArray(weeklyMetrics?.rows) ? weeklyMetrics.rows : [])
-      .filter(row => row && monday(row.week_start) === row.week_start)
-      .map(row => [row.week_start, row]));
-    function findMetrics(row) {
-      const metrics = metricsByWeek.get(row?.week_start);
-      return row?.parent_asin && row.parent_asin === metrics?.parent_asin ? metrics : null;
+  function renderAnalysis(target,{columns,rows,membership,label,note,emptyText}) {
+    if (!target) return;
+    const primary=columns[0].key;
+    const attr=primary==='attribute';
+    const fields=Object.fromEntries(columns.map(c=>[c.key,c]));
+    const toolbar=element('div','results-analysis-controls');
+    toolbar.setAttribute('role','group');
+    toolbar.setAttribute('aria-label',`${label}筛选`);
+    const count=element('p','results-analysis-count');
+    count.setAttribute('aria-live','polite');
+    const data=element('div','results-analysis-content');
+    function field(name,captionText,tag) {
+      const labelEl=element('label','results-field results-analysis-field');
+      const caption=element('span','',captionText);
+      const control=element(tag);
+      control.dataset.analysisControl=name;
+      labelEl.append(caption,control); toolbar.append(labelEl);
+      return control;
     }
-    const summaryRows = weeklyRows.map(row => withWeeklyMetrics(row, adsByWeek.get(row.week_start),
-      findMetrics(row), spError || otherAds?.error));
-    const coverageNote = weeklyCoverageNote(findMetrics(weeklyRows.find(row => row.week_start === week)));
-    renderTable(targets.summary, {
-      columns: summaryColumns, rows: summaryRows, week, label: '周总结',
-      note: [sourceNotice, weeklyProfitNotice, weeklyReturnsNotice, coverageNote,
-        '总广告费合计能归属当前父 ASIN 的 SP、SB、SD；SBV 未单列。',
-        advertisingNotice(scopedRows, false, otherAds?.error, spError, false),
-        weeklyMetrics?.error ? '暂时无法读取周利润及 FBA 退货汇总。' : ''].filter(Boolean).join(' '),
-      emptyText: '没有可展示的周期。',
-    });
-    renderTable(targets.ads, {
-      columns: advertisingColumns(scopedRows, false), rows: scopedRows, week, label: '产品广告结构',
-      note: advertisingNotice(scopedRows, false, otherAds?.error, spError), emptyText: '没有可展示的周期。',
-    });
+    function option(select,value,title) {
+      const node=element('option','',title); node.value=value; select.append(node);
+    }
+    const query=field('query','包含搜索','input');
+    query.type='search'; query.placeholder=attr?'输入属性的一部分':'输入搜索词的一部分';
+    const order=field('order','出单状态','select');
+    for (const [v,l] of [['all','全部'],['yes','已出单'],['no','未出单']]) option(order,v,l);
+    const metric=field('metric','筛选指标','select');
+    for (const c of columns.filter(c=>numberKinds.has(c.kind))) option(metric,c.key,`${c.label.replace(/^计算:/,'').replace(/\[.*$/,'')}${c.kind === 'pct' ? ' (%)' : ''}`);
+    const min=field('min','最低值（含）','input');
+    const max=field('max','最高值（含）','input');
+    for(const input of [min,max]){input.type='number';input.step='any';input.placeholder='不限';}
+    const reset=element('button','results-button','清除筛选和排序');
+    reset.type='button';reset.dataset.analysisControl='reset';toolbar.append(reset);
+    target.replaceChildren(toolbar,count,data);
+    function defaults() { query.value='';order.value='all';metric.value='cost';min.value='';max.value=''; }
+    function orderKey(v) {return v===null ? null : v>0?'yes':v===0?'no':null;}
+    const cached=rows.map(row=>({row,term:normalizeSearch(sheetValue(row,columns[0])),order:orderKey(analysisValue(row,fields.orders))}));
+    let sortKey=null,direction=null;
+    function refresh(focusSortKey) {
+      const q=normalizeSearch(query.value);
+      const metricCol=fields[metric.value] || fields.cost;
+      const lowBlank=String(min.value).trim()==='', highBlank=String(max.value).trim()==='';
+      const low=lowBlank ? null : numeric(min.value), high=highBlank ? null : numeric(max.value);
+      const invalid=Boolean(min.validity?.badInput || max.validity?.badInput || (!lowBlank && low===null) ||
+        (!highBlank && high===null) || (low!==null && high!==null && low>high));
+      const bounded=low!==null || high!==null;
+      const lowerLimit = low === null ? null : metricCol.kind==='pct' ? low/100 : low;
+      const upperLimit = high === null ? null : metricCol.kind==='pct' ? high/100 : high;
+      const visible=invalid ? [] : cached.filter(rec=>{
+        if (!rec.term.includes(q) || (order.value!=='all' && rec.order!==order.value)) return false;
+        if (!bounded) return true;
+        const n=analysisValue(rec.row,metricCol);
+        return n!==null && (lowerLimit===null || n>=lowerLimit) && (upperLimit===null || n<=upperLimit);
+      }).map(rec=>rec.row);
+      if (sortKey) {
+        const column=fields[sortKey], entries=visible.map(row=>({row,value:analysisValue(row,column)}));
+        entries.sort((a,b)=>{
+          const x=a.value,y=b.value;
+          if (x===null || y===null) return x===y?0:x===null?1:-1;
+          return (direction==='asc'?1:-1)*(typeof x==='number'?x-y:analysisCollator.compare(x,y));
+        });
+        for(let i=0;i<entries.length;i++)visible[i]=entries[i].row;
+      }
+      const {summary,explanation}=analysisSummary(visible,primary,membership);
+      const rowWord=attr?'个属性':'个搜索词';
+      count.textContent=invalid?'请输入有效的筛选范围，最低值不能高于最高值。':
+        `筛选结果：${integer.format(visible.length)} / ${integer.format(rows.length)} ${rowWord}。${explanation}`;
+      if (invalid) {
+        data.replaceChildren(element('p','results-empty','筛选范围无效。更正数值后即可查看汇总。'));
+        return;
+      }
+      const scope=attr?'属性可能覆盖同一搜索词；汇总中的词频为不同搜索词数，展现、花费和订单等按搜索词去重。':
+        '汇总中的点击天数按日期去重，日均值以这些日期为分母。';
+      renderTable(data,{columns,rows:visible,summary,
+        label,note:[note,scope,'比率用筛选后的合计重算；点击列名可排序。'].filter(Boolean).join(' '),
+        emptyText:rows.length?'没有符合筛选条件的记录。':emptyText,
+        sort:{key:sortKey,direction,choose(column,refocus) {
+          if (sortKey===column.key) direction=direction==='asc'?'desc':'asc';
+          else {sortKey=column.key;direction=numberKinds.has(column.kind)||column.kind==='date'?'desc':'asc';}
+          refresh(refocus ? column.key : '');
+        }},
+      });
+      if (focusSortKey) data.querySelector?.(`[data-analysis-sort="${focusSortKey}"]`)?.focus();
+    }
+    function refreshNow(){ refresh(''); }
+    for (const control of [query,min,max]) control.addEventListener('input',refreshNow);
+    order.addEventListener('change',refreshNow);
+    metric.addEventListener('change',refreshNow);
+    reset.addEventListener('click',()=>{defaults();sortKey=null;direction=null;refreshNow();query.focus();});
+    defaults();refreshNow();
   }
 
   function renderSearch(targets, { keyword_rows: keywordRows, attribute_rows: attributeRows, rangeNotice = '', period } = {}) {
-    const scope = '仅展示明确归属当前父 ASIN 的数据。订单和销售额采用 7 天归因。搜索份额、排名和全站展现缺少源数据，显示为 —。';
-    const daily = period === 'day';
-    renderTable(targets.keywords, {
-      columns: keywordColumns, rows: Array.isArray(keywordRows) ? keywordRows : [], label: '关键词分析',
-      note: [rangeNotice, scope].filter(Boolean).join(' '),
-      emptyText: daily ? '此父 ASIN 在所选日期范围暂无关键词分析。' : '所选周没有可归属此父 ASIN 的关键词数据。',
-    });
-    renderTable(targets.attributes, {
-      columns: attributeColumns, rows: Array.isArray(attributeRows) ? attributeRows : [], label: '属性分析',
-      note: [rangeNotice, scope].filter(Boolean).join(' '),
-      emptyText: daily ? '此父 ASIN 在所选日期范围暂无属性分析。' : '所选周没有可归属此父 ASIN 的属性数据。',
-    });
-  }
-
-  function renderDaily(target, { rows, adRows, otherAds, spError, profit, returns, dailyFees } = {}) {
-    const byDate = source => new Map((Array.isArray(source?.rows) ? source.rows : []).map(row => [row.report_date, row]));
-    const profits = byDate(profit);
-    const returnsByDate = byDate(returns);
-    const feesByDate = byDate(dailyFees?.error ? null : dailyFees);
-    const dailyRows = scopedDailyAds(rows, adRows, otherAds).map(row => {
-      const appSessions = numeric(own(row, 'app_sessions'));
-      const visits = numeric(own(row, 'visits'));
-      const dailyProfit = profits.get(row.report_date);
-      const profitBasis = numeric(dailyProfit?.profit_before_ads);
-      const salesBasis = numeric(dailyProfit?.sales_basis);
-      const adCost = numeric(row.ad_cost);
-      const savedFees = feesByDate.get(row.report_date);
-      const fees = Object.fromEntries(manualFeeKeys.map(key => [key, validFee(savedFees?.[key])]));
-      const feeTotal = sumFees(fees);
-      const estimate = !spError && !otherAds?.error && profitBasis !== null && adCost !== null && adCost >= 0 &&
-        feeTotal !== null && salesBasis !== null && salesBasis === numeric(row.sales)
-        ? profitBasis - adCost - feeTotal : null;
-      const movement = returnsByDate.get(row.report_date);
-      return {
-        ...row,
-        ...estimateDailyOrderSplit(row),
-        ...fees,
-        profit: estimate,
-        gross_margin: ratio(estimate, salesBasis),
-        returns_rate: ratio(movement?.return_units, movement?.shipped_units),
-        ad_cost_of_sales: ratio(row.ad_cost, row.sales),
-        app_session_share: appSessions !== null && visits !== null && appSessions >= 0 && appSessions <= visits
-          ? ratio(appSessions, visits) : null,
-        unit_session_rate: ratio(own(row, 'units'), visits),
-      };
-    });
-    const trafficNote = '订单取销售流量报表的订单商品数，不等于独立订单数。总访客数取各子 ASIN 会话数之和，未去重。转化 = 订购件数 ÷ 会话数；APP 流量占比 = APP 会话数 ÷ 会话数。';
-    const orderEstimateNote = '运营估算：自然订单 = 订单商品数 − 广告归因订单，两项占比均除以订单商品数。广告订单超过订单商品数时，广告占比按原值显示，自然订单及其占比留空。';
-    const profitNote = '预估利润取各子 ASIN 当天的成本参数，扣除当日已归属广告费、测评费用、站外费用和其他费用。手动费用单位为 USD。未纳入独立促销、退款或结算调整。毛利率 = 预估利润 ÷ 销售额；缺少必要成本或其他数据时显示「—」。';
-    const returnsNote = 'FBA 退货率 = 当天仓库收到的 FBA 退货件数 ÷ 当天 FBA 发货件数。反映当日进出量，不是同一批订单的退货率；缺报表或当天无发货时显示「—」。';
-    renderTable(target, {
-      columns: dailyColumns, rows: dailyRows, label: '每日销售与流量',
-      note: [trafficNote, '广告销售额和广告订单取归因数据。广告费占总销售额 = 已归属广告费 ÷ 同日销售额。',
-        advertisingNotice(dailyRows, false, otherAds?.error, spError, false), orderEstimateNote, profitNote, returnsNote,
-        profit?.error ? '暂时无法读取预估利润。' : '', returns?.error ? '暂时无法读取 FBA 退货数据。' : '',
-        dailyFees?.error ? '暂时无法读取每日费用，利润和毛利率显示「—」。' : ''].filter(Boolean).join(' '),
-      emptyText: '所选日期范围暂无数据。',
-    });
-  }
-
-  function scopedDailyAds(rows, adRows, otherAds) {
-    const byDay = new Map((Array.isArray(adRows) ? adRows : []).map(row => [row.report_date, row]));
-    const dailyRows = (Array.isArray(rows) ? rows : []).map(row => {
-      const ad = byDay.get(row.report_date);
-      return { ...row, sp_cost: ad?.sp_cost, sp_sales: ad?.sp_sales, sp_orders: ad?.sp_orders,
-        sp_impressions: ad?.sp_impressions, sp_clicks: ad?.sp_clicks,
-        sp_sales_share: ratio(ad?.sp_sales, row.sales), sp_acos: ratio(ad?.sp_cost, ad?.sp_sales) };
-    });
-    return advertisingRows(dailyRows, 'report_date', aggregateOtherAds(otherAds?.rows, date => date), otherAds?.coverage ?? otherAds?.pending);
-  }
-
-  function renderDailyAds(target, { rows, adRows, otherAds, spError } = {}) {
-    const scopedRows = scopedDailyAds(rows, adRows, otherAds);
-    renderTable(target, {
-      columns: advertisingColumns(scopedRows, true), rows: scopedRows, label: '每日广告结构',
-      note: advertisingNotice(scopedRows, true, otherAds?.error, spError),
-      emptyText: '所选日期范围暂无可展示的日报。',
-    });
+    const scope='仅展示归属当前父 ASIN 的搜索词。订单和销售额采用 7 天归因，缺少源数据的指标显示「—」。';
+    const daily=period==='day';
+    const keywords=Array.isArray(keywordRows)?keywordRows:[];
+    const attrs=Array.isArray(attributeRows)?attributeRows:[];
+    const notice=[rangeNotice,scope].filter(Boolean).join(' ');
+    renderAnalysis(targets.keywords,{columns:keywordColumns,rows:keywords,label:'关键词分析',note:notice,
+      emptyText:daily?'此父 ASIN 在所选日期范围暂无关键词分析。':'所选周没有可归属此父 ASIN 的关键词数据。'});
+    renderAnalysis(targets.attributes,{columns:attributeColumns,rows:attrs,membership:attributeIndex(keywords),
+      label:'属性分析',note:notice,
+      emptyText:daily?'此父 ASIN 在所选日期范围暂无属性分析。':'所选周没有可归属此父 ASIN 的属性数据。'});
   }
 
   const skuSources = [['br','BR'],['sp','SP'],['orders','订单'],['transactions','交易']];
@@ -689,6 +711,33 @@
     };
   }
 
+  const profitSourceNames = {br:'销售与流量',sp:'SP 广告',orders:'订单',transactions:'交易'};
+  const profitFieldNames = {exchange_rate:'汇率',product_cost_rmb:'采购成本（RMB）',inbound_cost_rmb:'头程（RMB）',
+    fba_fee:'FBA 费用',commission_rate:'佣金率',vat_rate:'VAT 税率',sp_cost:'SP 广告费',order_sales:'订单销售额',
+    order_units:'订单销量',order_fba_units:'FBA 配送数量',order_promotion:'促销金额',txn_refund:'交易退款',
+    txn_total:'交易净额',txn_units:'交易销量'};
+  function explainSkuProfit(day,metric) {
+    const issues=Array.isArray(day?.profit_issues) ? day.profit_issues.filter(v=>v?.metric===metric) : [];
+    if (!issues.length) {
+      const missing=Object.keys(profitSourceNames).filter(k=>k!=='br' && (metric==='order_profit'||k!=='orders') && day?.coverage?.[k]!=='ready');
+      if (missing.length) return '待同步：'+missing.map(k=>profitSourceNames[k]).join('、');
+      if (day?.conflict_count>0) return '存在归属冲突，需核对 SKU 归属和毛利输入。';
+      return '缺少成本或计算所需的原始字段；请核对每日经营明细的输入。';
+    }
+    return issues.map(v=>{
+      const src=profitSourceNames[v.field]||'报表';
+      const field=profitFieldNames[v.field]||'必要字段';
+      const n=Number.isSafeInteger(v.count)&&v.count>1 ? `（${v.count} 个 SKU）` : '';
+      const example=typeof v.sku==='string'&&v.sku ? `，SKU：${v.sku}` : '';
+      if(v.code==='source_missing') return src+'报表待同步';
+      if(v.code==='identity_conflict') return src+'的 SKU 归属冲突'+n;
+      if(v.code==='catalog_unmatched') return 'SKU 未匹配到当日目录'+n+example;
+      if(v.code==='cost_missing') return (day.profit_cost_mode==='daily'?'缺当日成本：':day.profit_cost_mode==='catalog'?'缺目录成本：':'缺成本：')+field+n+example;
+      if(v.code==='source_field_missing') return '原始数据缺'+field+n+example;
+      return '计算所需的原始字段不完整';
+    }).join('；');
+  }
+
   function renderSku(targets, { sku, week = '', otherAds, returns, dailyFees, weeklyNotes } = {}) {
     const daily = !week;
     const days = sku?.days ?? [];
@@ -723,12 +772,37 @@
       const txnProfit = numeric(row.txn_profit);
       const otherCostParts = otherAdChannels.filter(channel=>row.ad_channels.includes(channel))
         .map(channel=>numeric(row[`${channel.toLowerCase()}_cost`]));
-      const otherCost = otherAds?.error ? null : otherCostParts.length ? addKnown(otherCostParts) : 0;
+      const states = new Map((otherAds?.coverage ?? []).filter(v=>v.week_start===monday(date)).map(v=>[v.channel,v.status]));
+      const missingChannels = otherAdChannels.filter(ch=>!states.has(ch) || states.get(ch)==='missing');
+      const otherCost = otherAds?.error || missingChannels.length ? null : otherCostParts.length ? addKnown(otherCostParts) : 0;
+      const adReason=otherAds?.error ? 'SB/SD 花费读取失败' : missingChannels.length ?
+        missingChannels.join('、')+' 花费报表未到齐' : otherCost===null ? '已归属的 SB/SD 广告缺花费' : '';
       const net = orderProfit !== null && feeTotal !== null && otherCost !== null
         ? orderProfit - feeTotal - otherCost : null;
       const dailyMovement = movements.get(date);
-      return {...row,...fees,...estimateDailyOrderSplit(row),order_profit_net:net,
-        txn_profit:txnProfit !== null && otherCost !== null ? txnProfit - otherCost : null,
+      function reasons(metric, base) {
+        const why=[];
+        if (sku?.error) why.push(sku.error);
+        else if (!daily && sku?.unfinished) why.push('所选周尚未结束，请按日查看已发布的日期。');
+        if (base===null && !sku?.error) {
+          (daily?[row]:days).filter(d=>numeric(d[metric])===null).forEach(d=>{
+            if (!daily && sku?.unfinished && !Number.isInteger(d.conflict_count)) return;
+            why.push((daily?'':d.report_date+'：')+explainSkuProfit(d,metric));
+          });
+        }
+        if (adReason) why.push(adReason+'，无法扣除对应广告费用。');
+        if (metric==='order_profit' && feeTotal===null) why.push('手动费用读取失败或金额未知，请重新读取费用。');
+        if (base!==null && why.length) why.unshift('基础'+(metric==='order_profit'?'订单':'交易')+'毛利 '+dollars.format(base)+'；尚未扣完适用费用，非最终毛利。');
+        if (!why.length) why.push('必要数据尚未齐全。');
+        return why;
+      }
+      const txnNet=txnProfit !== null && otherCost !== null ? txnProfit - otherCost : null;
+      const missingReasons={};
+      if (net===null) missingReasons.order_profit_net=missingReasons.order_gross_margin=reasons('order_profit',orderProfit);
+      else if (!(numeric(row.order_sales)>0)) missingReasons.order_gross_margin=['订单销售额为零、负数或缺失，无法计算毛利率。'];
+      if (txnNet===null) missingReasons.txn_profit=reasons('txn_profit',txnProfit);
+      return {...row,...fees,...estimateDailyOrderSplit(row),_missingReasons:missingReasons,order_profit_net:net,
+        txn_profit:txnNet,
         order_gross_margin:ratio(net,row.order_sales),
         returns_rate:daily ? ratio(dailyMovement?.return_units,dailyMovement?.shipped_units) : weeklyFba.rate,
         app_session_share:ratio(row.sessions_app,row.sessions),unit_session_rate:ratio(row.br_units,row.sessions),
@@ -737,6 +811,9 @@
     const returnNote = daily ? 'FBA 退货率 = 当日收退件数 ÷ 发货件数。' : weeklyReturnsNotice;
     const coverage = skuContextCoverage(days);
     const periodNote = sku?.unfinished ? '所选周尚未结束，整周汇总留空。' : '';
+    const modes=[...new Set(days.map(d=>d.profit_cost_mode).filter(Boolean))];
+    const costNote=modes.length===1 && modes[0]==='daily'?'成本按子 ASIN 和美西日期读取。':
+      modes.length===1 && modes[0]==='catalog'?'当前使用子 ASIN 的目录成本。':'';
     const manual = daily ? '当日手动费用' : '本周手动费用';
     const feeUnavailable = daily ? dailyFees?.error : !weeklyNotes;
     renderTable(targets.summary,{
@@ -755,7 +832,7 @@
       ],
       rows:summaryRows,week,label:daily ? 'SKU 每日明细核对' : 'SKU 周总结核对',
       note:[coverage,periodNote,sku?.error,
-        `成本按子 ASIN 和对应日期读取，周毛利按天汇总。必要成本未填时，受影响的毛利留空。订单毛利已扣 SP 和交易退款，再扣除${manual}。交易毛利按交易净额估算，已扣 SP，未扣手动费用。两项毛利都扣除能归属本产品的 SB、SD 广告费；如读取失败或已归属的广告缺花费，毛利留空。订单毛利率以订单列表销售额为分母。`,
+        `${costNote}周毛利按天汇总；点击「— 原因」可查看缺项。订单毛利已扣 SP 和交易退款，再扣除${manual}。交易毛利按交易净额估算，已扣 SP，未扣手动费用。两项毛利都扣除能归属本产品的 SB、SD 广告费；缺报、读取失败或已归属广告缺花费时，毛利留空。订单毛利率以订单列表销售额为分母。`,
         'BR 订单商品数和两项 SKU 单数合计均不能当作去重后的父 ASIN 订单数。自然单按 BR 订单商品数减广告归因订单估算。',
         returnNote,daily ? (returns?.error ? '暂时无法读取 FBA 退货和发货数据。' : '') : weeklyFba.note,
         feeUnavailable ? `无法读取${manual}，订单毛利估算留空。` : '',
@@ -770,5 +847,5 @@
     });
   }
 
-  window.MCWeeklyResultTables = Object.freeze({ render, renderDaily, renderDailyAds, renderSku, renderSearch, weekLabel, keywordColumns, attributeColumns });
+  window.MCWeeklyResultTables = Object.freeze({ renderSku, renderSearch, weekLabel, keywordColumns, attributeColumns });
 })();
