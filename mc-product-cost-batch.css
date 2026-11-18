@@ -1,0 +1,37 @@
+.mc-product-cost-batch .batch-step { margin-bottom: 1rem; }
+.mc-product-cost-batch .batch-step h2 { margin: 0 0 .65rem; font-size: 1.15rem; }
+.mc-product-cost-batch .batch-step .catalog-cost-help:last-child { margin-bottom: 0; }
+.mc-product-cost-batch .batch-file { width: min(100%,32rem); }
+.mc-product-cost-batch #batchPreviewForm { margin-bottom: 0; }
+.mc-product-cost-batch .catalog-summary { margin: 0 0 .65rem; }
+.mc-product-cost-batch .batch-table .catalog-table { min-width: 650px; }
+.mc-product-cost-batch .batch-table .catalog-table th { width: auto; }
+.mc-product-cost-batch .batch-table .catalog-table th:nth-child(1),
+.mc-product-cost-batch .batch-table .catalog-table th:nth-child(4) { width: 12%; }
+.mc-product-cost-batch .batch-table .catalog-table th:nth-child(2),
+.mc-product-cost-batch .batch-table .catalog-table th:nth-child(3) { width: 17%; }
+.mc-product-cost-batch .batch-table td:last-child { overflow-wrap: anywhere; }
+.mc-product-cost-batch .batch-changes { margin: 0; padding-left: 1em; }
+.mc-product-cost-batch .batch-save-help { margin-top: .65rem; }
+.mc-product-cost-batch .batch-coverage-gaps { margin: .75rem 0; }
+.mc-product-cost-batch .batch-coverage-gaps h3 { margin: 0; font-size: .94rem; }
+.mc-product-cost-batch .batch-coverage-gaps ul {
+  display: grid; gap: .25rem 1.6rem; grid-template-columns: repeat(auto-fit,minmax(min(100%,21rem),1fr));
+  margin: .35rem 0; padding-left: 1.2rem; font-size: .88rem;
+}
+.mc-product-cost-batch #batchCoverageTable th:nth-child(1) { width: 18%; }
+.mc-product-cost-batch #batchCoverageTable th:nth-child(3) { width: 22%; }
+.mc-product-cost-batch #batchCoverageTable th:nth-child(4) { width: auto; }
+.mc-product-cost-batch #batchCoverageTable td:nth-child(3) { overflow-wrap: anywhere; }
+
+.mc-product-cost-batch .batch-mode { max-width: 33rem; }
+.mc-product-cost-batch .batch-range-options { margin-top: .8rem; }
+.mc-product-cost-batch .batch-input-form { display: grid; align-items: start; justify-items: start; gap: .8rem; }
+.mc-product-cost-batch #batchManualPanel { width: min(100%, 64rem); }
+.mc-product-cost-batch #batchManualPanel textarea { font: inherit; padding: .55rem .75rem; border: 1px solid #b4ccd2; border-radius: .4rem; resize: vertical; }
+.mc-product-cost-batch .batch-manual-values { display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,10rem),1fr)); gap: .6rem 1rem; }
+.mc-product-cost-batch #batchCatalogPicker { margin: .6rem 0 1rem; }
+.mc-product-cost-batch #batchCatalogPicker summary { cursor: pointer; color: #04606b; font-weight: 600; }
+.mc-product-cost-batch .batch-find-list { display: flex; flex-wrap: wrap; gap: .4rem; }
+.mc-product-cost-batch .batch-overwrite { display: flex; align-items: center; gap: .4rem; color: #854813; }
+.mc-product-cost-batch [hidden] { display: none !important; }
