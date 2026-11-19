@@ -17,3 +17,9 @@
 .mc-weekly-results .results-fee-week {max-width:25rem;margin:.55rem 0}
 @media(min-width:1000px){.mc-weekly-results .results-controls:has(.results-week-field:not([hidden])) {grid-template-columns:minmax(25rem,1.25fr) minmax(0,2fr)}}
 @media(max-width:640px){.mc-weekly-results .results-week-menu{left:auto;right:0;min-width:min(20rem,calc(100vw - 3rem))}}
+.mc-weekly-results .results-sku-filters {display:flex;align-items:end;flex-wrap:wrap;gap:.5rem .75rem;margin-bottom:.7rem}
+.mc-weekly-results .results-sku-filters .results-field {max-width:100%}
+.mc-weekly-results .results-sku-notes {margin:.7rem 0;color:var(--results-muted);font-size:.86rem}
+.mc-weekly-results .results-sku-notes>summary {width:fit-content;color:var(--results-teal);cursor:pointer}
+.mc-weekly-results .results-sku-notes p {margin:.45rem 0}
+.mc-weekly-results .results-table-compact [data-column="ad_scope"] {min-width:8rem;max-width:14rem;white-space:normal}
