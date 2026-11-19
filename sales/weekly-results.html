@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="../assets/workspace-nav.css?v=20261110">
   <link rel="stylesheet" href="../assets/mc-weekly-source-nav.css?v=20261113-1">
   <link rel="stylesheet" href="../assets/mc-weekly-results.css?v=20261119-layout4">
-  <link rel="stylesheet" href="../assets/mc-results-weeks.css?v=20261119-operator5">
+  <link rel="stylesheet" href="../assets/mc-results-weeks.css?v=20261119-skuowner6">
 </head>
 <body>
 <div class="shell workspace-shell workspace-sales" id="appShell" hidden>
@@ -115,11 +115,11 @@
             </label>
             <label class="results-field" for="resultOwner">
               <span>负责人</span>
-              <select id="resultOwner"><option value="">全部负责人</option></select>
+              <select id="resultOwner" title="按报表日期统计目录中绑定给该负责人的 SKU。"><option value="">全部负责人</option></select>
             </label>
             <label class="results-field" for="resultOperator">
               <span>运营人员</span>
-              <select id="resultOperator" title="按产品目录的运营名称筛选父款，指标按整个父 ASIN 统计。"><option value="">全部运营人员</option></select>
+              <select id="resultOperator" title="按产品目录的运营名称筛选父款。"><option value="">全部运营人员</option></select>
             </label>
             <button id="clearResultFilters" class="results-button" type="button">清除筛选</button>
           </div>
@@ -263,8 +263,8 @@
 <noscript><style>#loading{display:none}</style><p class="auth-loading">请启用 JavaScript 后查看周结果。</p></noscript>
 <script src="../assets/config.js"></script>
 <script src="../assets/auth-client.js"></script>
-<script src="../assets/mc-weekly-results-tables.js?v=20261119-layout4"></script>
-<script src="../assets/mc-weekly-results.js?v=20261119-operator5"></script>
+<script src="../assets/mc-weekly-results-tables.js?v=20261119-skuowner6"></script>
+<script src="../assets/mc-weekly-results.js?v=20261119-skuowner6"></script>
 </body>
 </html>
 

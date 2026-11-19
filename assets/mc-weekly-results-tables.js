@@ -474,8 +474,10 @@
           const reasons = row._missingReasons?.[column.key];
           if (formatted.text === missing && Array.isArray(reasons) && reasons.length) {
             const info = element('details','results-profit-details');
-            const summary = element('summary','', '— 原因');
-            summary.setAttribute('aria-label', column.label + '未计算，展开原因');
+            const baseProfit = column.key === 'order_profit_net' ? numeric(row._ownerBaseProfit) : null;
+            const caption = baseProfit === null ? '— 原因' : '按 SKU ' + dollars.format(baseProfit) + '（' + row._ownerProfitStatus + '）';
+            const summary = element('summary', '', caption);
+            summary.setAttribute('aria-label', column.label + '未结算，' + caption + '，展开原因');
             const list = element('ul');
             reasons.forEach(text=>list.append(element('li','',text)));
             info.append(summary,list);
@@ -798,7 +800,9 @@
     }
     total.ad_read_error = periods.some(row => row.ad_read_error);
     total.ad_channels = channels;
+    total.ownerPartial = periods.some(row => row.ownerPartial);
     const scopeNotes = [];
+    if (total.ownerPartial) scopeNotes.push('部分父款期间仅计负责人 SKU 的 SP');
     if (total.ad_missing_reports.length) scopeNotes.push(total.ad_missing_reports.join('、') + ' 有缺报');
     if (total.ad_pending.length) scopeNotes.push(total.ad_pending.join('、') + ' 有未归属记录');
     if (total.ad_read_error) scopeNotes.push('SB、SD 读取失败');
@@ -807,6 +811,12 @@
     // Weekly distinct-term counts cannot be added without the underlying terms.
     if (periods.length === 1) {
       for (const key of ['all_terms', 'organic_terms', 'sp_terms', 'ac_terms']) total[key] = periods[0][key];
+    }
+    const pendingFees = periods.filter(row => row._ownerProfitStatus);
+    if (pendingFees.length && periods.every(row => numeric(row.order_profit_net) !== null || numeric(row._ownerBaseProfit) !== null)) {
+      total._ownerBaseProfit = sum(periods, 'order_profit');
+      total._ownerProfitStatus = pendingFees.some(row => row._ownerProfitStatus === '父级费用待核对')
+        ? '父级费用待核对' : '父级费用待分配';
     }
     total._missingReasons = {};
     total.coverage = Object.fromEntries(['br', 'sp'].map(source =>
@@ -882,6 +892,7 @@
   }
 
   function skuPeriodData({ sku, week = '', otherAds, returns, dailyFees, weeklyNotes }) {
+    if (sku?.ownerInScope === false) return {week,rows:[],note:'该时段无归属此负责人的 SKU。',adError:false};
     const daily = !week;
     const days = sku?.days ?? [];
     const dateKey = daily ? 'report_date' : 'week_start';
@@ -891,17 +902,18 @@
     };
     const weekCoverage = Object.fromEntries(skuSources.map(([key])=>
       [key,days.length === 7 && days.every(day=>day.coverage?.[key] === 'ready') ? 'ready' : 'missing']));
+    const ownerPartial = sku?.ownerPartial === true;
     const baseRows = (daily ? days : [{...sku?.totals,week_start:week,coverage:weekCoverage}]).map(raw => ({
       ...raw,
-      skuReadError:Boolean(sku?.error),
+      skuReadError:Boolean(sku?.error), ownerPartial,
       data_coverage:sku?.error ? '经营数据读取失败' : coverageText(raw.coverage),
       sales:raw.br_sales,
       orders:raw.br_orders,
       sp_sales_share:ratio(raw.sp_sales,raw.br_sales),
       sp_acos:ratio(raw.sp_cost,raw.sp_sales),
     }));
-    const scopedRows = advertisingRows(baseRows,dateKey,
-      aggregateOtherAds(!daily && sku?.unfinished ? [] : otherAds?.rows,daily ? date=>date : monday),
+    const parentAds = aggregateOtherAds(!daily && sku?.unfinished ? [] : otherAds?.rows, daily ? date => date : monday);
+    const scopedRows = advertisingRows(baseRows,dateKey,ownerPartial ? new Map() : parentAds,
       otherAds?.coverage ?? otherAds?.pending,otherAds?.error);
     const movements = new Map((!returns?.error ? returns?.rows ?? [] : []).map(row=>[row.report_date,row]));
     const weeklyFba = daily ? null : weeklySkuFba(week,movements,returns?.error,sku?.unfinished);
@@ -910,15 +922,21 @@
       const date = row[dateKey];
       const savedFees = daily ? expenses.get(date) : weeklyNotes ?
         Object.fromEntries(manualFeeKeys.map(key=>[key,weeklyNotes.notes?.[key] ?? 0])) : null;
-      const fees = Object.fromEntries(manualFeeKeys.map(key=>[key,validFee(savedFees?.[key])]));
+      const parentFees = Object.fromEntries(manualFeeKeys.map(key=>[key,validFee(savedFees?.[key])]));
+      const parentFeeTotal = sumFees(parentFees);
+      const fees = ownerPartial ? Object.fromEntries(manualFeeKeys.map(key => [key, parentFees[key] === 0 ? 0 : null])) : parentFees;
       const feeTotal = sumFees(fees);
       const orderProfit = numeric(row.order_profit);
       const txnProfit = numeric(row.txn_profit);
-      const attributed = otherAdChannels.filter(channel=>row.ad_channels.includes(channel));
-      const costOf = channel => numeric(row[`${channel.toLowerCase()}_cost`]);
-      const unknownCost = attributed.filter(channel=>costOf(channel) === null);
-      const otherCost = otherAds?.error ? null : attributed.length ? addKnown(attributed.map(costOf)) : 0;
-      const adReason = otherAds?.error ? 'SB、SD 花费读取失败' :
+      const channels = parentAds.get(date) ?? new Map();
+      const unknownCost = [...channels.keys()].filter(channel => channels.get(channel).cost === null);
+      const parentOtherCost = otherAds?.error || (ownerPartial && !otherAds) ? null :
+        channels.size ? addKnown([...channels.values()].map(channel => channel.cost)) : 0;
+      const needsAdAllocation = ownerPartial && parentOtherCost !== null && parentOtherCost !== 0;
+      const needsFeeAllocation = ownerPartial && parentFeeTotal !== null && parentFeeTotal !== 0;
+      const otherCost = needsAdAllocation ? null : parentOtherCost;
+      const adReason = needsAdAllocation ? '父款 SB、SD 有花费，尚未分配至该负责人的 SKU' :
+        otherAds?.error || (ownerPartial && !otherAds) ? 'SB、SD 花费读取失败' :
         unknownCost.length ? `已归属的 ${unknownCost.join('、')} 广告缺少花费` : '';
       const net = orderProfit !== null && feeTotal !== null && otherCost !== null
         ? orderProfit - feeTotal - otherCost : null;
@@ -934,7 +952,8 @@
           });
         }
         if (adReason) why.push(adReason+'，无法扣除对应广告费用。');
-        if (metric==='order_profit' && feeTotal===null) why.push('手动费用读取失败或金额未知，请重新读取费用。');
+        if (metric==='order_profit' && feeTotal===null) why.push(needsFeeAllocation
+          ? '父款有手动费用，尚未分配至该负责人的 SKU。' : '手动费用读取失败或金额未知，请重新读取费用。');
         if (base!==null && why.length) why.unshift('基础'+(metric==='order_profit'?'订单':'交易')+'毛利 '+dollars.format(base)+'；尚未扣完适用费用，非最终毛利。');
         if (!why.length) why.push('必要数据尚未齐全。');
         return why;
@@ -944,7 +963,11 @@
       if (net===null) missingReasons.order_profit_net=missingReasons.order_gross_margin=reasons('order_profit',orderProfit);
       else if (!(numeric(row.order_sales)>0)) missingReasons.order_gross_margin=['订单销售额为零、负数或缺失，无法计算毛利率。'];
       if (txnNet===null) missingReasons.txn_profit=reasons('txn_profit',txnProfit);
+      const pendingOwnerFees = ownerPartial && (feeTotal === null || otherCost === null);
       return {...row,...fees,...productTrafficMetrics(row,missingReasons),_missingReasons:missingReasons,order_profit_net:net,
+        _ownerBaseProfit:pendingOwnerFees ? orderProfit : null,
+        _ownerProfitStatus:pendingOwnerFees ? (parentFeeTotal === null || parentOtherCost === null ? '父级费用待核对' : '父级费用待分配') : '',
+        ad_scope:ownerPartial ? row.ad_scope + '（负责人 SKU）' : row.ad_scope,
         txn_profit:txnNet,
         order_gross_margin:ratio(net,row.order_sales),
         _returnUnits:daily ? numeric(dailyMovement?.return_units) : weeklyFba.returned,
@@ -961,7 +984,7 @@
       sku?.error || skuContextCoverage(days), costNote,
       sku?.unfinished ? '所选周尚未结束，整周指标留空。' : '',
       daily ? (returns?.error ? '暂时无法读取 FBA 退货和发货数据。' : '') : weeklyFba.note,
-      feeUnavailable ? '暂时无法读取手动费用，订单毛利估算留空。' : '',
+      feeUnavailable ? '暂时无法核对手动费用，完整订单毛利待核对。' : '',
     ].filter(Boolean).join(' ');
     return { week, rows: summaryRows, note, adError: otherAds?.error };
   }
@@ -1036,6 +1059,7 @@
       clear.disabled = !select.value;
       const summary = summarizeSkuRows(rows, daily);
       const statusNotes = [];
+      if (summary?.ownerPartial) statusNotes.push('部分父款期间仅计所选负责人 SKU 的 SP；未分配的父款费用单列提示。');
       if (!ads && summary) {
         if (summary.data_coverage !== '四类报表已齐') statusNotes.push(summary.data_coverage);
         if (summary.ad_read_error || summary.ad_missing_reports.length || summary.ad_pending.length) {

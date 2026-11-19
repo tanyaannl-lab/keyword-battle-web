@@ -25,7 +25,8 @@
   const allowedRpc = new Set(['mc_product_catalog_read','mc_weekly_results_weeks','mc_weekly_results_notes_read',
     'mc_weekly_results_notes_save','mc_weekly_results_search_daily_read',
     'mc_weekly_results_other_ads_read','mc_daily_fba_returns_read','mc_daily_results_fees_read','mc_daily_results_fees_save',
-    'mc_weekly_results_sku_list','mc_weekly_results_sku_read']);
+    'mc_weekly_results_sku_list','mc_weekly_results_sku_read',
+    'mc_owner_results_sku_list','mc_owner_results_sku_read','mc_owner_fba_returns_read','mc_owner_results_choices']);
   const previewParams = new URLSearchParams(window.location?.search ?? '');
   const skuSources = ['br','sp','orders','transactions'];
   const skuMetricKeys = ['sessions_browser','sessions_app','sessions','br_orders','br_units','br_sales',
@@ -57,6 +58,10 @@
   let context;
   let saveRequest;
   let parents = new Map();
+  let catalogOwners = [];
+  let ownerChoiceRange = '';
+  let ownerChoicesRequest = null;
+  const ownerChoiceCache = new Map();
   let week = '';
   let chosenWeeks=[],availableWeeks=[],weekChecks=[];
   let mode = 'week';
@@ -81,7 +86,13 @@
   const dailyFeeUnconfirmed = new Set();
   let dailyFeeRefreshing = false;
 
+  const partialOwnerNotice = '此负责人只覆盖部分 SKU。SP、经营和 FBA 按所选负责人统计；整父费用和 SB、SD 无法拆分时显示 SKU 基础毛利。';
+  const partialSearchNotice = '关键词和属性数据只归属到父 ASIN，无法拆分到这个负责人的 SKU。';
   const feeWeek = () => detail?.periods ? ui.resultFeeWeek.value : week;
+  const feeScopeIsEditable = () => {
+    const sku = detail?.periods ? detail.periods.find(period => period.week === feeWeek())?.sku : detail?.sku;
+    return Boolean(sku && !sku.ownerPartial);
+  };
   const noteKey = () => `${feeWeek()}/${parent}`;
   const validDay = value => {
     if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -177,6 +188,8 @@
     }
     const grouped = new Map();
     const allOwners = new Set();
+    const skuCounts = new Map();
+    for (const item of data.products) skuCounts.set(item?.sku, (skuCounts.get(item?.sku) ?? 0) + 1);
     const allOperators = new Set();
     for (const item of data.products) {
       if (!asin.test(item?.parent_asin ?? '') || !asin.test(item.asin ?? '') || typeof item.sku !== 'string' ||
@@ -184,11 +197,14 @@
         throw new Error('产品目录格式有误，请联系管理员。');
       }
       const group = grouped.get(item.parent_asin) ?? { parent: item.parent_asin, owners: new Set(), children: [] };
-      for (const owner of item.owners) { group.owners.add(owner); allOwners.add(owner); }
+      const itemOwners = item.owners.map(value => value.trim()).filter(Boolean);
+      for (const owner of itemOwners) group.owners.add(owner);
+      if (skuCounts.get(item.sku) === 1 && item.sku.trim() &&
+          item.owners.length === 1 && itemOwners.length === 1) allOwners.add(itemOwners[0]);
       const operator = typeof item.operator_name === 'string' ? item.operator_name.trim() : '';
       if (operator) allOperators.add(operator);
       group.children.push({
-        owners: item.owners, operator,
+        owners: itemOwners, operator,
         searchText: normalize([item.parent_asin,item.asin,item.sku,...item.owners,operator].join(' ')),
       });
       grouped.set(item.parent_asin, group);
@@ -208,6 +224,50 @@
       owners:[...allOwners].sort(compare),
       operators:[...allOperators].sort(compare),
     };
+  }
+
+  function ownerDateRanges() {
+    if (mode === 'day') return dayStart && dayEnd ? [{start_date:dayStart,end_date:dayEnd}] : [];
+    return chosenWeeks.map(start => ({start_date:start,end_date:shiftDay(start,6)}));
+  }
+
+  function renderOwnerChoices(extra = []) {
+    const selected = ui.resultOwner.value;
+    const choices = new Set([...catalogOwners, ...extra]);
+    if (selected) choices.add(selected);
+    ui.resultOwner.replaceChildren(new Option('全部负责人',''), ...[...choices].sort(collator.compare)
+      .map(value => new Option(value, value)));
+    ui.resultOwner.value = selected;
+  }
+
+  function refreshOwnerChoiceRange() {
+    const key = JSON.stringify(ownerDateRanges());
+    if (key !== ownerChoiceRange) {
+      ownerChoicesRequest?.abort();
+      ownerChoicesRequest = null;
+      ownerChoiceRange = key;
+      renderOwnerChoices(ownerChoiceCache.get(key));
+    }
+  }
+
+  async function loadHistoricalOwners() {
+    if (!auth || !ownerChoiceRange || ownerChoicesRequest || ownerChoiceCache.has(ownerChoiceRange)) return;
+    const ranges = ownerDateRanges();
+    if (!ranges.length) return;
+    const generation = sessionGeneration, key = ownerChoiceRange;
+    const controller = new AbortController();
+    ownerChoicesRequest = controller;
+    try {
+      const names = await rpc('mc_owner_results_choices', {p_ranges:ranges}, controller.signal);
+      if (generation !== sessionGeneration || key !== ownerChoiceRange || controller.signal.aborted) return;
+      if (!Array.isArray(names) || names.some(value => typeof value !== 'string' || !value.trim() || value.length > 512)) return;
+      ownerChoiceCache.set(key, [...new Set(names)]);
+      renderOwnerChoices(names);
+    } catch {
+      // Earlier installations can still use the current catalog's owners.
+    } finally {
+      if (ownerChoicesRequest === controller) ownerChoicesRequest = null;
+    }
   }
 
   function selectedWeekText() {
@@ -287,24 +347,25 @@
   function changeFeeWeek() {
     if (!detail?.periods || saveRequest) return;
     const w=ui.resultFeeWeek.value, row=detail.rows.find(r=>r.week_start===w);
-    if (!row) {
+    if (!row || !feeScopeIsEditable()) {
       activeNoteKey=''; noteBase=null;
       feeFields.forEach(id=>ui[id].value=''); updateFormState();
       notice(ui.notesStatus,'所选周的费用暂时无法读取，不能保存。','error');return;
     }
     renderNotes(row);
   }
-  async function loadMultiWeeks(controller,weeks,parentAsin) {
+  async function loadMultiWeeks(controller,weeks,parentAsin,owner) {
     const values=await mapWeeks(weeks,controller,w=>parentAsin
-      ? fetchSkuPeriod(controller,false,w,w,shiftDay(w,6),parentAsin)
-      : fetchSkuList(controller,w,shiftDay(w,6)));
+      ? fetchSkuPeriod(controller,false,w,w,shiftDay(w,6),parentAsin,owner)
+      : fetchSkuList(controller,w,shiftDay(w,6),owner));
     if (context!==controller || controller.signal.aborted || !auth) return;
     loadedContext=true;
     if (!parentAsin) {
       const sumMap=(prop,fields)=>new Map([...parents.keys()].map(key=>[key,
         Object.fromEntries(fields.map(field=>{
-          const nums=values.map(part=>number(part[prop].get(key)?.[field]));
-          return [field,nums.every(v=>v!==null)?nums.reduce((a,b)=>a+b,0):null];
+          const applicable = owner ? values.filter(part => part.error || part.visibleParents?.has(key)) : values;
+          const nums = applicable.map(part => number(part[prop].get(key)?.[field]));
+          return [field,nums.length && nums.every(v=>v!==null)?nums.reduce((a,b)=>a+b,0):null];
         }))]));
       listVisible=values.every(v=>v.visibleParents instanceof Set)
         ?new Set(values.flatMap(v=>[...v.visibleParents])):null;
@@ -320,12 +381,18 @@
     }
     detail={periods:weeks.map((w,i)=>({...values[i],week:w})),rows:values.flatMap(v=>v.rows),search:{state:'idle'}};
     renderMultiDetail();
-    ui.resultFeeWeekField.hidden=false;
-    ui.resultFeeWeek.replaceChildren(...weeks.map(w=>new Option(weekLabel(w),w)));
-    ui.resultFeeWeek.value=weeks[0];ui.weeklyNotesForm.hidden=false;
-    changeFeeWeek();
-    notice(ui.productStatus,`已选 ${weeks.length} 周；周总结和产品广告结构均按周展示，费用保存到指定周次。`);
-    if(focusDetail){(focusDetail==='notes'?ui.resultFeeWeek:ui.selectedParent).focus();focusDetail=false;}
+    const editableWeeks = detail.periods.filter(period => !period.sku.ownerPartial).map(period => period.week);
+    ui.resultFeeWeekField.hidden = ui.weeklyNotesForm.hidden = !editableWeeks.length;
+    ui.resultFeeWeek.replaceChildren(...editableWeeks.map(w => new Option(weekLabel(w), w)));
+    if (editableWeeks.length) {
+      ui.resultFeeWeek.value = editableWeeks[0];
+      changeFeeWeek();
+    }
+    const partial = detail.periods.some(period => period.sku.ownerPartial && period.sku.ownerInScope !== false);
+    const weeksOutOfScope = detail.periods.filter(period => period.sku.ownerInScope === false).length;
+    const rangeNote = weeksOutOfScope ? `其中 ${weeksOutOfScope} 周没有归属该负责人的 SKU，已从表格剔除。` : '';
+    notice(ui.productStatus, rangeNote + (partial ? partialOwnerNotice : `已选 ${weeks.length} 周；周总结和产品广告结构均按周展示，费用保存到指定周次。`));
+    if(focusDetail){(focusDetail==='notes' && editableWeeks.length ? ui.resultFeeWeek : ui.selectedParent).focus();focusDetail=false;}
     const failed=weeks.filter((w,i)=>values[i].sku?.error);
     pageStatus(failed.length ? '部分周经营明细读取失败：'+failed.map(weekLabel).join('；') : '',
       failed.length?'warning':'',failed.length?loadContext:null);
@@ -359,7 +426,7 @@
     button.dataset.resultParent = parentAsin;
     button.textContent = label;
     if (label !== parentAsin) button.setAttribute('aria-label', `${parentAsin} ${label}`);
-    if (label === '管理费用' || label === '费用未保存') {
+    if (label === '管理费用' || label === '查看费用' || label === '费用未保存') {
       button.dataset.resultNotes = 'true';
     }
     return button;
@@ -371,9 +438,17 @@
     const operator = ui.resultOperator.value;
     const tokens = normalize(ui.resultSearch.value.trim()).split(/\s+/).filter(Boolean);
     const eligible = [...parents.values()].filter(g=>!listVisible || listVisible.has(g.parent));
-    const groupRows = eligible.filter(group => group.children.some(child =>
-      (!owner || child.owners.includes(owner)) && (!operator || child.operator === operator) &&
-      tokens.every(token => child.searchText.includes(token))));
+    // The owner RPC has already selected parents using the catalog on each report date.
+    // Current catalog metadata only helps narrow independent operator/text searches.
+    const groupRows = eligible.filter(group => {
+      if (!operator && !tokens.length) return true;
+      const currentMatches = owner ? group.children.filter(child => child.owners.includes(owner)) : group.children;
+      if (owner && !currentMatches.length) {
+        return !operator && tokens.every(token => normalize(group.parent + ' ' + owner).includes(token));
+      }
+      return currentMatches.some(child => (!operator || child.operator === operator) &&
+        tokens.every(token => child.searchText.includes(token)));
+    });
     ui.resultsCount.textContent = `显示 ${groupRows.length} / ${eligible.length} 个父款`;
     ui.clearResultFilters.disabled = !owner && !operator && !ui.resultSearch.value;
     ui.parentEmpty.hidden = groupRows.length !== 0;
@@ -390,7 +465,7 @@
         label.textContent = ' · 历史或指定归属';
         parentCell.append(label);
       }
-      makeCell(tr, groupLabel(group));
+      makeCell(tr, owner || groupLabel(group));
       makeCell(tr, format(line?.sales, usd), true);
       makeCell(tr, format(line?.orders, integer), true);
       if (mode === 'day') {
@@ -406,7 +481,7 @@
       makeCell(tr, adSales > 0 && adCost !== null ? pct.format(adCost / adSales) : empty, true);
       makeCell(tr, '', true).append(productButton(group.parent, '查看毛利'));
       const draft = chosenWeeks.some(w=>drafts.has(`${w}/${group.parent}`));
-      makeCell(tr, '').append(productButton(group.parent, draft ? '费用未保存' : '管理费用'));
+      makeCell(tr, '').append(productButton(group.parent, owner ? '查看费用' : draft ? '费用未保存' : '管理费用'));
       fragment.append(tr);
     }
     ui.parentResults.replaceChildren(fragment);
@@ -443,7 +518,7 @@
   }
 
   function updateFormState() {
-    const busy = !loadedContext || !parent || !!saveRequest || activeNoteKey !== noteKey();
+    const busy = !loadedContext || !parent || !feeScopeIsEditable() || !!saveRequest || activeNoteKey !== noteKey();
     for (const id of feeFields) ui[id].disabled = busy;
     ui.saveWeeklyNotes.disabled = busy || sameForm(formValues(), noteBase);
   }
@@ -620,6 +695,11 @@
       const map=new Map(current.periods.map(p=>[p.week,p]));
       async function refresh(w) {
         const period=map.get(w);
+        if (period.sku.ownerPartial) {
+          period.search = {state:'unavailable',message:period.sku.ownerInScope === false ? '本周没有归属该负责人的 SKU。' : partialSearchNotice};
+          renderSearchState(period.search, period.targets);
+          return;
+        }
         period.search={state:'loading'};
         renderSearchState(period.search,period.targets,()=>{});
         period.search=await readSearchPeriod(controller,w,shiftDay(w,6),parentAsin,false);
@@ -627,6 +707,11 @@
       }
       await mapWeeks([...map.keys()],controller,refresh);
       if(stillCurrent())current.search.state='ready';
+      return;
+    }
+    if (current.sku?.ownerPartial) {
+      current.search = {state:'unavailable',message:current.sku.ownerInScope === false ? '所选期间没有归属该负责人的 SKU。' : partialSearchNotice};
+      renderSearchState(current.search);
       return;
     }
     const daily=mode==='day';const start=daily?dayStart:week,end=daily?dayEnd:shiftDay(week,6);
@@ -638,10 +723,12 @@
 
 
 
-  async function readFbaMovements(start,end,parentAsin,signal) {
+  async function readFbaMovements(start,end,parentAsin,signal,owner) {
     const validCount = n => n === null || (Number.isSafeInteger(n) && n >= 0);
     try {
-      const rows = await rpc('mc_daily_fba_returns_read',{p_start_date:start,p_end_date:end,p_parent_asin:parentAsin},signal);
+      const params = {p_start_date:start,p_end_date:end,p_parent_asin:parentAsin};
+      if (owner) params.p_owner = owner;
+      const rows = await rpc(owner ? 'mc_owner_fba_returns_read' : 'mc_daily_fba_returns_read',params,signal);
       if (!Array.isArray(rows) || rows.length !== dayCount(start,end) || new Set(rows.map(r=>r?.report_date)).size !== rows.length ||
           rows.some(r=>!validDay(r?.report_date) || r.report_date < start || r.report_date > end ||
             !validCount(r.return_units) || !validCount(r.shipped_units))) throw new Error('退货或发货的格式有误。');
@@ -712,7 +799,7 @@
     }
   }
 
-  async function readSkuPeriod(start,end,lastClosed,parentAsin,signal) {
+  async function readSkuPeriod(start,end,lastClosed,parentAsin,signal,owner) {
     const dates = Array.from({length:dayCount(start,end)},(_,index)=>shiftDay(end,-index));
     const days = new Map();
     const completeEnd = end <= lastClosed ? end : lastClosed;
@@ -723,13 +810,16 @@
       skuMetricKeys.every(key=>validMetric(row[key])) &&
       Number.isSafeInteger(row.conflict_count) && row.conflict_count >= 0;
     let totals = null;
+    let wholeParent = !owner;
+    let ownerInScope = null;
     let error = '';
     if (start <= completeEnd) {
       try {
-        const payload = await rpc('mc_weekly_results_sku_read',{
-          p_start_date:start,p_end_date:completeEnd,p_parent_asin:parentAsin,
-        },signal);
-        if (payload?.parent_asin !== parentAsin || !Array.isArray(payload.days) ||
+        const params = {p_start_date:start,p_end_date:completeEnd,p_parent_asin:parentAsin};
+        if (owner) params.p_owner = owner;
+        const payload = await rpc(owner ? 'mc_owner_results_sku_read' : 'mc_weekly_results_sku_read', params, signal);
+        if (payload?.parent_asin !== parentAsin || (owner && (typeof payload.whole_parent !== 'boolean' ||
+            (payload.in_scope !== undefined && typeof payload.in_scope !== 'boolean'))) || !Array.isArray(payload.days) ||
             payload.days.length !== dayCount(start,completeEnd) || !validMetrics(payload.totals)) {
           throw new Error('Invalid SKU preview response');
         }
@@ -740,15 +830,19 @@
           }
           days.set(row.report_date,row);
         }
-        if (completeEnd === end) totals = payload.totals;
+        if (owner && typeof payload.in_scope === 'boolean') ownerInScope = payload.in_scope;
+        if (completeEnd === end) {
+          totals = payload.totals;
+          wholeParent = !owner || (payload.whole_parent && ownerInScope !== false);
+        }
       } catch (err) {
         days.clear();
-        error = err.status === 404 || err.code === 'PGRST202' ? 'SKU 汇总接口尚未启用。' : '暂时无法读取 SKU 汇总，请重新加载。';
+        error = err.status === 404 || err.code === 'PGRST202' ? (owner ? '负责人 SKU 汇总接口尚未启用。' : 'SKU 汇总接口尚未启用。') : '暂时无法读取 SKU 汇总，请重新加载。';
       }
     }
     const missingCoverage = Object.fromEntries(skuSources.map(key=>[key,'missing']));
     return {days:dates.map(report_date=>days.get(report_date) ?? {report_date,coverage:missingCoverage}),
-      totals,error,unfinished:completeEnd < end};
+      totals,error,unfinished:completeEnd < end,ownerPartial:Boolean(owner && !wholeParent),ownerInScope};
   }
 
   async function readSkuWeeklyNotes(weekStart,parentAsin,signal) {
@@ -764,27 +858,42 @@
     } catch { return []; }
   }
 
-  async function fetchSkuList(controller,start,end) {
+  async function fetchSkuList(controller,start,end,owner) {
     const emptyList = (error,visibleParents=null) => ({listRows:new Map(),listAds:new Map(),visibleParents,error});
-    if (end >= pacificToday()) return emptyList('所选期间尚未结束，整期合计待齐。点开父 ASIN 可查看各数据源进度。',
+    const openPeriod = end >= pacificToday();
+    const pendingMessage = '所选期间尚未结束，整期合计待齐。点开父 ASIN 可查看各数据源进度。';
+    if (openPeriod && !owner) return emptyList(pendingMessage,
       new Set([...parents.values()].filter(g=>!g.ruleOnly).map(g=>g.parent)));
+    const availableEnd = openPeriod ? shiftDay(pacificToday(),-1) : end;
+    if (start > availableEnd) return emptyList(pendingMessage, new Set());
     try {
-      const entries=await rpc('mc_weekly_results_sku_list',{p_start_date:start,p_end_date:end},controller.signal);
+      const params={p_start_date:start,p_end_date:availableEnd};
+      if (owner) params.p_owner = owner;
+      const entries=await rpc(owner ? 'mc_owner_results_sku_list' : 'mc_weekly_results_sku_list',params,controller.signal);
       const fields=['br_sales','br_orders','br_units','sessions','sp_cost','sp_orders','sp_sales'];
       if (!Array.isArray(entries) || entries.length>10000 || new Set(entries.map(v=>v?.parent_asin)).size!==entries.length ||
           entries.some(r=>!r || !asin.test(r.parent_asin ?? '') || fields.some(k=>!(k in r) || (r[k]!==null && number(r[k])===null)))) {
         throw new Error('父款经营明细列表格式有误。');
       }
+      if (owner && controller === context && !controller.signal.aborted) {
+        for (const {parent_asin: key} of entries) {
+          if (!parents.has(key)) parents.set(key, {
+            parent:key, owners:[], ruleOnly:true, children:[{owners:[],operator:'',searchText:normalize(key)}],
+          });
+        }
+      }
+      if (openPeriod) return emptyList(pendingMessage, new Set(entries.map(r => r.parent_asin)));
       return {listRows:new Map(entries.map(r=>[r.parent_asin,{sales:r.br_sales,orders:r.br_orders,units:r.br_units,visits:r.sessions}])),
         listAds:new Map(entries.map(r=>[r.parent_asin,{sp_cost:r.sp_cost,sp_orders:r.sp_orders,sp_sales:r.sp_sales}])),visibleParents:new Set(entries.map(r=>r.parent_asin)),error:''};
     } catch (e) {
       if (e.status===401 || e.status===403) throw e;
+      if (owner) return emptyList(e.status===404 || e.code==='PGRST202' ? '负责人 SKU 列表接口尚未启用。' : '暂时无法读取负责人的 SKU 汇总，请重试。',new Set());
       return emptyList(e.status===404 || e.code==='PGRST202' ? '父款经营明细列表接口尚未安装；可打开父 ASIN 查看明细。' :
         '暂时无法读取父款汇总。可重试，或点开父 ASIN 查看明细。');
     }
   }
 
-  async function fetchSkuPeriod(controller,daily,weekStart,start,end,parentAsin) {
+  async function fetchSkuPeriod(controller,daily,weekStart,start,end,parentAsin,owner) {
     const lastClosed = shiftDay(pacificToday(),-1);
     const from = daily ? start : weekStart;
     const to = daily ? end : shiftDay(weekStart,6);
@@ -792,27 +901,29 @@
     const subsidiary = from <= closed;
     const signal = controller.signal;
     const [sku,otherAds,returns,dailyFees,rows] = await Promise.all([
-      readSkuPeriod(from,to,lastClosed,parentAsin,signal),
+      readSkuPeriod(from,to,lastClosed,parentAsin,signal,owner),
       subsidiary ? optionalOtherAds(from,closed,parentAsin,signal) : blankOtherAds(),
-      subsidiary ? readFbaMovements(from,closed,parentAsin,signal) : {rows:[],error:false},
+      subsidiary ? readFbaMovements(from,closed,parentAsin,signal,owner) : {rows:[],error:false},
       daily ? readDailyFees(from,to,parentAsin,signal) : null,
       daily ? [] : readSkuWeeklyNotes(weekStart,parentAsin,signal),
     ]);
     return {sku,otherAds,returns,dailyFees,rows,search:{state:'idle'}};
   }
 
-  async function loadSkuContext(controller,daily,weekStart,start,end,parentAsin) {
-    const loaded = await fetchSkuPeriod(controller,daily,weekStart,start,end,parentAsin);
+  async function loadSkuContext(controller,daily,weekStart,start,end,parentAsin,owner) {
+    const loaded = await fetchSkuPeriod(controller,daily,weekStart,start,end,parentAsin,owner);
     if (context !== controller || controller.signal.aborted || !auth) return;
     const {rows,sku} = loaded;
     detail = loaded;
     loadedContext = true;
     renderDetail();
-    if (daily) showDailyFees();
-    else if (rows.length) renderNotes(rows[0]);
-    notice(ui.productStatus,daily || rows.length ? '' : '暂时无法读取本周费用，订单毛利估算留空。', 'warning');
+    if (!sku.ownerPartial) {
+      if (daily) showDailyFees();
+      else if (rows.length) renderNotes(rows[0]);
+    }
+    notice(ui.productStatus,sku.ownerInScope === false ? '所选期间此父款没有归属该负责人的 SKU。' : sku.ownerPartial ? partialOwnerNotice : daily || rows.length ? '' : '暂时无法读取本周费用，订单毛利估算留空。','warning');
     if (focusDetail) {
-      (focusDetail === 'notes' && rows.length ? ui.reviewFee : ui.selectedParent).focus();
+      (focusDetail === 'notes' && !sku.ownerPartial && rows.length ? ui.reviewFee : ui.selectedParent).focus();
       focusDetail = false;
     }
     pageStatus(sku.error,sku.error ? 'error' : '',sku.error ? loadContext : null);
@@ -828,6 +939,8 @@
     const start = dayStart;
     const end = dayEnd;
     const parentAsin = parent || null;
+    refreshOwnerChoiceRange();
+    const owner = ui.resultOwner.value;
     renderSkuSource();
     loadedContext = false;
     hasList = false;
@@ -853,19 +966,19 @@
     notice(ui.productStatus);
     if (parentAsin) {
       ui.selectedParent.textContent = parentAsin;
-      ui.selectedOwner.textContent = groupLabel(parents.get(parentAsin));
+      ui.selectedOwner.textContent = owner || groupLabel(parents.get(parentAsin));
       ui.selectedWeek.textContent = daily ? rangeLabel(start,end) : selectedWeekText();
       selectTab(selectedTab);
     }
     pageStatus(daily ? '正在读取所选日期的结果…' : '正在读取所选周的结果…');
     try {
-      if (!daily && chosenWeeks.length > 1) { await loadMultiWeeks(controller,chosenWeeks.slice(),parentAsin); return; }
+      if (!daily && chosenWeeks.length > 1) { await loadMultiWeeks(controller,chosenWeeks.slice(),parentAsin,owner); return; }
       if (parentAsin) {
-        await loadSkuContext(controller,daily,weekStart,start,end,parentAsin);
+        await loadSkuContext(controller,daily,weekStart,start,end,parentAsin,owner);
         return;
       }
       const from = daily ? start : weekStart, to = daily ? end : shiftDay(weekStart,6);
-      const loaded = await fetchSkuList(controller,from,to);
+      const loaded = await fetchSkuList(controller,from,to,owner);
       if (context !== controller || controller.signal.aborted || !auth) return;
       listVisible = loaded.visibleParents; listRows = loaded.listRows; listAds = loaded.listAds; hasList = loadedContext = true;
       renderList();
@@ -889,7 +1002,7 @@
   }
 
   function captureDraft() {
-    if (mode !== 'week' || !loadedContext || activeNoteKey !== noteKey()) return;
+    if (mode !== 'week' || !loadedContext || !feeScopeIsEditable() || activeNoteKey !== noteKey()) return;
     const values = formValues();
     if (sameForm(values, noteBase)) {
       drafts.delete(activeNoteKey);
@@ -942,7 +1055,7 @@
     const key = dailyFeeKey(ui.dailyFeesDate.value);
     const needsReload = dailyFeeUnconfirmed.has(key) || !!detail?.dailyFees?.error ||
       (!!row && dailyFeeDrafts.has(key) && dailyFeeDrafts.get(key).revision !== row.revision);
-    const busy = mode !== 'day' || !auth || !parent || !!saveRequest || dailyFeeRefreshing;
+    const busy = mode !== 'day' || !auth || !parent || !feeScopeIsEditable() || !!saveRequest || dailyFeeRefreshing;
     ui.dailyFeesDate.disabled = busy || !row;
     for (const id of Object.keys(dailyFeeFields)) ui[id].disabled = busy || !row;
     ui.saveDailyFees.disabled = busy || needsReload || sameDailyFees(dailyFeeValues(),row) || !row;
@@ -973,7 +1086,7 @@
 
   function captureDailyFeeDraft() {
     const row = currentDailyFee();
-    if (mode !== 'day' || !row || saveRequest || dailyFeeRefreshing) return;
+    if (mode !== 'day' || !row || !feeScopeIsEditable() || saveRequest || dailyFeeRefreshing) return;
     const key = dailyFeeKey(row.report_date);
     const values = dailyFeeValues();
     const original = dailyFeeDrafts.get(key)?.base ?? row;
@@ -986,7 +1099,7 @@
   }
 
   async function reloadDailyFees() {
-    if (mode !== 'day' || !auth || !parent || !detail || !context || saveRequest || dailyFeeRefreshing) return;
+    if (mode !== 'day' || !auth || !parent || !detail || !feeScopeIsEditable() || !context || saveRequest || dailyFeeRefreshing) return;
     const previous = detail;
     const load = context;
     const day = ui.dailyFeesDate.value;
@@ -1022,7 +1135,7 @@
   async function saveDailyFees(event) {
     event.preventDefault();
     const row = currentDailyFee();
-    if (mode !== 'day' || !auth || !parent || !row || saveRequest || dailyFeeRefreshing || ui.saveDailyFees.disabled) return;
+    if (mode !== 'day' || !auth || !parent || !row || !feeScopeIsEditable() || saveRequest || dailyFeeRefreshing || ui.saveDailyFees.disabled) return;
     const key = dailyFeeKey(row.report_date);
     const values = dailyFeeValues();
     let amounts;
@@ -1070,7 +1183,7 @@
 
   async function saveNotes(event) {
     event.preventDefault();
-    if (mode !== 'week' || !auth || !loadedContext || !parent || activeNoteKey !== noteKey() || saveRequest) return;
+    if (mode !== 'week' || !auth || !loadedContext || !parent || !feeScopeIsEditable() || activeNoteKey !== noteKey() || saveRequest) return;
     const key = activeNoteKey;
     const values = formValues();
     if (sameForm(values, noteBase)) return;
@@ -1126,6 +1239,11 @@
     bootstrap?.abort(); context?.abort(); saveRequest?.abort();
     bootstrap = context = saveRequest = null;
     auth = null;
+    ownerChoicesRequest?.abort();
+    ownerChoicesRequest = null;
+    ownerChoiceRange = '';
+    catalogOwners = [];
+    ownerChoiceCache.clear();
     parents.clear(); listRows.clear(); listAds.clear(); listVisible=null; drafts.clear();
     dailyFeeDrafts.clear(); dailyFeeUnconfirmed.clear();
     week = parent = activeNoteKey = dayStart = dayEnd = '';
@@ -1176,7 +1294,7 @@
       const parsed = catalogGroups(catalog);
       parents = parsed.groups;
       buildWeekPicker(available);
-      ui.resultOwner.replaceChildren(new Option('全部负责人',''),...parsed.owners.map(value => new Option(value,value)));
+      catalogOwners = parsed.owners;
       ui.resultOperator.replaceChildren(new Option('全部运营人员',''),...parsed.operators.map(value => new Option(value,value)));
       ui.resultsCatalogDate.textContent = catalog.snapshot_date;
       ui.resultsCatalogDate.dateTime = catalog.snapshot_date;
@@ -1253,11 +1371,15 @@
   ui.resultView.addEventListener('change',() => changeMode(ui.resultView.value));
   ui.resultDateFilter.addEventListener('submit',queryDays);
   ui.resultSearch.addEventListener('input',renderList);
-  ui.resultOwner.addEventListener('change',renderList);
+  ui.resultOwner.addEventListener('focus',() => void loadHistoricalOwners());
+  ui.resultOwner.addEventListener('pointerdown',() => void loadHistoricalOwners());
+  ui.resultOwner.addEventListener('change',() => void loadContext());
   ui.resultOperator.addEventListener('change',renderList);
   ui.clearResultFilters.addEventListener('click',() => {
+    const wasOwnerScoped = Boolean(ui.resultOwner.value);
     ui.resultSearch.value = ui.resultOwner.value = ui.resultOperator.value = '';
-    renderList();
+    if (wasOwnerScoped) void loadContext();
+    else renderList();
     ui.resultSearch.focus();
   });
   ui.parentResults.addEventListener('click',event => {
