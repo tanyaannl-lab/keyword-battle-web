@@ -6,7 +6,7 @@
     'parentResults','parentTable','parentEmpty','productList','resultProductFilters','productStatus',
     'productResults','selectedScopeLabel','selectedParent','scopeParents','scopeSkuMembers','scopeSkuCount','scopeSkuList','selectedOwner','selectedWeek','backToProducts',
     'resultSummary','resultAds','resultKeywords','resultAttributes','summaryResults','adsResults',
-    'keywordResults','attributeResults','weeklyNotesForm','reviewFee','offsiteFee','otherFee',
+    'keywordResults','attributeResults','keywordSearchScope','attributeSearchScope','weeklyNotesForm','reviewFee','offsiteFee','otherFee',
     'saveWeeklyNotes','notesStatus','resultView','resultWeeklyFilter','resultDateFilter','resultStartDate',
     'resultEndDate','resultDateFeedback','weekTimeZone','resultsSummaryTitle','resultsSummaryHint',
     'resultTabSummary','resultTabAds','resultsAdsTitle','resultsWeeklyListHint','resultsDailyListHint',
@@ -20,6 +20,7 @@
   const dailyElements = [...document.querySelectorAll('[data-day-only]')];
   const panels = { summary: ui.resultSummary, ads: ui.resultAds, keywords: ui.resultKeywords, attributes: ui.resultAttributes };
   const tables = { summary: ui.summaryResults, ads: ui.adsResults, keywords: ui.keywordResults, attributes: ui.attributeResults };
+  const searchScopes = [ui.keywordSearchScope, ui.attributeSearchScope];
   const config = window.KB_CONFIG;
   const origin = 'https://peykqsnlistkhrqsiulx.supabase.co';
   const login = '../index.html';
@@ -87,9 +88,8 @@
   const dailyFeeUnconfirmed = new Set();
   let dailyFeeRefreshing = false;
 
-  const groupDetailNotice = '按当前筛选范围内的 SKU 统计。跨父款或仅覆盖部分父款时显示 SKU 基础毛利；整父费用和搜索词可在对应父款中查看。';
+  const groupDetailNotice = '按当前筛选范围内的 SKU 统计。跨父款或仅覆盖部分父款时显示 SKU 基础毛利。关键词和属性可在对应页签按父 ASIN 查看，整父费用可进入父款明细查看。';
   const partialOwnerNotice = '此负责人只覆盖部分 SKU。SP、经营和 FBA 按所选负责人统计；整父费用和 SB、SD 无法拆分时显示 SKU 基础毛利。';
-  const partialSearchNotice = '关键词和属性数据只归属到父 ASIN，无法拆分到这个负责人的 SKU。';
   const feeWeek = () => detail?.periods ? ui.resultFeeWeek.value : week;
   const feeScopeIsEditable = () => {
     const sku = detail?.periods ? detail.periods.find(period => period.week === feeWeek())?.sku : detail?.sku;
@@ -329,6 +329,10 @@
     return body;
   }
   function renderMultiDetail() {
+    if (!detail.periods[0]?.targets) {
+      tables.keywords.replaceChildren();
+      tables.attributes.replaceChildren();
+    }
     for (const period of detail.periods) {
       if (!period.targets) period.targets = {
         keywords: weekSection(tables.keywords, period.week),
@@ -357,8 +361,8 @@
     if (context!==controller || controller.signal.aborted || !auth) return;
     loadedContext=true;
     detail={periods:weeks.map((w,i)=>({...values[i],week:w})),rows:values.flatMap(v=>v.rows),search:{state:'idle'}};
-    renderMultiDetail();
     if (detailGroup) renderGroupContext(detail.periods.map(period => period.groupContext));
+    renderMultiDetail();
     const editableWeeks = detailGroup ? [] : detail.periods.filter(period => !period.sku.ownerPartial).map(period => period.week);
     ui.resultFeeWeekField.hidden = ui.weeklyNotesForm.hidden = !editableWeeks.length;
     ui.resultFeeWeek.replaceChildren(...editableWeeks.map(w => new Option(weekLabel(w), w)));
@@ -386,7 +390,10 @@
       if (active && focus) tab.focus();
     }
     for (const [name,panel] of Object.entries(panels)) panel.hidden = key !== name;
-    if ((key === 'keywords' || key === 'attributes') && detail && (detailGroup || detail.search.state === 'idle')) void loadSearchAnalysis();
+    if (key === 'keywords' || key === 'attributes') {
+      if (detail?.search.state === 'idle') void loadSearchAnalysis();
+      else if (!detail) renderSearchState({state:'loading',message:'正在读取所选范围…'});
+    }
   }
 
   function makeCell(row, value, numeric = false) {
@@ -532,6 +539,7 @@
     const parentAsins = [...new Set(contexts.flatMap(part => part?.parents ?? [])
       .filter(value => typeof value === 'string' && asin.test(value)))].sort();
     detailGroup.parentAsins = parentAsins;
+    setupSearchParent(detailGroup, parentAsins);
     ui.scopeParents.replaceChildren();
     ui.scopeParents.hidden = !parentAsins.length;
     if (!parentAsins.length) return;
@@ -547,6 +555,50 @@
       button.setAttribute('aria-label','查看父款 ' + value + ' 的整父明细和费用');
       ui.scopeParents.append(button);
     }
+  }
+
+  function setupSearchParent(group, parentsInRange) {
+    const current = detail;
+    if (!parentsInRange.includes(group.chosenSearchParent)) group.chosenSearchParent = '';
+    const chosen = parentsInRange.length === 1 ? parentsInRange[0] : group.chosenSearchParent;
+    current.searchParent = chosen;
+    const scopeText = value => value
+      ? '统计范围为父 ASIN ' + value + ' 下的全部 SKU。'
+      : '当前分组关联多个父 ASIN，请选择要查看的整父数据。';
+    const selectors = [], notes = [];
+    for (const scope of searchScopes) {
+      scope.replaceChildren();
+      scope.hidden = !parentsInRange.length;
+      if (scope.hidden) continue;
+      if (parentsInRange.length > 1) {
+        const label = document.createElement('label');
+        label.className = 'results-field';
+        const caption = document.createElement('span');
+        caption.textContent = '查看父 ASIN';
+        const select = document.createElement('select');
+        select.dataset.searchParent = '';
+        select.append(new Option('选择父 ASIN',''), ...parentsInRange.map(key => new Option(key,key)));
+        select.value = chosen;
+        selectors.push(select);
+        label.append(caption,select);
+        scope.append(label);
+      }
+      const note = document.createElement('p');
+      note.className = 'results-table-note';
+      note.dataset.searchScopeNote = '';
+      note.textContent = scopeText(chosen);
+      notes.push(note);
+      scope.append(note);
+    }
+    for (const select of selectors) select.addEventListener('change', () => {
+      if (current !== detail || group !== detailGroup || (select.value && !parentsInRange.includes(select.value))) return;
+      current.searchParent = group.chosenSearchParent = select.value;
+      for (const other of selectors) other.value = current.searchParent;
+      for (const note of notes) note.textContent = scopeText(current.searchParent);
+      current.search.controller?.abort();
+      current.search = {state:'idle'};
+      void loadSearchAnalysis();
+    });
   }
 
   function formValues() {
@@ -691,7 +743,7 @@
     }
     const loading = search.state === 'loading';
     const canRetry = search.state === 'waiting' || search.state === 'error';
-    const message = loading ? '正在读取搜索词分析…' : search.message;
+    const message = search.message || (loading ? '正在读取搜索词分析…' : '暂无搜索词分析。');
     for (const target of [targets.keywords, targets.attributes]) {
       const status = document.createElement('p');
       status.className = 'results-state';
@@ -739,7 +791,7 @@
       validateSearchRows(data);
       const covered=searchCoveredDays(data,start,end);
       if (!covered || (!daily && covered<wanted)) return {state:'waiting',
-        message:`搜索词日报待同步（${covered}/${wanted} 天）。${daily?'':'七天齐备后显示本周分析。'}`};
+        message:`搜索词日报待同步（${covered}/${wanted} 天）。${daily?'':'七天齐备后显示本周分析，可切换到按日查看已发布的日期。'}`};
       return {state:'ready',data:{...data,period:daily?'day':'week',rangeNotice:
         covered===wanted ? `按已发布的搜索词日报汇总（${covered}/${wanted} 天）。` :
         `只汇总已发布的搜索词日报（${covered}/${wanted} 天），其余日期未计入。`}};
@@ -749,51 +801,63 @@
     }
   }
   async function loadSearchAnalysis() {
-    const controller=context, current=detail;
-    if (!auth || !controller || controller.signal.aborted || !current || (!parent && !detailGroup) ||
-        (!detailGroup && !['idle','error','waiting'].includes(current.search.state))) return;
-    if (detailGroup) {
-      const state = {state:'unavailable',message:'关键词和属性按父 ASIN 统计，请选择实际父款查看。'};
-      current.search = state;
-      if (current.periods) {
-        for (const period of current.periods) renderSearchState(state, period.targets);
-      } else renderSearchState(state);
-      return;
+    const ownerContext = context, current = detail, group = detailGroup;
+    if (!auth || !ownerContext || ownerContext.signal.aborted || !current || current.search.state !== 'idle') return;
+    const controller = new AbortController();
+    const request = {state:'loading',controller};
+    current.search = request;
+    const signal = AbortSignal.any([ownerContext.signal,controller.signal]);
+    const stillCurrent = () => detail === current && context === ownerContext &&
+      current.search === request && !signal.aborted && !!auth;
+    const selectedParent = group ? current.searchParent : parent;
+    const daily = mode === 'day';
+    const start = daily ? dayStart : week, end = daily ? dayEnd : shiftDay(week,6);
+    const periods = current.periods ?? [current];
+    const eligible = [];
+
+    function refreshScope() {
+      if (stillCurrent()) void loadContext();
     }
-    const stillCurrent=()=>context===controller && detail===current && !!auth && !controller.signal.aborted;
-    const parentAsin=parent;
-    if (current.periods) {
-      current.search.state='loading';
-      const map=new Map(current.periods.map(p=>[p.week,p]));
-      async function refresh(w) {
-        const period=map.get(w);
-        if (period.sku.ownerPartial) {
-          period.search = {state:'unavailable',message:period.sku.ownerInScope === false ? '本周没有归属该负责人的 SKU。' : partialSearchNotice};
-          renderSearchState(period.search, period.targets);
-          return;
-        }
-        period.search={state:'loading'};
-        renderSearchState(period.search,period.targets,()=>{});
-        period.search=await readSearchPeriod(controller,w,shiftDay(w,6),parentAsin,false);
-        if(stillCurrent())renderSearchState(period.search,period.targets,()=>{if(stillCurrent())void refresh(w);});
+    for (const period of periods) {
+      const targets = period.targets ?? tables;
+      const time = daily ? '所选日期范围' : '本周';
+      if (group && period.sku.error) {
+        renderSearchState({state:'error',message:time + '的关联父 ASIN 读取失败，请重试。'},targets,refreshScope);
+      } else if (group && !period.groupContext?.parents.length) {
+        const message = period.sku.unfinished && period.sku.ownerInScope === null
+          ? '本周尚未结束，暂时无法确定关联父 ASIN。' : time + '没有与当前分组关联的父 ASIN。';
+        renderSearchState({state:'unavailable',message},targets);
+      } else if (!selectedParent) {
+        renderSearchState({state:'unavailable',message:'请先选择父 ASIN 查看搜索词分析。'},targets);
+      } else if (group && !period.groupContext.parents.includes(selectedParent)) {
+        renderSearchState({state:'unavailable',message:time + '的分组未关联父 ASIN ' + selectedParent + '。'},targets);
+      } else {
+        renderSearchState({state:'loading'},targets);
+        eligible.push(period);
       }
-      await mapWeeks([...map.keys()],controller,refresh);
-      if(stillCurrent())current.search.state='ready';
-      return;
     }
-    if (current.sku?.ownerPartial) {
-      current.search = {state:'unavailable',message:current.sku.ownerInScope === false ? '所选期间没有归属该负责人的 SKU。' : partialSearchNotice};
-      renderSearchState(current.search);
-      return;
+
+    async function read(period) {
+      if (!stillCurrent()) return;
+      const targets = period.targets ?? tables;
+      const from = period.week || start, to = period.week ? shiftDay(period.week,6) : end;
+      const data = await readSearchPeriod({signal},from,to,selectedParent,daily);
+      if (!stillCurrent()) return;
+      const retry = () => {
+        if (!stillCurrent()) return;
+        renderSearchState({state:'loading'},targets);
+        void read(period);
+      };
+      try {
+        renderSearchState(data,targets,retry);
+      } catch {
+        renderSearchState({state:'error',message:'搜索词分析表无法显示，请重新加载分析。'},targets,retry);
+      }
     }
-    const daily=mode==='day';const start=daily?dayStart:week,end=daily?dayEnd:shiftDay(week,6);
-    current.search={state:'loading'};renderSearchState(current.search);
-    const search=await readSearchPeriod(controller,start,end,parentAsin,daily);
-    if(!stillCurrent())return;
-    current.search=search;renderSearchState(search);
+
+    await mapWeeks(eligible,ownerContext,read);
+    if (stillCurrent()) request.state = 'ready';
   }
-
-
 
   async function readFbaMovements(start,end,parentAsin,signal,owner) {
     const validCount = n => n === null || (Number.isSafeInteger(n) && n >= 0);
@@ -969,8 +1033,8 @@
     const {rows,sku} = loaded;
     detail = loaded;
     loadedContext = true;
-    renderDetail();
     if (detailGroup) renderGroupContext([loaded.groupContext]);
+    renderDetail();
     if (!detailGroup && !sku.ownerPartial) {
       if (daily) showDailyFees();
       else if (rows.length) renderNotes(rows[0]);
@@ -1019,6 +1083,7 @@
     ui.resultsDailyListHint.hidden = true;
     ui.weeklyNotesForm.hidden = true;
     ui.resultFeeWeekField.hidden = true;
+    for (const scope of searchScopes) { scope.hidden = true; scope.replaceChildren(); }
     resetDailyFees();
     for (const table of Object.values(tables)) table.replaceChildren();
     for (const id of feeFields) ui[id].value = '0';
@@ -1068,7 +1133,11 @@
         missing.length ? '所选期间待同步：' + missing.join('、') + '。' : ''].join('');
       pageStatus(status,status ? 'warning' : '');
     } catch (error) {
-      if (context === controller && !controller.signal.aborted && auth) pageStatus(explain(error),'error',loadContext);
+      if (context === controller && !controller.signal.aborted && auth) {
+        const message = explain(error);
+        pageStatus(message,'error',loadContext);
+        if (isDetail && !detail) renderSearchState({state:'error',message},tables,loadContext);
+      }
     }
   }
 
@@ -1351,6 +1420,7 @@
     detailGroup = parentOrigin = returnGroup = null;
     ui.scopeParents.replaceChildren();
     ui.scopeParents.hidden = true;
+    for (const scope of searchScopes) { scope.hidden = true; scope.replaceChildren(); }
     ui.scopeSkuMembers.hidden = true;
     ui.scopeSkuMembers.open = false;
     ui.scopeSkuList.replaceChildren();

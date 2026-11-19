@@ -95,6 +95,29 @@
 .mc-weekly-results #parentTable [data-product-row] td {background:#f8fbfb}
 .mc-weekly-results .results-expand-products {display:block;margin:.24rem 0 0;padding:.2rem .4rem;border:1px solid #bfd2d7;border-radius:.3rem;color:var(--results-teal);font:inherit;font-size:.76rem;background:white;cursor:pointer}
 .mc-weekly-results .results-product-subinfo {display:block;margin-top:.2rem;font-size:.75rem;font-weight:400;color:var(--results-muted)}
+.mc-weekly-results .results-search-scope {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .45rem .8rem;
+  margin-bottom: .85rem;
+}
+.mc-weekly-results .results-search-scope label {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .5rem;
+  font-weight: 600;
+}
+.mc-weekly-results .results-search-scope select {
+  padding: .35rem .5rem;
+  max-width: 100%;
+  color: inherit;
+  font: inherit;
+  border: 1px solid #bfd2d7;
+  border-radius: .3rem;
+  background: white;
+}
 .mc-weekly-results .results-parent-links {display:flex;align-items:center;flex-wrap:wrap;gap:.25rem .65rem;margin:.4rem 0}
 .mc-weekly-results #parentTable button:focus-visible,.mc-weekly-results .results-parent-links button:focus-visible {outline:2px solid var(--results-teal);outline-offset:2px}
 @media(max-width:640px){.mc-weekly-results #parentTable tbody th{max-width:11.5rem;min-width:7rem}}
