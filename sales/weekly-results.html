@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="../assets/workspace-nav.css?v=20261110">
   <link rel="stylesheet" href="../assets/mc-weekly-source-nav.css?v=20261113-1">
   <link rel="stylesheet" href="../assets/mc-weekly-results.css?v=20261119-layout4">
-  <link rel="stylesheet" href="../assets/mc-results-weeks.css?v=20261119-layout4">
+  <link rel="stylesheet" href="../assets/mc-results-weeks.css?v=20261119-operator5">
 </head>
 <body>
 <div class="shell workspace-shell workspace-sales" id="appShell" hidden>
@@ -111,11 +111,15 @@
           <div id="resultProductFilters" class="results-product-filters">
             <label class="results-field" for="resultSearch">
               <span>搜索产品</span>
-              <input id="resultSearch" type="search" maxlength="200" autocomplete="off" placeholder="父 ASIN、子 ASIN 或 SKU">
+              <input id="resultSearch" type="search" maxlength="200" autocomplete="off" placeholder="ASIN、SKU、负责人或运营人员">
             </label>
             <label class="results-field" for="resultOwner">
               <span>负责人</span>
               <select id="resultOwner"><option value="">全部负责人</option></select>
+            </label>
+            <label class="results-field" for="resultOperator">
+              <span>运营人员</span>
+              <select id="resultOperator" title="按产品目录的运营名称筛选父款，指标按整个父 ASIN 统计。"><option value="">全部运营人员</option></select>
             </label>
             <button id="clearResultFilters" class="results-button" type="button">清除筛选</button>
           </div>
@@ -260,7 +264,7 @@
 <script src="../assets/config.js"></script>
 <script src="../assets/auth-client.js"></script>
 <script src="../assets/mc-weekly-results-tables.js?v=20261119-layout4"></script>
-<script src="../assets/mc-weekly-results.js?v=20261119-layout4"></script>
+<script src="../assets/mc-weekly-results.js?v=20261119-operator5"></script>
 </body>
 </html>
 

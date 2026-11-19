@@ -24,6 +24,22 @@
 .mc-weekly-results .results-sku-notes p {margin:.45rem 0}
 .mc-weekly-results .results-table-compact [data-column="ad_scope"] {min-width:8rem;max-width:14rem;white-space:normal}
 
+.mc-weekly-results .results-product-filters {
+  display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
+  gap: .65rem;
+}
+.mc-weekly-results .results-product-filters .results-field {
+  flex: 1 1 8.5rem;
+}
+.mc-weekly-results .results-product-filters .results-field:first-child {
+  flex: 1.5 1 12rem;
+}
+@container (max-width: 620px) {
+  .mc-weekly-results .results-product-filters .results-field:first-child { flex-basis: 100%; }
+}
+
 .mc-weekly-results .metric-ad {
   --metric-cell: #eaf3ff;
   --metric-hover: #dfedfc;

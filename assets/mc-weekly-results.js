@@ -2,7 +2,7 @@
 
 (() => {
   const ids = ['appShell','loading','userEmail','logoutBtn','results','resultsStatus','retryResults',
-    'resultWeek','resultSearch','resultOwner','clearResultFilters','resultsCount','resultsCatalogDate',
+    'resultWeek','resultSearch','resultOwner','resultOperator','clearResultFilters','resultsCount','resultsCatalogDate',
     'parentResults','parentTable','parentEmpty','productList','resultProductFilters','productStatus',
     'productResults','selectedParent','selectedOwner','selectedWeek','backToProducts',
     'resultSummary','resultAds','resultKeywords','resultAttributes','summaryResults','adsResults',
@@ -177,6 +177,7 @@
     }
     const grouped = new Map();
     const allOwners = new Set();
+    const allOperators = new Set();
     for (const item of data.products) {
       if (!asin.test(item?.parent_asin ?? '') || !asin.test(item.asin ?? '') || typeof item.sku !== 'string' ||
           !Array.isArray(item.owners) || item.owners.some(owner => typeof owner !== 'string')) {
@@ -184,7 +185,12 @@
       }
       const group = grouped.get(item.parent_asin) ?? { parent: item.parent_asin, owners: new Set(), children: [] };
       for (const owner of item.owners) { group.owners.add(owner); allOwners.add(owner); }
-      group.children.push({ owners: item.owners, searchText: normalize([item.parent_asin,item.asin,item.sku,...item.owners].join(' ')) });
+      const operator = typeof item.operator_name === 'string' ? item.operator_name.trim() : '';
+      if (operator) allOperators.add(operator);
+      group.children.push({
+        owners: item.owners, operator,
+        searchText: normalize([item.parent_asin,item.asin,item.sku,...item.owners,operator].join(' ')),
+      });
       grouped.set(item.parent_asin, group);
     }
     // The optional list is sourced from past directories and approved overrides. Add
@@ -193,13 +199,14 @@
       for (const value of data.report_parent_choices) {
         if (typeof value !== 'string' || !asin.test(value) || grouped.has(value)) continue;
         grouped.set(value, { parent:value, owners:new Set(), ruleOnly:true,
-          children:[{owners:[],searchText:normalize(value)}] });
+          children:[{owners:[],operator:'',searchText:normalize(value)}] });
       }
     }
     const compare = (a,b) => collator.compare(a,b);
     return {
       groups: new Map([...grouped].sort(([a],[b]) => compare(a,b)).map(([key,group]) => [key, {...group, owners:[...group.owners].sort(compare)}])),
       owners:[...allOwners].sort(compare),
+      operators:[...allOperators].sort(compare),
     };
   }
 
@@ -361,12 +368,14 @@
   function renderList() {
     if (!hasList) return;
     const owner = ui.resultOwner.value;
+    const operator = ui.resultOperator.value;
     const tokens = normalize(ui.resultSearch.value.trim()).split(/\s+/).filter(Boolean);
     const eligible = [...parents.values()].filter(g=>!listVisible || listVisible.has(g.parent));
     const groupRows = eligible.filter(group => group.children.some(child =>
-      (!owner || child.owners.includes(owner)) && tokens.every(token => child.searchText.includes(token))));
+      (!owner || child.owners.includes(owner)) && (!operator || child.operator === operator) &&
+      tokens.every(token => child.searchText.includes(token))));
     ui.resultsCount.textContent = `显示 ${groupRows.length} / ${eligible.length} 个父款`;
-    ui.clearResultFilters.disabled = !owner && !ui.resultSearch.value;
+    ui.clearResultFilters.disabled = !owner && !operator && !ui.resultSearch.value;
     ui.parentEmpty.hidden = groupRows.length !== 0;
     ui.parentTable.hidden = groupRows.length === 0;
     const fragment = document.createDocumentFragment();
@@ -1129,6 +1138,7 @@
     ui.userEmail.textContent = '';
     ui.resultSearch.value = '';
     ui.resultOwner.replaceChildren(new Option('全部负责人',''));
+    ui.resultOperator.replaceChildren(new Option('全部运营人员',''));
     chosenWeeks=[]; availableWeeks=[]; weekChecks=[]; ui.resultWeekOptions.replaceChildren();
     ui.resultWeek.open=false;ui.resultWeek.inert=false;ui.resultWeekSummary.textContent='选择周次';ui.resultFeeWeek.replaceChildren();
     ui.resultStartDate.value = ui.resultEndDate.value = '';
@@ -1167,6 +1177,7 @@
       parents = parsed.groups;
       buildWeekPicker(available);
       ui.resultOwner.replaceChildren(new Option('全部负责人',''),...parsed.owners.map(value => new Option(value,value)));
+      ui.resultOperator.replaceChildren(new Option('全部运营人员',''),...parsed.operators.map(value => new Option(value,value)));
       ui.resultsCatalogDate.textContent = catalog.snapshot_date;
       ui.resultsCatalogDate.dateTime = catalog.snapshot_date;
       week = available[1] ?? available[0];
@@ -1243,8 +1254,9 @@
   ui.resultDateFilter.addEventListener('submit',queryDays);
   ui.resultSearch.addEventListener('input',renderList);
   ui.resultOwner.addEventListener('change',renderList);
+  ui.resultOperator.addEventListener('change',renderList);
   ui.clearResultFilters.addEventListener('click',() => {
-    ui.resultSearch.value = ui.resultOwner.value = '';
+    ui.resultSearch.value = ui.resultOwner.value = ui.resultOperator.value = '';
     renderList();
     ui.resultSearch.focus();
   });
