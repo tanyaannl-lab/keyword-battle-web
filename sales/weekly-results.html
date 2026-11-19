@@ -8,8 +8,8 @@
   <link rel="stylesheet" href="../assets/styles.css">
   <link rel="stylesheet" href="../assets/workspace-nav.css?v=20261110">
   <link rel="stylesheet" href="../assets/mc-weekly-source-nav.css?v=20261113-1">
-  <link rel="stylesheet" href="../assets/mc-weekly-results.css?v=20261119-merged1">
-  <link rel="stylesheet" href="../assets/mc-results-weeks.css?v=20261119-merged1">
+  <link rel="stylesheet" href="../assets/mc-weekly-results.css?v=20261119-separate2">
+  <link rel="stylesheet" href="../assets/mc-results-weeks.css?v=20261119-separate2">
 </head>
 <body>
 <div class="shell workspace-shell workspace-sales" id="appShell" hidden>
@@ -163,14 +163,15 @@
           <p id="productStatus" class="results-state" role="status" hidden></p>
 
           <div class="results-tabs" role="tablist" aria-label="产品结果表">
-            <button id="resultTabSummary" type="button" role="tab" data-result-tab="summary" aria-selected="true" aria-controls="resultSummary">周总结与产品广告</button>
+            <button id="resultTabSummary" type="button" role="tab" data-result-tab="summary" aria-selected="true" aria-controls="resultSummary">周总结</button>
+            <button id="resultTabAds" type="button" role="tab" data-result-tab="ads" aria-selected="false" aria-controls="resultAds" tabindex="-1">产品广告结构</button>
             <button id="resultTabKeywords" type="button" role="tab" data-result-tab="keywords" aria-selected="false" aria-controls="resultKeywords" tabindex="-1">关键词分析</button>
             <button id="resultTabAttributes" type="button" role="tab" data-result-tab="attributes" aria-selected="false" aria-controls="resultAttributes" tabindex="-1">属性分析</button>
           </div>
 
           <section id="resultSummary" class="results-panel" role="tabpanel" aria-labelledby="resultTabSummary" tabindex="0">
             <header class="results-panel-head">
-              <h3 id="resultsSummaryTitle">每周经营与广告明细</h3>
+              <h3 id="resultsSummaryTitle">周总结</h3>
               <p id="resultsSummaryHint">每周按日汇总。某项指标缺任意一天，该周的这一项显示「—」。</p>
             </header>
             <form id="dailyFeesForm" class="results-notes" aria-labelledby="dailyFeesTitle" autocomplete="off" hidden>
@@ -234,6 +235,10 @@
             </form>
           </section>
 
+          <section id="resultAds" class="results-panel" role="tabpanel" aria-labelledby="resultTabAds" tabindex="0" hidden>
+            <header class="results-panel-head"><h3 id="resultsAdsTitle">产品广告结构</h3><p data-week-only>所选周次每周一行，首行合计当前筛选范围。</p><p data-day-only hidden>所选日期每天一行，首行合计当前筛选范围。</p></header>
+            <div id="adsResults" class="results-data"></div>
+          </section>
           <section id="resultKeywords" class="results-panel" role="tabpanel" aria-labelledby="resultTabKeywords" tabindex="0" hidden>
             <header class="results-panel-head"><h3>关键词分析</h3><p data-week-only>所选周，每个完整搜索词一行。</p></header>
             <div id="keywordResults" class="results-data"></div>
@@ -254,8 +259,8 @@
 <noscript><style>#loading{display:none}</style><p class="auth-loading">请启用 JavaScript 后查看周结果。</p></noscript>
 <script src="../assets/config.js"></script>
 <script src="../assets/auth-client.js"></script>
-<script src="../assets/mc-weekly-results-tables.js?v=20261119-merged1"></script>
-<script src="../assets/mc-weekly-results.js?v=20261119-merged1"></script>
+<script src="../assets/mc-weekly-results-tables.js?v=20261119-separate2"></script>
+<script src="../assets/mc-weekly-results.js?v=20261119-separate2"></script>
 </body>
 </html>
 

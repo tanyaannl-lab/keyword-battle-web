@@ -5,11 +5,11 @@
     'resultWeek','resultSearch','resultOwner','clearResultFilters','resultsCount','resultsCatalogDate',
     'parentResults','parentTable','parentEmpty','productList','resultProductFilters','productStatus',
     'productResults','selectedParent','selectedOwner','selectedWeek','backToProducts',
-    'resultSummary','resultKeywords','resultAttributes','summaryResults',
+    'resultSummary','resultAds','resultKeywords','resultAttributes','summaryResults','adsResults',
     'keywordResults','attributeResults','weeklyNotesForm','reviewFee','offsiteFee','otherFee',
     'saveWeeklyNotes','notesStatus','resultView','resultWeeklyFilter','resultDateFilter','resultStartDate',
     'resultEndDate','resultDateFeedback','weekTimeZone','resultsSummaryTitle','resultsSummaryHint',
-    'resultTabSummary','resultsWeeklyListHint','resultsDailyListHint',
+    'resultTabSummary','resultTabAds','resultsAdsTitle','resultsWeeklyListHint','resultsDailyListHint',
     'dailyFeesForm','dailyFeesDate','dailyReviewFee','dailyOffsiteFee','dailyOtherFee','saveDailyFees',
     'reloadDailyFees','dailyFeesStatus','dailyFeesHint','weeklyNotesHint','skuPreviewNotice',
     'resultWeekOptions','resultWeekSummary','applyResultWeeks','resultWeekCount','resultFeeWeek','resultFeeWeekField'];
@@ -17,8 +17,8 @@
   const tabs = [...document.querySelectorAll('[data-result-tab]')];
   const weeklyElements = [...document.querySelectorAll('[data-week-only]')];
   const dailyElements = [...document.querySelectorAll('[data-day-only]')];
-  const panels = { summary: ui.resultSummary, keywords: ui.resultKeywords, attributes: ui.resultAttributes };
-  const tables = { summary: ui.summaryResults, keywords: ui.keywordResults, attributes: ui.attributeResults };
+  const panels = { summary: ui.resultSummary, ads: ui.resultAds, keywords: ui.resultKeywords, attributes: ui.resultAttributes };
+  const tables = { summary: ui.summaryResults, ads: ui.adsResults, keywords: ui.keywordResults, attributes: ui.attributeResults };
   const config = window.KB_CONFIG;
   const origin = 'https://peykqsnlistkhrqsiulx.supabase.co';
   const login = '../index.html';
@@ -317,7 +317,7 @@
     ui.resultFeeWeek.replaceChildren(...weeks.map(w=>new Option(weekLabel(w),w)));
     ui.resultFeeWeek.value=weeks[0];ui.weeklyNotesForm.hidden=false;
     changeFeeWeek();
-    notice(ui.productStatus,`已选 ${weeks.length} 周；周表每周一行，费用保存到下方指定的周次。`);
+    notice(ui.productStatus,`已选 ${weeks.length} 周；周总结和产品广告结构均按周展示，费用保存到指定周次。`);
     if(focusDetail){(focusDetail==='notes'?ui.resultFeeWeek:ui.selectedParent).focus();focusDetail=false;}
     const failed=weeks.filter((w,i)=>values[i].sku?.error);
     pageStatus(failed.length ? '部分周经营明细读取失败：'+failed.map(weekLabel).join('；') : '',
@@ -456,8 +456,8 @@
     ui.resultsWeeklyListHint.hidden = daily;
     ui.resultsDailyListHint.hidden = true;
     ui.weekTimeZone.textContent = daily ? '默认显示美国太平洋时间的前一天，可查询最多 92 天。' : '周次按美国太平洋时间计算，周一至周日。';
-    ui.resultTabSummary.textContent = daily ? '每日明细与广告' : '周总结与产品广告';
-    ui.resultsSummaryTitle.textContent = daily ? '每日经营与广告明细' : '每周经营与广告明细';
+    ui.resultTabSummary.textContent = ui.resultsSummaryTitle.textContent = daily ? '每日明细' : '周总结';
+    ui.resultTabAds.textContent = ui.resultsAdsTitle.textContent = daily ? '每日广告' : '产品广告结构';
     ui.resultStartDate.min = ui.resultEndDate.min = earliestSkuDay;
     renderSkuSource();
   }

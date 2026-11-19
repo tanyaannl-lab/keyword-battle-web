@@ -724,8 +724,12 @@
       total[key] = ratio(total[numerator], total[denominator]);
     }
 
-    const absent = skuSources.filter(([key]) => periods.some(row => row.coverage?.[key] !== 'ready'));
-    total.data_coverage = absent.length ? '待同步：' + absent.map(([, name]) => name).join('、') : '四类报表已齐';
+    const verified = periods.filter(row => !row.skuReadError);
+    const absent = skuSources.filter(([key]) => verified.some(row => row.coverage?.[key] !== 'ready'));
+    const statuses = [];
+    if (verified.length < periods.length) statuses.push('经营数据读取失败');
+    if (absent.length) statuses.push('待同步：' + absent.map(([, name]) => name).join('、'));
+    total.data_coverage = statuses.join('；') || '四类报表已齐';
     const channels = channelOrder.filter(channel => periods.some(row => row.ad_channels.includes(channel)));
     total.ad_scope = channels.length === 1 ? '仅 ' + channels[0] : channels.join(' + ') || missing;
     for (const channel of otherAdChannels) {
@@ -793,7 +797,7 @@
 
   const profitSourceNames = {br:'销售与流量',sp:'SP 广告',orders:'订单',transactions:'交易'};
   function skuProfitPolicyNote() {
-    return '毛利只扣可归属本产品的 SB、SD 花费。某渠道没有归属记录时跳过；缺报时按已知费用估算，见「统计范围」。广告读取失败或归属记录缺少花费时，毛利留空，可点「原因」核对。';
+    return '毛利只扣可归属本产品的 SB、SD 花费。某渠道没有归属记录时跳过；缺报时按已知费用估算。广告读取失败或归属记录缺少花费时，毛利留空，可点「原因」核对。';
   }
   const profitFieldNames = {exchange_rate:'汇率',product_cost_rmb:'采购成本（RMB）',inbound_cost_rmb:'头程（RMB）',
     fba_fee:'FBA 费用',commission_rate:'佣金率',vat_rate:'VAT 税率',sp_cost:'SP 广告费',order_sales:'订单销售额',
@@ -833,7 +837,8 @@
       [key,days.length === 7 && days.every(day=>day.coverage?.[key] === 'ready') ? 'ready' : 'missing']));
     const baseRows = (daily ? days : [{...sku?.totals,week_start:week,coverage:weekCoverage}]).map(raw => ({
       ...raw,
-      data_coverage:coverageText(raw.coverage),
+      skuReadError:Boolean(sku?.error),
+      data_coverage:sku?.error ? '经营数据读取失败' : coverageText(raw.coverage),
       sales:raw.br_sales,
       orders:raw.br_orders,
       sp_sales_share:ratio(raw.sp_sales,raw.br_sales),
@@ -897,7 +902,7 @@
       costModes.size === 1 && costModes.has('catalog') ? '成本取自子 ASIN 的目录。' : '';
     const feeUnavailable = daily ? dailyFees?.error : !weeklyNotes;
     const note = [
-      skuContextCoverage(days), sku?.error, costNote,
+      sku?.error || skuContextCoverage(days), costNote,
       sku?.unfinished ? '所选周尚未结束，整周指标留空。' : '',
       daily ? (returns?.error ? '暂时无法读取 FBA 退货和发货数据。' : '') : weeklyFba.note,
       feeUnavailable ? '暂时无法读取手动费用，订单毛利估算留空。' : '',
@@ -905,10 +910,10 @@
     return { week, rows: summaryRows, note, adError: otherAds?.error };
   }
 
-  function skuColumns(rows, daily) {
-    const columns = [
+  function skuSummaryColumns(daily) {
+    return [
       daily ? col('report_date','日期','date') : col('week_start','周期','week'),
-      col('data_coverage','数据状态'), col('ad_scope','广告统计范围'),
+      col('data_coverage','数据状态'),
       col('br_sales','BR 销售额','usd'),col('br_orders','BR 订单商品数','int'),col('br_units','BR 订购件数','int'),
       col('sessions','会话数','int'),col('app_session_share','APP 流量占比','pct'),
       col('unit_session_rate','订购件数 / 会话数','pct'),...skuFinanceColumns,
@@ -919,20 +924,19 @@
       col('ad_order_share','广告单占比（估算）','pct'),
       col('review_fee','测评费用原币','usd'),col('offsite_fee','站外费用原币','usd'),col('other_fee','其他费用原币','usd'),
     ];
-    const present = new Set(columns.map(column => column.key));
-    // The advertising table's sales column is the same BR sales amount.
-    present.add('sales');
-    return columns.concat(advertisingColumns(rows, daily, true).filter(column => !present.has(column.key)));
   }
 
   function renderSku(targets, inputs) {
-    const target = targets.summary;
-    if (!target) return;
     const periods = (Array.isArray(inputs) ? inputs : [inputs]).map(skuPeriodData);
+    if (targets.summary) renderSkuTable(targets.summary, periods, false);
+    if (targets.ads) renderSkuTable(targets.ads, periods, true);
+  }
+
+  function renderSkuTable(target, periods, ads) {
     const daily = !periods[0]?.week;
     const dateKey = daily ? 'report_date' : 'week_start';
     const allRows = periods.flatMap(period => period.rows);
-    const label = daily ? '每日经营与广告明细' : '每周经营与广告明细';
+    const label = ads ? (daily ? '每日广告' : '产品广告结构') : (daily ? '每日明细' : '周总结');
     const periodText = value => daily ? value : weekLabel(value);
     const priorSelection = target.querySelector('[data-sku-period-filter]')?.value;
     const controls = element('div', 'results-sku-filters');
@@ -950,24 +954,26 @@
     const data = element('div');
     const explanation = element('details', 'results-sku-notes');
     const detailsBody = element('div');
-    explanation.append(element('summary', '', '查看数据到齐情况与计算口径'), detailsBody);
+    explanation.append(element('summary', '', ads ? '查看广告统计口径' : '查看数据到齐情况与计算口径'), detailsBody);
     target.replaceChildren(controls, data, explanation);
 
     function refresh() {
       const rows = select.value ? allRows.filter(row => row[dateKey] === select.value) : allRows;
       const shownPeriods = periods.filter(period => daily || !select.value || period.week === select.value);
       clear.disabled = !select.value;
+      const summary = summarizeSkuRows(rows, daily);
+      const hasAdCaveat = summary && (summary.ad_read_error || summary.ad_missing_reports.length || summary.ad_pending.length);
       renderTable(data, {
-        columns: skuColumns(rows, daily), rows, label, summary: summarizeSkuRows(rows, daily),
+        columns: ads ? [...advertisingColumns(rows, daily, true), col('data_coverage', '数据状态')] : skuSummaryColumns(daily),
+        rows, label, summary, note: !ads && hasAdCaveat ? '广告统计范围：' + summary.ad_scope : '',
         summaryLabel: '筛选汇总（' + rows.length + (daily ? ' 天）' : ' 周）'),
-        emptyText: '所选期间暂无经营或广告数据。',
+        emptyText: ads ? '所选期间暂无广告数据。' : '所选期间暂无经营数据。',
       });
-      const lines = [
+      const lines = ads ? [advertisingNotice(rows, daily, shownPeriods.some(period => period.adError), false)] : [
         skuProfitPolicyNote(),
         '订单毛利以已扣 SP 和交易退款的基础毛利扣除手动费用及适用的 SB、SD 广告费计算。交易毛利已扣 SP 和适用的 SB、SD 广告费，未扣手动费用。订单毛利率以订单销售额为分母。',
         'BR 订单商品数和 SKU 单数均未按父 ASIN 去重。自然单按 BR 订单商品数减去广告归因订单估算。',
         daily ? 'FBA 退货率按收退件数除以发货件数计算。' : weeklyReturnsNotice,
-        advertisingNotice(rows, daily, shownPeriods.some(period => period.adError), false),
         ...shownPeriods.map(period => (daily ? '所查日期范围：' : weekLabel(period.week) + '：') + period.note),
       ];
       detailsBody.replaceChildren(...lines.filter(Boolean).map(line => element('p', 'results-table-note', line)));
