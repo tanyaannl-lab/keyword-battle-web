@@ -83,6 +83,12 @@
 .mc-fba-inventory .inventory-table :is(.inventory-age-group, [data-column="age_0_90"]) { border-inline-start: 1px solid #c9e0d9; }
 .mc-fba-inventory .inventory-table .inventory-age-value[data-column="age_total"] { font-weight: 700; background: #f3f9f7; }
 .mc-fba-inventory .inventory-table .inventory-asin { width: 6.7rem; }
+.mc-fba-inventory .inventory-table :is([data-column="product_short_name"], [data-column="owner"]) {
+  min-width: 5rem;
+  max-width: 13rem;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 .mc-fba-inventory .inventory-table .inventory-sku {
   min-width: 7rem;
   max-width: 15rem;

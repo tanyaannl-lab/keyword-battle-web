@@ -5,6 +5,7 @@
   const origin = 'https://peykqsnlistkhrqsiulx.supabase.co';
   const endpoint = `${origin}/rest/v1/rpc/mc_fba_inventory_movement_read`;
   const ageEndpoint = `${origin}/rest/v1/rpc/mc_fba_inventory_age_read`;
+  const catalogEndpoint = `${origin}/rest/v1/rpc/mc_product_catalog_read`;
   const login = '../index.html';
   const limit = 10_000;
   const pageSize = 50;
@@ -17,7 +18,7 @@
   const quantityKeys = ['fulfillable','reserved','unfulfillable','inbound_working','inbound_shipped',
     'inbound_receiving','researching','total_quantity','ordered_units_30d'];
   const columns = [
-    ['parent_asin','父 ASIN'], ['asin','子 ASIN'], ['seller_sku','卖家 SKU'],
+    ['product_short_name','产品简称'], ['parent_asin','父 ASIN'], ['owner','负责人'], ['asin','子 ASIN'], ['seller_sku','卖家 SKU'],
     ['fulfillable','当前可售','number'], ['reserved','预留','number'], ['unfulfillable','不可售','number'],
     ['in_transit','实际在途','number'], ['inbound_working','计划入库','number'],
     ['ordered_units_30d','近 30 天订购件数','number'],
@@ -76,6 +77,7 @@
     ageNotice: 'inventoryAgeNotice', ageState: 'inventoryAgeState', ageTime: 'inventoryAgeTime',
     ageTimestamp: 'inventoryAgeAt', ageReport: 'inventoryAgeReport', ageReportDate: 'inventoryAgeReportDate',
     ageLag: 'inventoryAgeLag', coverageNotice: 'inventoryCoverageNotice',
+    catalogNotice: 'inventoryCatalogNotice', catalogRetry: 'inventoryCatalogRetry',
     status: 'inventoryStatus', results: 'inventoryResults', search: 'inventorySearch',
     scope: 'inventoryScope', showAll: 'inventoryShowAll', tracking: 'inventoryTracking', filter: 'inventoryFilter',
     download: 'inventoryDownload', count: 'inventoryCount',
@@ -92,7 +94,11 @@
     year:'numeric',month:'2-digit',day:'2-digit'});
   const order = new Intl.Collator('en', { numeric:true });
   const compareAsin = (a,b) => a === b ? 0 : a === null ? 1 : b === null || a < b ? -1 : 1;
+  const inventoryOrder = (a,b) => compareAsin(a.parent_asin,b.parent_asin) || compareAsin(a.asin,b.asin) ||
+    order.compare(a.seller_sku,b.seller_sku) || (a.seller_sku < b.seller_sku ? -1 : 1);
   const searchable = value => String(value ?? '').normalize('NFKC').toLowerCase();
+  const searchText = row => [row.product_short_name,row.parent_asin,row.owner,row.asin,row.seller_sku,row.fnsku]
+    .map(searchable).join(' ');
   const formatUnits = count => integers.format(count);
   const asinShape = /^[A-Z0-9]{10}$/;
   const fnskuShape = /^[A-Z0-9_.:-]{1,128}$/;
@@ -114,6 +120,8 @@
     unknown: row => row.fulfillable === null,
   };
   let auth, request, snapshot, generation = 0, page = 0, scopedCount = 0, visible = [];
+  let catalogRequest, refreshSession;
+  const expandedDetails = new Set();
   let stockStatus = 'idle', ageRequest, ageStatus = 'idle', ageSnapshot = null;
   const visibleAgeCells = new Map();
   const openAgeCards = new Map();
@@ -179,15 +187,89 @@
       const quantities = Object.fromEntries(optionalDetailColumns.map(([key]) => [key,
         Number.isSafeInteger(row[key]) && row[key] >= 0 ? row[key] : null,
       ]));
-      return { ...row, ...quantities, parent_asin, in_transit, daily_average, sellable_days,
-        tracking_label: row.tracked ? '是' : '否',
-        search: [parent_asin,row.asin,row.seller_sku,row.fnsku].map(searchable).join(' ') };
+      const item = {...row, ...quantities, product_short_name:null, owner:null, parent_asin, inventoryParent:parent_asin,
+        in_transit, daily_average, sellable_days, tracking_label:row.tracked ? '是' : '否'};
+      item.search = searchText(item);
+      return item;
     });
-    rows.sort((a,b) => compareAsin(a.parent_asin,b.parent_asin) || compareAsin(a.asin,b.asin) ||
-      order.compare(a.seller_sku,b.seller_sku) || (a.seller_sku < b.seller_sku ? -1 : 1));
+    rows.sort(inventoryOrder);
     if (rows.some(row => row.tracked) !== (tracking_matched_count > 0)) invalid();
     return {captured_at:data.captured_at, sales_start_date, sales_end_date, sales_captured_at,
       tracking_count, tracking_matched_count, rows};
+  }
+
+  function readDirectory(data) {
+    if (data === null) return null;
+    if (data?.store !== 'MC' || data.marketplace !== 'amazon.com' || !isDay(data.snapshot_date) ||
+        !Array.isArray(data.products) || data.products.length > limit) throw new ReadError(200,'invalid');
+    const bySku = new Map(), byChild = new Map();
+    for (const product of data.products) {
+      if (!safeText(product?.sku,255)) throw new ReadError(200,'invalid');
+      const child = product.asin, parent = product.parent_asin;
+      const validChild = typeof child === 'string' && child.length === 10 && asinShape.test(child);
+      const validParent = typeof parent === 'string' && parent.length === 10 && asinShape.test(parent) ? parent : null;
+      if (validChild) {
+        if (!byChild.has(child)) byChild.set(child,validParent);
+        else if (byChild.get(child) !== validParent) byChild.set(child,null);
+      }
+      // A seller SKU can occur under different child ASINs. Only a unique current row supplies its labels.
+      bySku.set(product.sku,bySku.has(product.sku) ? null : {
+        parent:validParent,
+        name:safeText(product.product_short_name,160) ? product.product_short_name : null,
+        owner:Array.isArray(product.owners) && product.owners.every(label => safeText(label,160))
+          ? [...new Set(product.owners)].join('、') || null : null,
+      });
+    }
+    return {bySku,byChild,date:data.snapshot_date};
+  }
+
+  function applyDirectory(base,directory) {
+    let matched = 0;
+    for (const row of base.rows) {
+      const exact = directory?.bySku.get(row.seller_sku);
+      if (exact) matched++;
+      row.product_short_name = exact?.name ?? null;
+      row.owner = exact?.owner ?? null;
+      row.parent_asin = exact?.parent ?? row.inventoryParent ?? directory?.byChild.get(row.asin) ?? null;
+      row.search = searchText(row);
+    }
+    base.rows.sort(inventoryOrder);
+    filterRows(true);
+    return matched;
+  }
+
+  function catalogNotice(message = '', retry = false) {
+    el.catalogNotice.textContent = message;
+    el.catalogNotice.hidden = !message;
+    el.catalogRetry.hidden = !retry;
+  }
+
+  async function loadCatalog(base) {
+    catalogRequest?.abort();
+    const read = new AbortController();
+    catalogRequest = read;
+    el.download.disabled = true;
+    catalogNotice('正在读取产品目录…');
+    try {
+      const signal = AbortSignal.any([read.signal,AbortSignal.timeout(25_000)]);
+      const directory = readDirectory(await readRpc(catalogEndpoint,auth,signal));
+      if (catalogRequest !== read || snapshot !== base || read.signal.aborted) return;
+      const matched = applyDirectory(base,directory);
+      if (directory) {
+        catalogNotice('产品目录 ' + directory.date + '：已匹配 ' + formatUnits(matched) + ' / ' +
+          formatUnits(base.rows.length) + ' 个库存 SKU；缺少的简称和负责人显示「—」。');
+      } else catalogNotice('尚无产品目录，产品简称和负责人暂缺。',true);
+    } catch (error) {
+      if (catalogRequest !== read || snapshot !== base || read.signal.aborted) return;
+      const message = error.status === 403 || error.code === '42501' ? '当前账号没有读取产品目录的权限。'
+        : error.code === 'invalid' ? '产品目录格式异常。' : '产品目录读取失败。';
+      catalogNotice(message + '库存仍可查看，产品简称和负责人暂缺。',true);
+    } finally {
+      if (catalogRequest === read) {
+        catalogRequest = null;
+        el.download.disabled = !snapshot || !visible.length;
+      }
+    }
   }
 
   function ageKey(row) {
@@ -227,9 +309,15 @@
       body:'{}',
     });
     let response = await send(access);
-    if (response.status === 401 && !signal.aborted && auth === current) {
-      const refreshed = await window.KBAuth.getValidSession();
-      if (!signal.aborted && auth === current && refreshed?.user?.id === current.user.id &&
+    if (response.status === 401 && !signal.aborted && auth?.user.id === current.user.id) {
+      if (auth.session.access_token === access && !refreshSession) {
+        const pending = window.KBAuth.getValidSession().finally(() => {
+          if (refreshSession === pending) refreshSession = null;
+        });
+        refreshSession = pending;
+      }
+      const refreshed = auth.session.access_token === access ? await refreshSession : auth;
+      if (!signal.aborted && auth?.user.id === current.user.id && refreshed?.user?.id === current.user.id &&
           refreshed.session?.access_token && refreshed.session.access_token !== access) {
         auth = refreshed;
         response = await send(refreshed.session.access_token);
@@ -243,18 +331,21 @@
     return response.json();
   }
 
-  function filterRows() {
+  function filterRows(preserve = false) {
     if (!snapshot) return;
     const query = searchable(el.search.value.trim()).split(/\s+/).filter(Boolean);
     const accepts = Object.hasOwn(filters,el.filter.value) ? filters[el.filter.value] : () => true;
     const scoped = el.scope.value === 'all' ? snapshot.rows : snapshot.rows.filter(row => row.tracked);
     scopedCount = scoped.length;
     visible = scoped.filter(row => accepts(row) && query.every(token => row.search.includes(token)));
-    page = 0;
-    renderPage();
+    const preserveView = preserve === true;
+    page = preserveView ? Math.max(0,Math.min(page,Math.ceil(visible.length/pageSize)-1)) : 0;
+    renderPage(preserveView);
   }
 
-  function renderPage() {
+  function renderPage(preserve = false) {
+    const open = preserve ? new Set(expandedDetails) : new Set();
+    expandedDetails.clear();
     renderSources();
     openAgeCards.clear();
     visibleAgeCells.clear();
@@ -276,7 +367,7 @@
       `${formatUnits(snapshot.tracking_count)} 项；未匹配项暂无库存记录。` : '';
     el.table.hidden = count === 0;
     el.pages.hidden = pages < 2;
-    el.download.disabled = count === 0;
+    el.download.disabled = count === 0 || Boolean(catalogRequest);
     el.prev.disabled = page === 0;
     el.next.disabled = page + 1 >= pages;
     el.page.textContent = pages ? `第 ${formatUnits(page + 1)} / ${formatUnits(pages)} 页` : '';
@@ -286,10 +377,12 @@
     for (const row of visible.slice(rowNumber,(page + 1) * pageSize)) {
       const tr = document.createElement('tr');
       const panelId = `inventory-detail-${++rowNumber}`;
+      const detail = open.has(row) ? renderDetail(row,panelId) : null;
       for (const [key,,kind] of columns) {
         const value = key === 'sellable_days' && outdated ? null : row[key];
         const isSku = key === 'seller_sku';
         const cell = document.createElement(isSku ? 'th' : 'td');
+        cell.dataset.column = key;
         if (isSku) {
           cell.scope = 'row';
           cell.id = `${panelId}-sku`;
@@ -300,7 +393,7 @@
         if (value === null) cell.classList.add('results-missing');
         if (key === 'fulfillable' && value === 0) cell.classList.add('inventory-zero');
         cell.textContent = formatCell(value,kind);
-        if (isSku) cell.append(detailToggle(tr,row,panelId));
+        if (isSku) cell.append(detailToggle(tr,row,panelId,detail));
         tr.append(cell);
       }
       const ageCells = ageTableKeys.map(key => {
@@ -313,6 +406,7 @@
       visibleAgeCells.set(row,ageCells);
       fillAgeCells(row,ageCells);
       body.append(tr);
+      if (detail) body.append(detail);
     }
     el.body.replaceChildren(body);
   }
@@ -329,14 +423,19 @@
     }
   }
 
-  function detailToggle(summaryRow,row,panelId) {
+  function detailToggle(summaryRow,row,panelId,previousDetail) {
     const toggle = document.createElement('button');
     toggle.type = 'button';
     toggle.classList.add('inventory-detail-toggle');
     toggle.textContent = '库存明细';
     toggle.setAttribute('aria-label',`库存明细：${row.seller_sku}`);
-    toggle.setAttribute('aria-expanded','false');
-    let detail;
+    let detail = previousDetail;
+    toggle.setAttribute('aria-expanded',String(Boolean(detail)));
+    if (detail) {
+      detail.hidden = false;
+      expandedDetails.add(row);
+      toggle.setAttribute('aria-controls',panelId);
+    }
     toggle.addEventListener('click',() => {
       if (!detail) {
         detail = renderDetail(row,panelId);
@@ -345,6 +444,8 @@
       }
       const open = detail.hidden;
       detail.hidden = !open;
+      if (open) expandedDetails.add(row);
+      else expandedDetails.delete(row);
       toggle.setAttribute('aria-expanded',String(open));
     });
     return toggle;
@@ -501,7 +602,7 @@
   }
 
   function exportRows() {
-    if (!snapshot || !visible.length) return;
+    if (!snapshot || !visible.length || catalogRequest) return;
     const csvColumns = [...columns,...extraColumns,...optionalDetailColumns];
     const header = [...csvColumns.map(([,label]) => label), ...ageCsvColumns.map(([,label]) => label), '库存快照时间（UTC）',
       '订购统计起始日（美西）', '订购统计截止日（美西）', '订购报表采集时间（UTC）'].map(csvCell).join(',');
@@ -528,6 +629,11 @@
   }
 
   function clearSnapshot() {
+    catalogRequest?.abort();
+    catalogRequest = null;
+    el.download.disabled = true;
+    catalogNotice();
+    expandedDetails.clear();
     cancelAge();
     ageSnapshot = null;
     ageStatus = stockStatus = 'idle';
@@ -643,6 +749,7 @@
       filterRows();
       status('');
       void loadAge(next);
+      void loadCatalog(next);
     } catch (error) {
       if (request !== read || read.signal.aborted) return;
       if (error.status === 401) {
@@ -666,7 +773,7 @@
   function clearPrivate() {
     generation++;
     request?.abort();
-    request = auth = null;
+    request = auth = refreshSession = null;
     clearSnapshot();
     el.search.value = el.filter.value = el.email.textContent = '';
     el.scope.value = 'all';
@@ -709,6 +816,9 @@
   }
 
   el.reload.addEventListener('click',load);
+  el.catalogRetry.addEventListener('click',() => {
+    if (auth && snapshot && !request && !catalogRequest) void loadCatalog(snapshot);
+  });
   el.search.addEventListener('input',filterRows);
   el.filter.addEventListener('change',filterRows);
   el.scope.addEventListener('change',filterRows);

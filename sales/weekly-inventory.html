@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="../assets/workspace-nav.css?v=20261110">
   <link rel="stylesheet" href="../assets/mc-weekly-source-nav.css?v=20261113-1">
   <link rel="stylesheet" href="../assets/mc-weekly-results.css?v=20261113-1">
-  <link rel="stylesheet" href="../assets/mc-weekly-inventory.css?v=20261117-fresh1">
+  <link rel="stylesheet" href="../assets/mc-weekly-inventory.css?v=20261119-catalog1">
 </head>
 <body>
 <div class="shell workspace-shell workspace-sales" id="appShell" hidden>
@@ -99,7 +99,7 @@
         <div class="results-controls inventory-controls" role="group" aria-label="筛选库存">
           <label class="results-field" for="inventorySearch">
             <span>搜索库存</span>
-            <input type="search" id="inventorySearch" autocomplete="off" maxlength="160" placeholder="父 ASIN、子 ASIN、SKU 或 FNSKU">
+            <input type="search" id="inventorySearch" autocomplete="off" maxlength="160" placeholder="产品简称、负责人、ASIN、SKU 或 FNSKU">
           </label>
           <label class="results-field" for="inventoryScope">
             <span>查看范围</span>
@@ -124,10 +124,12 @@
           <button class="results-button results-button-primary" type="button" id="inventoryDownload" disabled>导出筛选结果</button>
         </div>
 
-        <p class="results-table-note" id="inventoryHelp">每行一个卖家 SKU。父 ASIN 来自产品目录，未匹配显示「—」。库存取自亚马逊 FBA，订购件数取自亚马逊业务报告。实际在途 = 已发往亚马逊 + 接收中；日均订购件数 = 近 30 天订购件数 ÷ 30；预计可售天数 = 当前可售 ÷ 日均订购件数。「—」表示缺少数据或无法计算。CSV 导出当前筛选的全部页及 FBA 明细。</p>
+        <p class="results-table-note" id="inventoryHelp">每行一个卖家 SKU。产品简称、父 ASIN 和负责人取自产品目录。库存取自亚马逊 FBA，订购件数取自亚马逊业务报告。实际在途 = 已发往亚马逊 + 接收中；日均订购件数 = 近 30 天订购件数 ÷ 30；预计可售天数 = 当前可售 ÷ 日均订购件数。「—」表示缺少数据或无法计算。CSV 导出当前筛选的全部页及 FBA 明细。</p>
         <p class="results-table-note" id="inventoryDetailHelp">仓间调拨在 API 中属于预留。亚马逊库存总量为 API 原始字段，口径与卖家后台的「现有」不同。调查中按 1–10 天、11–20 天和 21 天及以上分档。库龄在表格右侧，六档齐全才显示合计。展开「库存明细」可查看该 SKU 的库龄快照日期和 0–90 天细分。库龄快照可能与当前库存不同日。</p>
         <p class="results-table-note inventory-source-warning" id="inventoryCoverageNotice" role="status" hidden></p>
         <p class="results-table-note" id="inventoryAgeNotice" role="status" hidden></p>
+        <p class="results-table-note" id="inventoryCatalogNotice" role="status" hidden></p>
+        <button class="results-button" type="button" id="inventoryCatalogRetry" hidden>重新读取产品目录</button>
         <p class="results-table-note" id="inventoryTracking" role="status" hidden></p>
         <p id="inventoryCount" class="results-count inventory-count" role="status"></p>
         <p id="inventoryEmpty" class="results-empty" hidden></p>
@@ -135,11 +137,13 @@
 
         <div id="inventoryTable" class="results-table-wrap inventory-table-wrap" tabindex="0" role="region" aria-label="FBA 库存表" hidden>
           <table class="results-table results-table-compact inventory-table" aria-describedby="inventoryHelp inventoryDetailHelp">
-            <colgroup span="11"></colgroup>
+            <colgroup span="13"></colgroup>
             <colgroup span="7"></colgroup>
             <thead>
               <tr>
+                <th scope="col" rowspan="2" data-column="product_short_name">产品简称</th>
                 <th scope="col" rowspan="2" class="inventory-asin">父 ASIN</th>
+                <th scope="col" rowspan="2" data-column="owner">负责人</th>
                 <th scope="col" rowspan="2" class="inventory-asin">子 ASIN</th>
                 <th scope="col" rowspan="2" class="inventory-sku">卖家 SKU</th>
                 <th scope="col" rowspan="2" class="results-number">当前可售</th>
@@ -178,6 +182,6 @@
 <noscript><style>#loading{display:none}</style><p class="auth-loading">请启用 JavaScript 后查看 FBA 库存。</p></noscript>
 <script src="../assets/config.js"></script>
 <script src="../assets/auth-client.js"></script>
-<script src="../assets/mc-weekly-inventory.js?v=20261117-fresh1"></script>
+<script src="../assets/mc-weekly-inventory.js?v=20261119-catalog1"></script>
 </body>
 </html>
