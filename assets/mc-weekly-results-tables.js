@@ -29,7 +29,7 @@
     'FBA 退货率': ['FBA 退货率', '当日收退 / 发货'],
     'FBA 周退货率': ['FBA 退货率', '全周收退 / 发货'],
     '广告费占总销售额': ['广告费占', '总销售额'],
-    'SP 归因销售额占比（参考）': ['SP 归因销售额占比', '参考'],
+    'SP 归因销售额占比参考': ['SP 归因销售额占比', '参考'],
     '广告归因销售额占比（参考）': ['广告归因销售额占比', '参考'],
     '订单毛利（估算）': ['订单毛利', '估算'],
     '订单毛利率（估算）': ['订单毛利率', '估算'],
@@ -87,31 +87,40 @@
     col('order_label', '出单标识'),
   ]);
 
-  const spMetricColumns = [
-    col('sp_sales', 'SP 归因销售额', 'usd'),
-    col('sp_sales_share', 'SP 归因销售额占比（参考）', 'pct'),
-    col('sp_cost', 'SP 广告费', 'usd'),
-    col('sp_orders', 'SP 归因订单', 'int'),
-    col('sp_impressions', 'SP 展现', 'int'),
-    col('sp_clicks', 'SP 点击', 'int'),
-    col('sp_acos', 'SP ACOS', 'pct'),
+  function reportColumn(key, label, kind, tone = 'ad') {
+    return Object.freeze({ ...col(key, label, kind), tone });
+  }
+
+  const advertisingMetrics = [
+    col('ad_scope', '统计范围'),
+    col('sales', '销售额', 'usd'),
+    reportColumn('sp_sales', 'SP 归因销售额', 'usd'),
+    reportColumn('sp_sales_share', 'SP 归因销售额占比参考', 'pct'),
+    reportColumn('sp_cost', 'SP 广告费', 'usd'),
+    reportColumn('sp_orders', 'SP 归因订单', 'int'),
+    reportColumn('sp_impressions', 'SP 展现', 'int'),
+    reportColumn('sp_clicks', 'SP 点击', 'int'),
+    reportColumn('sp_acos', 'SP ACOS', 'pct'),
+    reportColumn('sp_units', 'SP 归因销量', 'int'),
+    reportColumn('organic_sales', '自然销售额', 'usd', 'organic'),
+    reportColumn('organic_orders', '自然订单', 'int', 'organic'),
+    reportColumn('organic_clicks', '自然点击量', 'int', 'organic'),
+    reportColumn('organic_conversion_rate', '自然转化率', 'pct', 'organic'),
+    reportColumn('base_ad_cost', '根基广告', 'usd'),
+    reportColumn('expansion_ad_cost', '拓词广告', 'usd'),
+    col('all_terms', '全部流量词', 'int'),
+    reportColumn('organic_terms', '自然流量词', 'int', 'organic'),
+    reportColumn('sp_terms', 'SP 广告词', 'int'),
+    col('ac_terms', 'AC 推荐词', 'int'),
+    col('data_coverage', '数据状态'),
   ];
 
   const combinedAdColumns = [
-    col('ad_sales', '已归属广告销售额', 'usd'),
-    col('ad_sales_share', '广告归因销售额占比（参考）', 'pct'),
-    col('ad_cost', '已归属广告花费', 'usd'),
-    col('ad_orders', '已归属广告订单', 'int'),
-    col('ad_acos', '已归属广告 ACOS', 'pct'),
-  ];
-
-  const weeklyAdExtraColumns = [
-    col('base_ad_cost', '根基广告', 'usd'),
-    col('expansion_ad_cost', '拓词广告', 'usd'),
-    col('all_terms', '全部流量词', 'int'),
-    col('organic_terms', '自然流量词', 'int'),
-    col('sp_terms', 'SP 广告词', 'int'),
-    col('ac_terms', 'AC 推荐词', 'int'),
+    reportColumn('ad_sales', '已归属广告销售额', 'usd'),
+    reportColumn('ad_sales_share', '广告归因销售额占比（参考）', 'pct'),
+    reportColumn('ad_cost', '已归属广告花费', 'usd'),
+    reportColumn('ad_orders', '已归属广告订单', 'int'),
+    reportColumn('ad_acos', '已归属广告 ACOS', 'pct'),
   ];
 
   function element(name, className, content) {
@@ -158,24 +167,38 @@
     if (splitIssue) reasons.organic_orders = reasons.organic_order_share = [splitIssue];
 
     const hasOtherAds = otherAdChannels.some(channel => row.ad_channels.includes(channel));
-    const clicks = numeric(row.sp_clicks);
-    const conversionIssue = adReadIssue || (hasOtherAds ? '已归属的 SB 或 SD 报表未提供对应点击量。' :
-      !row.ad_channels.includes('SP') || !isCount(adOrders) || !isCount(clicks) ? '缺少同范围的广告订单或点击量。' :
-      clicks === 0 ? '广告点击量为零。' : '');
-    if (conversionIssue) reasons.ad_conversion_rate = [conversionIssue];
-    reasons.organic_clicks = ['当前报表没有该父 ASIN 的自然点击量。'];
-    reasons.organic_impressions = ['当前报表没有该父 ASIN 的自然展示量。'];
-    reasons.organic_ctr = ['缺少同范围的自然点击量和自然展示量。'];
-    reasons.organic_conversion_rate = ['缺少与自然订单同范围的自然点击量。'];
-
+    const spClicks = numeric(row.sp_clicks);
+    const spImpressions = numeric(row.sp_impressions);
+    const clickIssue = adReadIssue || (hasOtherAds ? '已归属的 SB 或 SD 报表未提供对应点击量。' :
+      !row.ad_channels.includes('SP') || !isCount(spClicks) ? '缺少已计入广告渠道的点击量。' : '');
+    const adClicks = clickIssue ? null : spClicks;
+    const adCtrIssue = clickIssue || (!isCount(spImpressions) ? '缺少已计入广告渠道的展示量。' :
+      spImpressions === 0 ? '广告展示量为零。' : '');
+    const adConversionIssue = clickIssue || (!isCount(adOrders) ? '缺少已计入广告渠道的归因订单。' :
+      adClicks === 0 ? '广告点击量为零。' : '');
+    // The workbook specifies BR sessions as its total-click proxy.
+    const visits = numeric(row.sessions);
+    const organicClickIssue = clickIssue || (row.coverage?.br !== 'ready' || !isCount(visits) ? '缺少有效的 BR 总访客数。' :
+      adClicks > visits ? '广告点击量超过总访客数，无法估算自然点击量。' : '');
+    const organicClicks = organicClickIssue ? null : visits - adClicks;
     const organicOrders = splitIssue ? null : orders - adOrders;
+    const organicConversionIssue = organicClickIssue || splitIssue || (organicClicks === 0 ? '估算的自然点击量为零。' : '');
+    if (clickIssue) reasons.ad_clicks = [clickIssue];
+    if (adCtrIssue) reasons.ad_ctr = [adCtrIssue];
+    if (adConversionIssue) reasons.ad_conversion_rate = [adConversionIssue];
+    if (organicClickIssue) reasons.organic_clicks = [organicClickIssue];
+    if (organicConversionIssue) reasons.organic_conversion_rate = [organicConversionIssue];
+
     return {
       organic_sales: salesIssue ? null : Math.max(0, difference),
       organic_orders: organicOrders,
       organic_order_share: ratio(organicOrders, orders),
       ad_order_share: orderIssue ? null : ratio(adOrders, orders),
-      organic_clicks: null, organic_impressions: null, organic_ctr: null, organic_conversion_rate: null,
-      ad_conversion_rate: conversionIssue ? null : ratio(adOrders, clicks),
+      ad_clicks: adClicks,
+      organic_clicks: organicClicks,
+      ad_ctr: adCtrIssue ? null : ratio(adClicks, spImpressions),
+      organic_conversion_rate: organicConversionIssue ? null : ratio(organicOrders, organicClicks),
+      ad_conversion_rate: adConversionIssue ? null : ratio(adOrders, adClicks),
     };
   }
 
@@ -275,24 +298,23 @@
     });
   }
 
-  function advertisingColumns(rows, daily, skuPreview = false) {
+  function advertisingColumns(rows, daily) {
     const seen = new Set(rows.flatMap(row => row.ad_channels));
-    const showCombined = otherAdChannels.some(channel => seen.has(channel));
-    const details = showCombined ? otherAdChannels.filter(channel => seen.has(channel)).flatMap(channel => {
-      const prefix = channel.toLowerCase();
-      return [col(`${prefix}_sales`, `${channel} 归因销售额`, 'usd'), col(`${prefix}_cost`, `${channel} 广告费`, 'usd'),
-        col(`${prefix}_orders`, `${channel} 归因订单`, 'int')];
-    }) : [];
-    return [
-      daily ? col('report_date', '日期', 'date') : col('week_start', '周期', 'week'),
-      col('ad_scope', '统计范围'),
-      col('sales', '销售额', 'usd'),
-      ...(showCombined ? combinedAdColumns : []),
-      ...(!showCombined || seen.has('SP') || skuPreview ? spMetricColumns : []),
-      ...(skuPreview ? [col('sp_units', 'SP 归因销量', 'int')] : []),
-      ...details,
-      ...(daily ? [] : weeklyAdExtraColumns),
+    const columns = [
+      daily ? col('report_date', '周期', 'date') : col('week_start', '周期', 'week'),
+      ...advertisingMetrics,
     ];
+    const attributed = otherAdChannels.filter(channel => seen.has(channel));
+    if (attributed.length) columns.push(...combinedAdColumns);
+    for (const channel of attributed) {
+      const prefix = channel.toLowerCase();
+      columns.push(
+        reportColumn(prefix + '_sales', channel + ' 归因销售额', 'usd'),
+        reportColumn(prefix + '_cost', channel + ' 广告费', 'usd'),
+        reportColumn(prefix + '_orders', channel + ' 归因订单', 'int'),
+      );
+    }
+    return columns;
   }
 
   function advertisingNotice(rows, daily, error, spError, showSalesShare = true) {
@@ -366,6 +388,7 @@
     heading.scope = 'col';
     heading.dataset.column = column.key;
     heading.dataset.kind = column.kind;
+    if (column.tone) heading.classList.add('metric-' + column.tone);
     if (numberKinds.has(column.kind)) heading.classList.add('results-number');
     const threshold = /^(.*?)\[([^\]]+)\]$/.exec(column.label);
     const [label, hint] = compactHeadings[column.label] ||
@@ -436,6 +459,7 @@
           const cell = element(index === 0 ? 'th' : 'td', '', formatted.text);
           cell.dataset.column = column.key;
           cell.dataset.kind = column.kind;
+          if (column.tone) cell.classList.add('metric-' + column.tone);
           if (!summaryHeading && column.kind === 'week' && formatted.text !== missing) {
             const [first, last] = formatted.text.split(' 至 ');
             cell.replaceChildren(element('span', 'results-week-part', first), document.createTextNode(' '),
@@ -785,7 +809,8 @@
       for (const key of ['all_terms', 'organic_terms', 'sp_terms', 'ac_terms']) total[key] = periods[0][key];
     }
     total._missingReasons = {};
-    total.coverage = {sp: periods.every(row => row.coverage?.sp === 'ready') ? 'ready' : 'missing'};
+    total.coverage = Object.fromEntries(['br', 'sp'].map(source =>
+      [source, periods.every(row => row.coverage?.[source] === 'ready') ? 'ready' : 'missing']));
     Object.assign(total, productTrafficMetrics(total, total._missingReasons));
     for (const key of ['order_profit_net', 'txn_profit', 'order_gross_margin']) {
       if (total[key] !== null) continue;
@@ -960,20 +985,14 @@
       col('returns_rate', '退货率', 'pct'),
       col('app_session_share', 'APP流量占比', 'pct'),
       col('sessions', '总访客数', 'int'),
+      col('ad_clicks', '广告点击量', 'int'),
+      col('organic_clicks', '自然点击量', 'int'),
+      col('ad_ctr', '广告点击率', 'pct'),
       col('unit_session_rate', '总转化', 'pct'),
       col('organic_conversion_rate', '自然转化', 'pct'),
       col('ad_conversion_rate', '广告转化', 'pct'),
     ];
   }
-
-  const adOrganicColumns = [
-    col('organic_sales', '自然销售额', 'usd'),
-    col('organic_orders', '自然订单', 'int'),
-    col('organic_clicks', '自然点击量', 'int'),
-    col('organic_impressions', '自然展示量', 'int'),
-    col('organic_ctr', '自然点击率', 'pct'),
-    col('organic_conversion_rate', '自然转化率', 'pct'),
-  ];
 
   function renderSku(targets, inputs) {
     const periods = (Array.isArray(inputs) ? inputs : [inputs]).map(skuPeriodData);
@@ -1000,6 +1019,11 @@
     const clear = element('button', 'results-button', '清除筛选');
     clear.type = 'button';
     controls.append(field, clear);
+    if (ads) {
+      const legend = element('div', 'results-metric-legend');
+      legend.append(element('span', 'metric-ad', '广告指标'), element('span', 'metric-organic', '自然指标'));
+      controls.append(legend);
+    }
     const data = element('div');
     const explanation = element('details', 'results-sku-notes');
     const detailsBody = element('div');
@@ -1019,22 +1043,25 @@
         }
       }
       renderTable(data, {
-        columns: ads ? [...advertisingColumns(rows, daily, true), col('data_coverage', '数据状态'), ...adOrganicColumns] : skuSummaryColumns(daily),
+        columns: ads ? advertisingColumns(rows, daily) : skuSummaryColumns(daily),
         rows, label, summary, note: statusNotes.join(' · '),
         summaryLabel: '筛选汇总（' + rows.length + (daily ? ' 天）' : ' 周）'),
         emptyText: ads ? '所选期间暂无广告数据。' : '所选期间暂无经营数据。',
       });
       const organicNote = '自然销售额为 BR 销售额减去已归属广告销售额，自然订单为 BR 订单商品数减去已归属广告订单，均为估算值。广告归因可能跨日或跨 SKU。';
+      const clickNote = '按模板以 BR 会话数作为总点击量的估算值。自然点击量 = 会话数 − 已归属广告点击量，自然转化率 = 自然订单 ÷ 估算自然点击量。';
       const lines = ads ? [
         advertisingNotice(rows, daily, shownPeriods.some(period => period.adError), false),
         organicNote,
-        '当前报表未提供该父 ASIN 的自然点击量和自然展示量，因此自然点击率、自然转化率也留空。',
+        clickNote,
+        '当前仅 SP 提供点击和展现数据。计入 SB 或 SD 时，依赖全渠道点击或展现的数据留空。',
       ] : [
         skuProfitPolicyNote(),
         '利润沿用订单毛利估算，已计入 SP、交易退款、手动费用和可归属的 SB、SD 广告费。毛利率以订单报表销售额为分母。表内销售额取自 BR 销售与流量报告。',
         organicNote,
         '订单取 BR 订单商品数。总访客数取 BR 会话数。APP流量占比为 APP 会话数除以总会话数。总转化为 BR 订购件数除以总会话数。',
-        '广告转化为归因订单除以同范围的广告点击量。当前仅 SP 提供点击量，计入 SB 或 SD 时缺少相应点击量。自然转化缺少同范围自然点击量时留空。',
+        clickNote,
+        '广告点击率 = 已归属广告点击量 ÷ 同范围的广告展现量。广告转化 = 已归属广告订单 ÷ 同范围的广告点击量。当前仅 SP 提供点击和展现数据，计入 SB 或 SD 时，相应指标留空。',
         '退货金额取交易报表的退款金额。' + (daily ? '退货率为当日 FBA 收退件数除以发货件数。' : weeklyReturnsNotice),
         ...shownPeriods.map(period => (daily ? '所查日期范围：' : weekLabel(period.week) + '：') + period.note),
       ];

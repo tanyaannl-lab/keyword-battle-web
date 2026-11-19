@@ -23,3 +23,49 @@
 .mc-weekly-results .results-sku-notes>summary {width:fit-content;color:var(--results-teal);cursor:pointer}
 .mc-weekly-results .results-sku-notes p {margin:.45rem 0}
 .mc-weekly-results .results-table-compact [data-column="ad_scope"] {min-width:8rem;max-width:14rem;white-space:normal}
+
+.mc-weekly-results .metric-ad {
+  --metric-cell: #eaf3ff;
+  --metric-hover: #dfedfc;
+  --metric-strong: #d2e6fc;
+  --metric-edge: #a9c9ec;
+}
+.mc-weekly-results .metric-organic {
+  --metric-cell: #eaf6e9;
+  --metric-hover: #def0dd;
+  --metric-strong: #d2eace;
+  --metric-edge: #abcda5;
+}
+.mc-weekly-results .results-table td:is(.metric-ad, .metric-organic) {
+  background-color: var(--metric-cell);
+}
+.mc-weekly-results .results-table tbody tr:where(:not([data-summary="true"])):hover td:is(.metric-ad, .metric-organic) {
+  background-color: var(--metric-hover);
+}
+.mc-weekly-results .results-table thead th:is(.metric-ad, .metric-organic),
+.mc-weekly-results .results-table tbody tr[data-summary="true"] > :is(.metric-ad, .metric-organic) {
+  background-color: var(--metric-strong);
+  border-bottom-color: var(--metric-edge);
+}
+.mc-weekly-results .results-metric-legend {
+  display: flex;
+  align-items: center;
+  gap: .85rem;
+  margin-inline-start: auto;
+  padding-block: .45rem;
+  color: var(--results-muted);
+  font-size: .8rem;
+}
+.mc-weekly-results .results-metric-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+}
+.mc-weekly-results .results-metric-legend span::before {
+  content: "";
+  width: .85em;
+  height: .85em;
+  border: 1px solid var(--metric-edge);
+  border-radius: 2px;
+  background-color: var(--metric-strong);
+}
