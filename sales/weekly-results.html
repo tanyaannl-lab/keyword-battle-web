@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="../assets/workspace-nav.css?v=20261110">
   <link rel="stylesheet" href="../assets/mc-weekly-source-nav.css?v=20261113-1">
   <link rel="stylesheet" href="../assets/mc-weekly-results.css?v=20261119-layout4">
-  <link rel="stylesheet" href="../assets/mc-results-weeks.css?v=20261119-skuowner6">
+  <link rel="stylesheet" href="../assets/mc-results-weeks.css?v=20261119-ownergroup1">
 </head>
 <body>
 <div class="shell workspace-shell workspace-sales" id="appShell" hidden>
@@ -111,7 +111,7 @@
           <div id="resultProductFilters" class="results-product-filters">
             <label class="results-field" for="resultSearch">
               <span>搜索产品</span>
-              <input id="resultSearch" type="search" maxlength="200" autocomplete="off" placeholder="ASIN、SKU、负责人或运营人员">
+              <input id="resultSearch" type="search" maxlength="200" autocomplete="off" placeholder="产品简称、SKU、ASIN、负责人或运营人员">
             </label>
             <label class="results-field" for="resultOwner">
               <span>负责人</span>
@@ -119,7 +119,7 @@
             </label>
             <label class="results-field" for="resultOperator">
               <span>运营人员</span>
-              <select id="resultOperator" title="按产品目录的运营名称筛选父款。"><option value="">全部运营人员</option></select>
+              <select id="resultOperator" title="按报表日期筛选对应运营人员的 SKU。"><option value="">全部运营人员</option></select>
             </label>
             <button id="clearResultFilters" class="results-button" type="button">清除筛选</button>
           </div>
@@ -127,41 +127,50 @@
         <p class="results-timezone" id="weekTimeZone">周次按美国太平洋时间计算，周一至周日。</p>
         <p id="skuPreviewNotice" class="results-state" data-state="warning" hidden>销售、流量、SP、订单和交易均来自每日经营明细。</p>
 
-        <section id="productList" class="results-list" aria-label="筛选期间的父款">
+        <section id="productList" class="results-list" aria-label="负责人及产品汇总">
           <div class="results-overview">
             <p id="resultsCount" class="results-count" aria-live="polite" aria-atomic="true"></p>
             <p class="results-catalog-date">目录日期 <time id="resultsCatalogDate">—</time></p>
           </div>
-          <div class="results-table-wrap" id="parentTable" tabindex="0" role="region" aria-label="父款结果表">
-            <table class="results-table" aria-label="父款结果">
+          <div class="results-table-wrap" id="parentTable" tabindex="0" role="region" aria-label="负责人和产品数据，可横向滚动">
+            <table class="results-table" aria-label="负责人和产品汇总">
               <thead>
                 <tr>
-                  <th scope="col">父 ASIN</th><th scope="col">负责人</th>
-                  <th scope="col" class="results-num">销售额</th><th scope="col" class="results-num">订单商品数</th>
-                  <th scope="col" class="results-num" data-day-only hidden>订购件数</th><th scope="col" class="results-num" data-day-only hidden>会话数</th>
-                  <th scope="col" class="results-num" data-week-only>SP 广告花费</th><th scope="col" class="results-num" data-week-only>SP 归因订单</th>
-                  <th scope="col" class="results-num" data-week-only>SP ACOS</th><th scope="col" class="results-num" data-week-only>利润</th>
-                  <th scope="col" data-week-only>本周费用</th>
+                  <th scope="col" aria-sort="ascending"><button type="button" class="results-column-sort" data-list-sort="name">负责人 / 产品</button></th>
+                  <th scope="col" class="results-num"><button type="button" class="results-column-sort" data-list-sort="br_sales">销售额</button></th>
+                  <th scope="col" class="results-num"><button type="button" class="results-column-sort" data-list-sort="br_orders">订单商品数</button></th>
+                  <th scope="col" data-day-only hidden class="results-num"><button type="button" class="results-column-sort" data-list-sort="br_units">订购件数</button></th>
+                  <th scope="col" data-day-only hidden class="results-num"><button type="button" class="results-column-sort" data-list-sort="sessions">会话数</button></th>
+                  <th scope="col" data-week-only class="results-num"><button type="button" class="results-column-sort" data-list-sort="sp_cost">SP 广告花费</button></th>
+                  <th scope="col" data-week-only class="results-num"><button type="button" class="results-column-sort" data-list-sort="sp_orders">SP 归因订单</button></th>
+                  <th scope="col" data-week-only class="results-num"><button type="button" class="results-column-sort" data-list-sort="sp_acos">SP ACOS</button></th>
+                  <th scope="col" class="results-num"><button type="button" class="results-column-sort" data-list-sort="order_profit">SKU 基础毛利</button></th>
+                  <th scope="col">操作</th>
                 </tr>
               </thead>
               <tbody id="parentResults"></tbody>
             </table>
           </div>
-          <p class="results-table-note" id="resultsWeeklyListHint">金额按勾选的周次合计。点击父 ASIN 可逐周对照毛利、广告和 FBA 退货率。</p>
+          <p class="results-table-note" id="resultsWeeklyListHint">按勾选周次合计。SKU 基础毛利未扣父款级费用，结算口径可在明细中查看。</p>
           <p class="results-table-note results-daily-note" id="resultsDailyListHint" hidden></p>
-          <p id="parentEmpty" class="results-empty" hidden>没有符合条件的父款，请调整筛选。</p>
+          <p id="parentEmpty" class="results-empty" hidden>当前日期和筛选条件下没有符合条件的产品。</p>
         </section>
 
         <article id="productResults" class="results-detail" aria-labelledby="selectedParent" hidden>
           <header class="results-detail-head">
             <div class="results-product-identity">
-              <p class="results-label">父 ASIN</p>
+              <p class="results-label" id="selectedScopeLabel">父 ASIN</p>
               <h2 id="selectedParent" tabindex="-1">—</h2>
               <p id="selectedOwner" class="results-owner"></p>
+              <details id="scopeSkuMembers" class="results-scope-members" hidden>
+                <summary id="scopeSkuCount"></summary>
+                <ul id="scopeSkuList"></ul>
+              </details>
+              <div id="scopeParents" class="results-parent-links" hidden></div>
             </div>
             <div class="results-detail-actions">
               <span id="selectedWeek" class="results-week-tag"></span>
-              <button id="backToProducts" class="results-button" type="button">返回父款列表</button>
+              <button id="backToProducts" class="results-button" type="button">返回负责人列表</button>
             </div>
           </header>
           <p id="productStatus" class="results-state" role="status" hidden></p>
@@ -263,8 +272,10 @@
 <noscript><style>#loading{display:none}</style><p class="auth-loading">请启用 JavaScript 后查看周结果。</p></noscript>
 <script src="../assets/config.js"></script>
 <script src="../assets/auth-client.js"></script>
-<script src="../assets/mc-weekly-results-tables.js?v=20261119-skuowner6"></script>
-<script src="../assets/mc-weekly-results.js?v=20261119-skuowner6"></script>
+<script src="../assets/mc-weekly-results-tables.js?v=20261119-ownergroup1"></script>
+<script src="../assets/mc-owner-periods.js?v=20261119-ownergroup1"></script>
+<script src="../assets/mc-product-results.js?v=20261119-ownergroup1"></script>
+<script src="../assets/mc-weekly-results.js?v=20261119-ownergroup1"></script>
 </body>
 </html>
 

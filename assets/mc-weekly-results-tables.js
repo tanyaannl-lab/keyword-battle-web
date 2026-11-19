@@ -7,7 +7,7 @@
   const decimal = new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 });
   const dollars = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
   const percent = new Intl.NumberFormat('en-US', { style: 'percent', maximumFractionDigits: 2 });
-  const spNotice = 'SP 指商品推广，订单和销售额采用 7 天归因，可能包含其他 SKU。仅展示明确归属当前父 ASIN 的数据。';
+  const spNotice = 'SP 指商品推广，订单和销售额采用 7 天归因，可能包含其他 SKU。仅展示能归属所选范围的数据。';
   const weeklyReturnsNotice = 'FBA 周退货率 = 全周收退件数 ÷ 全周发货件数。退货和发货数据都需齐全 7 天；当周无发货时显示「—」。该比率反映当周进出量。';
   const channelOrder = ['SP', 'SB', 'SD'];
   const otherAdChannels = channelOrder.slice(1);
@@ -325,7 +325,7 @@
     const confirmedEmpty = otherAdChannels.filter(channel => rows.length && rows.every(row => row.ad_empty.includes(channel)));
     const join = values => otherAdChannels.filter(channel => values.has(channel)).join('、');
     const notices = [
-      names.length ? `统计范围：${names.length === 1 ? `仅 ${names[0]}` : names.join(' + ')}，只计入能归属当前父 ASIN 的数据。` : '暂无能归属当前父 ASIN 的广告数据。',
+      names.length ? `统计范围：${names.length === 1 ? `仅 ${names[0]}` : names.join(' + ')}，只计入能归属所选范围的数据。` : '所选范围暂无可归属的广告数据。',
       names.length ? (showSalesShare ? adShareNotice : '各广告类型的归因窗口可能不同，归因订单未跨类型去重。') : '',
       seen.has('SP') ? spNotice : '',
       pending.size ? `${join(pending)} 有广告报表，但部分或全部记录未能归属产品，未归属部分未计入。` : '',
@@ -475,7 +475,7 @@
           if (formatted.text === missing && Array.isArray(reasons) && reasons.length) {
             const info = element('details','results-profit-details');
             const baseProfit = column.key === 'order_profit_net' ? numeric(row._ownerBaseProfit) : null;
-            const caption = baseProfit === null ? '— 原因' : '按 SKU ' + dollars.format(baseProfit) + '（' + row._ownerProfitStatus + '）';
+            const caption = baseProfit === null ? '— 原因' : '基础毛利 · 按 SKU ' + dollars.format(baseProfit) + '（' + row._ownerProfitStatus + '）';
             const summary = element('summary', '', caption);
             summary.setAttribute('aria-label', column.label + '未结算，' + caption + '，展开原因');
             const list = element('ul');
@@ -802,7 +802,7 @@
     total.ad_channels = channels;
     total.ownerPartial = periods.some(row => row.ownerPartial);
     const scopeNotes = [];
-    if (total.ownerPartial) scopeNotes.push('部分父款期间仅计负责人 SKU 的 SP');
+    if (total.ownerPartial) scopeNotes.push('部分期间仅计所选 SKU 的 SP');
     if (total.ad_missing_reports.length) scopeNotes.push(total.ad_missing_reports.join('、') + ' 有缺报');
     if (total.ad_pending.length) scopeNotes.push(total.ad_pending.join('、') + ' 有未归属记录');
     if (total.ad_read_error) scopeNotes.push('SB、SD 读取失败');
@@ -815,8 +815,8 @@
     const pendingFees = periods.filter(row => row._ownerProfitStatus);
     if (pendingFees.length && periods.every(row => numeric(row.order_profit_net) !== null || numeric(row._ownerBaseProfit) !== null)) {
       total._ownerBaseProfit = sum(periods, 'order_profit');
-      total._ownerProfitStatus = pendingFees.some(row => row._ownerProfitStatus === '父级费用待核对')
-        ? '父级费用待核对' : '父级费用待分配';
+      const statuses = new Set(pendingFees.map(row => row._ownerProfitStatus));
+      total._ownerProfitStatus = ['父级费用待核对', '父款费用未计入', '父级费用待分配'].find(status => statuses.has(status));
     }
     total._missingReasons = {};
     total.coverage = Object.fromEntries(['br', 'sp'].map(source =>
@@ -892,7 +892,7 @@
   }
 
   function skuPeriodData({ sku, week = '', otherAds, returns, dailyFees, weeklyNotes }) {
-    if (sku?.ownerInScope === false) return {week,rows:[],note:'该时段无归属此负责人的 SKU。',adError:false};
+    if (sku?.ownerInScope === false) return {week,rows:[],note:'该时段没有符合所选范围的 SKU。',adError:false};
     const daily = !week;
     const days = sku?.days ?? [];
     const dateKey = daily ? 'report_date' : 'week_start';
@@ -903,6 +903,7 @@
     const weekCoverage = Object.fromEntries(skuSources.map(([key])=>
       [key,days.length === 7 && days.every(day=>day.coverage?.[key] === 'ready') ? 'ready' : 'missing']));
     const ownerPartial = sku?.ownerPartial === true;
+    const partialProduct = sku?.productGroup === true && ownerPartial;
     const baseRows = (daily ? days : [{...sku?.totals,week_start:week,coverage:weekCoverage}]).map(raw => ({
       ...raw,
       skuReadError:Boolean(sku?.error), ownerPartial,
@@ -912,9 +913,10 @@
       sp_sales_share:ratio(raw.sp_sales,raw.br_sales),
       sp_acos:ratio(raw.sp_cost,raw.sp_sales),
     }));
-    const parentAds = aggregateOtherAds(!daily && sku?.unfinished ? [] : otherAds?.rows, daily ? date => date : monday);
+    const parentAds = aggregateOtherAds(partialProduct || (!daily && sku?.unfinished) ? [] : otherAds?.rows, daily ? date => date : monday);
+    const adReadError = !partialProduct && (otherAds?.error || (sku?.productGroup === true && !otherAds));
     const scopedRows = advertisingRows(baseRows,dateKey,ownerPartial ? new Map() : parentAds,
-      otherAds?.coverage ?? otherAds?.pending,otherAds?.error);
+      partialProduct ? [] : otherAds?.coverage ?? otherAds?.pending,adReadError);
     const movements = new Map((!returns?.error ? returns?.rows ?? [] : []).map(row=>[row.report_date,row]));
     const weeklyFba = daily ? null : weeklySkuFba(week,movements,returns?.error,sku?.unfinished);
     const expenses = new Map((!dailyFees?.error ? dailyFees?.rows ?? [] : []).map(row=>[row.report_date,row]));
@@ -922,7 +924,7 @@
       const date = row[dateKey];
       const savedFees = daily ? expenses.get(date) : weeklyNotes ?
         Object.fromEntries(manualFeeKeys.map(key=>[key,weeklyNotes.notes?.[key] ?? 0])) : null;
-      const parentFees = Object.fromEntries(manualFeeKeys.map(key=>[key,validFee(savedFees?.[key])]));
+      const parentFees = Object.fromEntries(manualFeeKeys.map(key=>[key,partialProduct ? null : validFee(savedFees?.[key])]));
       const parentFeeTotal = sumFees(parentFees);
       const fees = ownerPartial ? Object.fromEntries(manualFeeKeys.map(key => [key, parentFees[key] === 0 ? 0 : null])) : parentFees;
       const feeTotal = sumFees(fees);
@@ -930,13 +932,14 @@
       const txnProfit = numeric(row.txn_profit);
       const channels = parentAds.get(date) ?? new Map();
       const unknownCost = [...channels.keys()].filter(channel => channels.get(channel).cost === null);
-      const parentOtherCost = otherAds?.error || (ownerPartial && !otherAds) ? null :
+      const parentOtherCost = partialProduct || adReadError || (ownerPartial && !otherAds) ? null :
         channels.size ? addKnown([...channels.values()].map(channel => channel.cost)) : 0;
       const needsAdAllocation = ownerPartial && parentOtherCost !== null && parentOtherCost !== 0;
       const needsFeeAllocation = ownerPartial && parentFeeTotal !== null && parentFeeTotal !== 0;
       const otherCost = needsAdAllocation ? null : parentOtherCost;
-      const adReason = needsAdAllocation ? '父款 SB、SD 有花费，尚未分配至该负责人的 SKU' :
-        otherAds?.error || (ownerPartial && !otherAds) ? 'SB、SD 花费读取失败' :
+      const adReason = partialProduct ? 'SB、SD 花费按父 ASIN 记录，无法分配到所选 SKU' :
+        needsAdAllocation ? '父款 SB、SD 有花费，尚未分配至所选 SKU' :
+        adReadError || (ownerPartial && !otherAds) ? 'SB、SD 花费读取失败' :
         unknownCost.length ? `已归属的 ${unknownCost.join('、')} 广告缺少花费` : '';
       const net = orderProfit !== null && feeTotal !== null && otherCost !== null
         ? orderProfit - feeTotal - otherCost : null;
@@ -952,8 +955,11 @@
           });
         }
         if (adReason) why.push(adReason+'，无法扣除对应广告费用。');
-        if (metric==='order_profit' && feeTotal===null) why.push(needsFeeAllocation
-          ? '父款有手动费用，尚未分配至该负责人的 SKU。' : '手动费用读取失败或金额未知，请重新读取费用。');
+        if (metric==='order_profit' && feeTotal===null) {
+          if (partialProduct) why.push('手动费用按父 ASIN 登记，当前范围无法分摊。');
+          else if (needsFeeAllocation) why.push('父款有手动费用，尚未分配至所选 SKU。');
+          else why.push('手动费用读取失败或金额未知，请重新读取费用。');
+        }
         if (base!==null && why.length) why.unshift('基础'+(metric==='order_profit'?'订单':'交易')+'毛利 '+dollars.format(base)+'；尚未扣完适用费用，非最终毛利。');
         if (!why.length) why.push('必要数据尚未齐全。');
         return why;
@@ -964,10 +970,13 @@
       else if (!(numeric(row.order_sales)>0)) missingReasons.order_gross_margin=['订单销售额为零、负数或缺失，无法计算毛利率。'];
       if (txnNet===null) missingReasons.txn_profit=reasons('txn_profit',txnProfit);
       const pendingOwnerFees = ownerPartial && (feeTotal === null || otherCost === null);
+      let scopeStatus = '';
+      if (partialProduct) scopeStatus = '父款费用未计入';
+      else if (pendingOwnerFees) scopeStatus = parentFeeTotal === null || parentOtherCost === null ? '父级费用待核对' : '父级费用待分配';
       return {...row,...fees,...productTrafficMetrics(row,missingReasons),_missingReasons:missingReasons,order_profit_net:net,
         _ownerBaseProfit:pendingOwnerFees ? orderProfit : null,
-        _ownerProfitStatus:pendingOwnerFees ? (parentFeeTotal === null || parentOtherCost === null ? '父级费用待核对' : '父级费用待分配') : '',
-        ad_scope:ownerPartial ? row.ad_scope + '（负责人 SKU）' : row.ad_scope,
+        _ownerProfitStatus:scopeStatus,
+        ad_scope:ownerPartial ? row.ad_scope + '（所选 SKU）' : row.ad_scope,
         txn_profit:txnNet,
         order_gross_margin:ratio(net,row.order_sales),
         _returnUnits:daily ? numeric(dailyMovement?.return_units) : weeklyFba.returned,
@@ -979,14 +988,14 @@
     const costModes = new Set(days.map(day => day.profit_cost_mode).filter(Boolean));
     const costNote = costModes.size === 1 && costModes.has('daily') ? '成本按子 ASIN 和美西日期读取。' :
       costModes.size === 1 && costModes.has('catalog') ? '成本取自子 ASIN 的目录。' : '';
-    const feeUnavailable = daily ? dailyFees?.error : !weeklyNotes;
+    const feeUnavailable = !partialProduct && (daily ? dailyFees?.error : !weeklyNotes);
     const note = [
       sku?.error || skuContextCoverage(days), costNote,
       sku?.unfinished ? '所选周尚未结束，整周指标留空。' : '',
       daily ? (returns?.error ? '暂时无法读取 FBA 退货和发货数据。' : '') : weeklyFba.note,
       feeUnavailable ? '暂时无法核对手动费用，完整订单毛利待核对。' : '',
     ].filter(Boolean).join(' ');
-    return { week, rows: summaryRows, note, adError: otherAds?.error };
+    return { week, rows: summaryRows, note, adError: adReadError };
   }
 
   function skuSummaryColumns(daily) {
@@ -1059,7 +1068,7 @@
       clear.disabled = !select.value;
       const summary = summarizeSkuRows(rows, daily);
       const statusNotes = [];
-      if (summary?.ownerPartial) statusNotes.push('部分父款期间仅计所选负责人 SKU 的 SP；未分配的父款费用单列提示。');
+      if (summary?.ownerPartial) statusNotes.push('部分期间的广告数据仅含所选 SKU 的 SP。父款费用无法分摊时，利润栏显示基础毛利，毛利率留空。');
       if (!ads && summary) {
         if (summary.data_coverage !== '四类报表已齐') statusNotes.push(summary.data_coverage);
         if (summary.ad_read_error || summary.ad_missing_reports.length || summary.ad_pending.length) {
@@ -1081,7 +1090,7 @@
         '当前仅 SP 提供点击和展现数据。计入 SB 或 SD 时，依赖全渠道点击或展现的数据留空。',
       ] : [
         skuProfitPolicyNote(),
-        '利润沿用订单毛利估算，已计入 SP、交易退款、手动费用和可归属的 SB、SD 广告费。毛利率以订单报表销售额为分母。表内销售额取自 BR 销售与流量报告。',
+        'SKU 基础毛利计入商品成本、SP 和交易退款。完整订单毛利再扣除可归属的手动费用和 SB、SD 花费。毛利率以订单报表销售额为分母。表内销售额取自 BR 销售与流量报告。',
         organicNote,
         '订单取 BR 订单商品数。总访客数取 BR 会话数。APP流量占比为 APP 会话数除以总会话数。总转化为 BR 订购件数除以总会话数。',
         clickNote,

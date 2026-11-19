@@ -4,7 +4,7 @@
   const ids = ['appShell','loading','userEmail','logoutBtn','results','resultsStatus','retryResults',
     'resultWeek','resultSearch','resultOwner','resultOperator','clearResultFilters','resultsCount','resultsCatalogDate',
     'parentResults','parentTable','parentEmpty','productList','resultProductFilters','productStatus',
-    'productResults','selectedParent','selectedOwner','selectedWeek','backToProducts',
+    'productResults','selectedScopeLabel','selectedParent','scopeParents','scopeSkuMembers','scopeSkuCount','scopeSkuList','selectedOwner','selectedWeek','backToProducts',
     'resultSummary','resultAds','resultKeywords','resultAttributes','summaryResults','adsResults',
     'keywordResults','attributeResults','weeklyNotesForm','reviewFee','offsiteFee','otherFee',
     'saveWeeklyNotes','notesStatus','resultView','resultWeeklyFilter','resultDateFilter','resultStartDate',
@@ -15,6 +15,7 @@
     'resultWeekOptions','resultWeekSummary','applyResultWeeks','resultWeekCount','resultFeeWeek','resultFeeWeekField'];
   const ui = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
   const tabs = [...document.querySelectorAll('[data-result-tab]')];
+  const listSortButtons = [...document.querySelectorAll('[data-list-sort]')];
   const weeklyElements = [...document.querySelectorAll('[data-week-only]')];
   const dailyElements = [...document.querySelectorAll('[data-day-only]')];
   const panels = { summary: ui.resultSummary, ads: ui.resultAds, keywords: ui.resultKeywords, attributes: ui.resultAttributes };
@@ -26,7 +27,7 @@
     'mc_weekly_results_notes_save','mc_weekly_results_search_daily_read',
     'mc_weekly_results_other_ads_read','mc_daily_fba_returns_read','mc_daily_results_fees_read','mc_daily_results_fees_save',
     'mc_weekly_results_sku_list','mc_weekly_results_sku_read',
-    'mc_owner_results_sku_list','mc_owner_results_sku_read','mc_owner_fba_returns_read','mc_owner_results_choices']);
+    'mc_owner_results_sku_list','mc_owner_results_sku_read','mc_owner_fba_returns_read','mc_owner_results_choices','mc_owner_results_products','mc_owner_product_detail']);
   const previewParams = new URLSearchParams(window.location?.search ?? '');
   const skuSources = ['br','sp','orders','transactions'];
   const skuMetricKeys = ['sessions_browser','sessions_app','sessions','br_orders','br_units','br_sales',
@@ -34,7 +35,6 @@
     'order_sales','order_profit','order_profit_cny','txn_orders','txn_units','txn_sales','txn_total',
     'txn_refund','txn_profit','txn_profit_cny'];
   const asin = /^[A-Z0-9]{10}$/;
-  const normalize = text => text.normalize('NFKC').toLowerCase();
   const collator = new Intl.Collator('zh-Hans', { numeric: true, sensitivity: 'base' });
   const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
   const integer = new Intl.NumberFormat('en-US');
@@ -69,9 +69,11 @@
   let dayEnd = '';
   let parent = '';
   let selectedTab = 'summary';
-  let listRows = new Map();
-  let listAds = new Map();
-  let listVisible = null;
+  let ownerGroups = [];
+  let catalogOperators = [];
+  const expandedOwners = new Set();
+  let listSortKey = 'name', listSortDirection = 1;
+  let detailGroup = null, parentOrigin = null, returnGroup = null;
   let detail = null;
   let hasList = false;
   let loadedContext = false;
@@ -80,18 +82,18 @@
   let noteBase = null;
   let retryAction = null;
   let focusDetail = false;
-  let returnParent = '';
   const drafts = new Map();
   const dailyFeeDrafts = new Map();
   const dailyFeeUnconfirmed = new Set();
   let dailyFeeRefreshing = false;
 
+  const groupDetailNotice = '按当前筛选范围内的 SKU 统计。跨父款或仅覆盖部分父款时显示 SKU 基础毛利；整父费用和搜索词可在对应父款中查看。';
   const partialOwnerNotice = '此负责人只覆盖部分 SKU。SP、经营和 FBA 按所选负责人统计；整父费用和 SB、SD 无法拆分时显示 SKU 基础毛利。';
   const partialSearchNotice = '关键词和属性数据只归属到父 ASIN，无法拆分到这个负责人的 SKU。';
   const feeWeek = () => detail?.periods ? ui.resultFeeWeek.value : week;
   const feeScopeIsEditable = () => {
     const sku = detail?.periods ? detail.periods.find(period => period.week === feeWeek())?.sku : detail?.sku;
-    return Boolean(sku && !sku.ownerPartial);
+    return Boolean(!detailGroup && parent && sku && !sku.ownerPartial);
   };
   const noteKey = () => `${feeWeek()}/${parent}`;
   const validDay = value => {
@@ -196,17 +198,13 @@
           !Array.isArray(item.owners) || item.owners.some(owner => typeof owner !== 'string')) {
         throw new Error('产品目录格式有误，请联系管理员。');
       }
-      const group = grouped.get(item.parent_asin) ?? { parent: item.parent_asin, owners: new Set(), children: [] };
+      const group = grouped.get(item.parent_asin) ?? { parent: item.parent_asin, owners: new Set() };
       const itemOwners = item.owners.map(value => value.trim()).filter(Boolean);
       for (const owner of itemOwners) group.owners.add(owner);
       if (skuCounts.get(item.sku) === 1 && item.sku.trim() &&
           item.owners.length === 1 && itemOwners.length === 1) allOwners.add(itemOwners[0]);
       const operator = typeof item.operator_name === 'string' ? item.operator_name.trim() : '';
       if (operator) allOperators.add(operator);
-      group.children.push({
-        owners: itemOwners, operator,
-        searchText: normalize([item.parent_asin,item.asin,item.sku,...item.owners,operator].join(' ')),
-      });
       grouped.set(item.parent_asin, group);
     }
     // The optional list is sourced from past directories and approved overrides. Add
@@ -214,8 +212,7 @@
     if (Array.isArray(data.report_parent_choices) && data.report_parent_choices.length <= 10000) {
       for (const value of data.report_parent_choices) {
         if (typeof value !== 'string' || !asin.test(value) || grouped.has(value)) continue;
-        grouped.set(value, { parent:value, owners:new Set(), ruleOnly:true,
-          children:[{owners:[],operator:'',searchText:normalize(value)}] });
+        grouped.set(value, { parent:value, owners:new Set() });
       }
     }
     const compare = (a,b) => collator.compare(a,b);
@@ -355,33 +352,14 @@
     renderNotes(row);
   }
   async function loadMultiWeeks(controller,weeks,parentAsin,owner) {
-    const values=await mapWeeks(weeks,controller,w=>parentAsin
-      ? fetchSkuPeriod(controller,false,w,w,shiftDay(w,6),parentAsin,owner)
-      : fetchSkuList(controller,w,shiftDay(w,6),owner));
+    const values=await mapWeeks(weeks,controller,w=>
+      fetchSkuPeriod(controller,false,w,w,shiftDay(w,6),parentAsin,owner));
     if (context!==controller || controller.signal.aborted || !auth) return;
     loadedContext=true;
-    if (!parentAsin) {
-      const sumMap=(prop,fields)=>new Map([...parents.keys()].map(key=>[key,
-        Object.fromEntries(fields.map(field=>{
-          const applicable = owner ? values.filter(part => part.error || part.visibleParents?.has(key)) : values;
-          const nums = applicable.map(part => number(part[prop].get(key)?.[field]));
-          return [field,nums.length && nums.every(v=>v!==null)?nums.reduce((a,b)=>a+b,0):null];
-        }))]));
-      listVisible=values.every(v=>v.visibleParents instanceof Set)
-        ?new Set(values.flatMap(v=>[...v.visibleParents])):null;
-      listRows=sumMap('listRows',['sales','orders','units','visits']);
-      listAds=sumMap('listAds',['sp_cost','sp_sales','sp_orders']);
-      hasList=true;renderList();
-      if(returnParent){ui.parentResults.querySelector(`[data-result-parent="${returnParent}"]`)?.focus();returnParent='';}
-      const missing=weeks.filter((w,i)=>values[i].error);
-      pageStatus(`父款列表合计所选 ${weeks.length} 周；任一选中周缺值，对应合计显示「—」。`+
-        (missing.length ? ' 待读取：'+missing.map(w=>weekLabel(w)).join('；') : ''),missing.length?'warning':'',
-        missing.length?loadContext:null);
-      return;
-    }
     detail={periods:weeks.map((w,i)=>({...values[i],week:w})),rows:values.flatMap(v=>v.rows),search:{state:'idle'}};
     renderMultiDetail();
-    const editableWeeks = detail.periods.filter(period => !period.sku.ownerPartial).map(period => period.week);
+    if (detailGroup) renderGroupContext(detail.periods.map(period => period.groupContext));
+    const editableWeeks = detailGroup ? [] : detail.periods.filter(period => !period.sku.ownerPartial).map(period => period.week);
     ui.resultFeeWeekField.hidden = ui.weeklyNotesForm.hidden = !editableWeeks.length;
     ui.resultFeeWeek.replaceChildren(...editableWeeks.map(w => new Option(weekLabel(w), w)));
     if (editableWeeks.length) {
@@ -391,7 +369,7 @@
     const partial = detail.periods.some(period => period.sku.ownerPartial && period.sku.ownerInScope !== false);
     const weeksOutOfScope = detail.periods.filter(period => period.sku.ownerInScope === false).length;
     const rangeNote = weeksOutOfScope ? `其中 ${weeksOutOfScope} 周没有归属该负责人的 SKU，已从表格剔除。` : '';
-    notice(ui.productStatus, rangeNote + (partial ? partialOwnerNotice : `已选 ${weeks.length} 周；周总结和产品广告结构均按周展示，费用保存到指定周次。`));
+    notice(ui.productStatus, rangeNote + (detailGroup ? groupDetailNotice : partial ? partialOwnerNotice : `已选 ${weeks.length} 周；周总结和产品广告结构均按周展示，费用保存到指定周次。`));
     if(focusDetail){(focusDetail==='notes' && editableWeeks.length ? ui.resultFeeWeek : ui.selectedParent).focus();focusDetail=false;}
     const failed=weeks.filter((w,i)=>values[i].sku?.error);
     pageStatus(failed.length ? '部分周经营明细读取失败：'+failed.map(weekLabel).join('；') : '',
@@ -408,7 +386,7 @@
       if (active && focus) tab.focus();
     }
     for (const [name,panel] of Object.entries(panels)) panel.hidden = key !== name;
-    if ((key === 'keywords' || key === 'attributes') && detail?.search.state === 'idle') void loadSearchAnalysis();
+    if ((key === 'keywords' || key === 'attributes') && detail && (detailGroup || detail.search.state === 'idle')) void loadSearchAnalysis();
   }
 
   function makeCell(row, value, numeric = false) {
@@ -419,72 +397,156 @@
     return cell;
   }
 
-  function productButton(parentAsin, label) {
+  const listMetricLabels = {br:'BR',sp:'SP',orders:'订单',transactions:'交易'};
+
+  function listMetric(totals, key) {
+    if (key !== 'sp_acos') return number(totals[key]);
+    const cost = number(totals.sp_cost), sales = number(totals.sp_sales);
+    return cost !== null && sales > 0 ? cost / sales : null;
+  }
+
+  function orderedGroups(rows, labelKey) {
+    return [...rows].sort((a,b) => {
+      const byName = collator.compare(a[labelKey], b[labelKey]);
+      if (listSortKey === 'name') return listSortDirection * byName;
+      const left = listMetric(a.totals,listSortKey), right = listMetric(b.totals,listSortKey);
+      if (left === null || right === null) return Number(left === null) - Number(right === null) || byName;
+      return listSortDirection * (left-right) || byName;
+    });
+  }
+
+  function coverageNote(coverage) {
+    if (!coverage?.active_days) return '';
+    return Object.entries(listMetricLabels).flatMap(([key,label]) => {
+      const days = coverage[key + '_days'];
+      return Number.isInteger(days) && days < coverage.active_days ? [label + ' ' + days + '/' + coverage.active_days + ' 天'] : [];
+    }).join('、');
+  }
+
+  function scopeButton(scope,owner,productKey) {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = 'results-link-button';
-    button.dataset.resultParent = parentAsin;
-    button.textContent = label;
-    if (label !== parentAsin) button.setAttribute('aria-label', `${parentAsin} ${label}`);
-    if (label === '管理费用' || label === '查看费用' || label === '费用未保存') {
-      button.dataset.resultNotes = 'true';
-    }
+    button.dataset.scopeDetail = scope;
+    button.dataset.owner = owner;
+    if (productKey) button.dataset.productKey = productKey;
+    button.textContent = '查看明细';
+    button.setAttribute('aria-label', (productKey ? owner + ' · ' + productKey : owner) + ' 查看明细');
     return button;
+  }
+
+  function renderGroupRow(owner, product) {
+    const tr = document.createElement('tr');
+    const heading = document.createElement('th');
+    const row = product || owner, name = owner.owner;
+    tr.dataset.owner = name;
+    heading.scope = 'row';
+    heading.textContent = product ? product.key : name;
+    tr.append(heading);
+    if (product) {
+      tr.dataset.productRow = product.kind;
+      tr.dataset.productKey = product.key;
+      const label = document.createElement('small');
+      label.className = 'results-product-subinfo';
+      label.textContent = product.kind === 'sku' ? '单 SKU' : product.skus.length + ' 个 SKU';
+      heading.append(label);
+    } else {
+      tr.dataset.ownerRow = name;
+      const expanded = expandedOwners.has(name);
+      const toggle = document.createElement('button');
+      toggle.type = 'button';
+      toggle.className = 'results-expand-products';
+      toggle.dataset.ownerToggle = name;
+      toggle.textContent = (expanded ? '收起产品明细' : '展开产品明细') + '（' + owner.products.length + '）';
+      toggle.setAttribute('aria-label', name + ' ' + toggle.textContent);
+      toggle.setAttribute('aria-expanded', String(expanded));
+      heading.append(toggle);
+    }
+    const incomplete = coverageNote(row.coverage);
+    if (incomplete) {
+      const label = document.createElement('small');
+      label.className = 'results-product-subinfo';
+      label.textContent = '待同步：' + incomplete;
+      heading.append(label);
+    }
+    const numeric = (key, formatter) => {
+      const cell = makeCell(tr, format(listMetric(row.totals,key),formatter), true);
+      cell.dataset.column = key;
+    };
+    numeric('br_sales',usd);
+    numeric('br_orders',integer);
+    if (mode === 'day') {
+      numeric('br_units',integer);
+      numeric('sessions',integer);
+    } else {
+      numeric('sp_cost',usd);
+      numeric('sp_orders',integer);
+      numeric('sp_acos',pct);
+    }
+    numeric('order_profit',usd);
+    makeCell(tr,'').append(scopeButton(product?.kind ?? 'owner',name,product?.key));
+    return tr;
   }
 
   function renderList() {
     if (!hasList) return;
-    const owner = ui.resultOwner.value;
-    const operator = ui.resultOperator.value;
-    const tokens = normalize(ui.resultSearch.value.trim()).split(/\s+/).filter(Boolean);
-    const eligible = [...parents.values()].filter(g=>!listVisible || listVisible.has(g.parent));
-    // The owner RPC has already selected parents using the catalog on each report date.
-    // Current catalog metadata only helps narrow independent operator/text searches.
-    const groupRows = eligible.filter(group => {
-      if (!operator && !tokens.length) return true;
-      const currentMatches = owner ? group.children.filter(child => child.owners.includes(owner)) : group.children;
-      if (owner && !currentMatches.length) {
-        return !operator && tokens.every(token => normalize(group.parent + ' ' + owner).includes(token));
-      }
-      return currentMatches.some(child => (!operator || child.operator === operator) &&
-        tokens.every(token => child.searchText.includes(token)));
-    });
-    ui.resultsCount.textContent = `显示 ${groupRows.length} / ${eligible.length} 个父款`;
-    ui.clearResultFilters.disabled = !owner && !operator && !ui.resultSearch.value;
-    ui.parentEmpty.hidden = groupRows.length !== 0;
-    ui.parentTable.hidden = groupRows.length === 0;
+    const products = ownerGroups.reduce((sum,o) => sum + o.products.length, 0);
+    ui.resultsCount.textContent = ownerGroups.length + ' 个负责人 · ' + products + ' 个产品';
+    ui.clearResultFilters.disabled = !ui.resultOwner.value && !ui.resultOperator.value && !ui.resultSearch.value;
+    ui.parentEmpty.hidden = ownerGroups.length !== 0;
+    ui.parentTable.hidden = ownerGroups.length === 0;
     const fragment = document.createDocumentFragment();
-    for (const group of groupRows) {
-      const tr = document.createElement('tr');
-      const line = listRows.get(group.parent);
-      const ad = listAds.get(group.parent);
-      const parentCell = makeCell(tr, '');
-      parentCell.append(productButton(group.parent, group.parent));
-      if (group.ruleOnly) {
-        const label = document.createElement('small');
-        label.textContent = ' · 历史或指定归属';
-        parentCell.append(label);
+    for (const owner of orderedGroups(ownerGroups,'owner')) {
+      fragment.append(renderGroupRow(owner));
+      if (expandedOwners.has(owner.owner)) {
+        for (const product of orderedGroups(owner.products,'key')) fragment.append(renderGroupRow(owner,product));
       }
-      makeCell(tr, owner || groupLabel(group));
-      makeCell(tr, format(line?.sales, usd), true);
-      makeCell(tr, format(line?.orders, integer), true);
-      if (mode === 'day') {
-        makeCell(tr, format(line?.units, integer), true);
-        makeCell(tr, format(line?.visits, integer), true);
-        fragment.append(tr);
-        continue;
-      }
-      makeCell(tr, format(ad?.sp_cost, usd), true);
-      makeCell(tr, format(ad?.sp_orders, integer), true);
-      const adSales = number(ad?.sp_sales);
-      const adCost = number(ad?.sp_cost);
-      makeCell(tr, adSales > 0 && adCost !== null ? pct.format(adCost / adSales) : empty, true);
-      makeCell(tr, '', true).append(productButton(group.parent, '查看毛利'));
-      const draft = chosenWeeks.some(w=>drafts.has(`${w}/${group.parent}`));
-      makeCell(tr, '').append(productButton(group.parent, owner ? '查看费用' : draft ? '费用未保存' : '管理费用'));
-      fragment.append(tr);
     }
     ui.parentResults.replaceChildren(fragment);
+    for (const button of listSortButtons) {
+      const th = button.closest('th');
+      if (button.dataset.listSort === listSortKey) th.setAttribute('aria-sort',listSortDirection > 0 ? 'ascending' : 'descending');
+      else th.removeAttribute('aria-sort');
+    }
+    if (returnGroup) {
+      const button = [...ui.parentResults.querySelectorAll('[data-scope-detail]')].find(b =>
+        b.dataset.owner === returnGroup.owner && b.dataset.scopeDetail === returnGroup.kind &&
+        (b.dataset.productKey || null) === returnGroup.key);
+      (button || ui.resultSearch).focus();
+      returnGroup = null;
+    }
+  }
+
+  function renderGroupContext(contexts) {
+    if (!detailGroup) return;
+    const skus = [...new Set(contexts.flatMap(part => part?.skus ?? []))].sort(collator.compare);
+    if (detailGroup.kind === 'short_name' && skus.length) {
+      ui.scopeSkuCount.textContent = '包含 ' + skus.length + ' 个 SKU';
+      ui.scopeSkuList.replaceChildren(...skus.map(sku => {
+        const item = document.createElement('li');
+        item.textContent = sku;
+        return item;
+      }));
+      ui.scopeSkuMembers.hidden = false;
+    }
+    const parentAsins = [...new Set(contexts.flatMap(part => part?.parents ?? [])
+      .filter(value => typeof value === 'string' && asin.test(value)))].sort();
+    detailGroup.parentAsins = parentAsins;
+    ui.scopeParents.replaceChildren();
+    ui.scopeParents.hidden = !parentAsins.length;
+    if (!parentAsins.length) return;
+    const label = document.createElement('span');
+    label.textContent = '整父明细和费用';
+    ui.scopeParents.append(label);
+    for (const value of parentAsins) {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'results-link-button';
+      button.dataset.resultParent = value;
+      button.textContent = value;
+      button.setAttribute('aria-label','查看父款 ' + value + ' 的整父明细和费用');
+      ui.scopeParents.append(button);
+    }
   }
 
   function formValues() {
@@ -558,16 +620,18 @@
   function changeMode(next) {
     if (!['day','week'].includes(next) || saveRequest || mode === next || !week) return;
     mode = next;
+    const hiddenSort = (next === 'day' ? ['sp_cost','sp_orders','sp_acos'] : ['br_units','sessions']).includes(listSortKey);
+    if (hiddenSort) { listSortKey = 'name'; listSortDirection = 1; }
     notice(ui.resultDateFeedback);
     if (mode === 'day') {
       const weekEnd = shiftDay(week,6);
-      if (parents.has(parent) && validSkuRange(week,weekEnd) && weekEnd < pacificToday()) {
+      if ((parent || detailGroup) && validSkuRange(week,weekEnd) && weekEnd < pacificToday()) {
         dayStart = week;
         dayEnd = weekEnd;
       }
       setDateControls();
       selectedTab = 'summary';
-    } else if (chosenWeeks.length===1 && parents.has(parent) && validDay(dayEnd)) {
+    } else if (chosenWeeks.length===1 && (parent || detailGroup) && validDay(dayEnd)) {
       const dayWeek=weekOf(dayEnd);
       if (availableWeeks.includes(dayWeek)) setChosenWeeks([dayWeek]);
     }
@@ -686,8 +750,16 @@
   }
   async function loadSearchAnalysis() {
     const controller=context, current=detail;
-    if (!auth || !controller || controller.signal.aborted || !current || !parent ||
-        !['idle','error','waiting'].includes(current.search.state)) return;
+    if (!auth || !controller || controller.signal.aborted || !current || (!parent && !detailGroup) ||
+        (!detailGroup && !['idle','error','waiting'].includes(current.search.state))) return;
+    if (detailGroup) {
+      const state = {state:'unavailable',message:'关键词和属性按父 ASIN 统计，请选择实际父款查看。'};
+      current.search = state;
+      if (current.periods) {
+        for (const period of current.periods) renderSearchState(state, period.targets);
+      } else renderSearchState(state);
+      return;
+    }
     const stillCurrent=()=>context===controller && detail===current && !!auth && !controller.signal.aborted;
     const parentAsin=parent;
     if (current.periods) {
@@ -858,39 +930,16 @@
     } catch { return []; }
   }
 
-  async function fetchSkuList(controller,start,end,owner) {
-    const emptyList = (error,visibleParents=null) => ({listRows:new Map(),listAds:new Map(),visibleParents,error});
-    const openPeriod = end >= pacificToday();
-    const pendingMessage = '所选期间尚未结束，整期合计待齐。点开父 ASIN 可查看各数据源进度。';
-    if (openPeriod && !owner) return emptyList(pendingMessage,
-      new Set([...parents.values()].filter(g=>!g.ruleOnly).map(g=>g.parent)));
-    const availableEnd = openPeriod ? shiftDay(pacificToday(),-1) : end;
-    if (start > availableEnd) return emptyList(pendingMessage, new Set());
-    try {
-      const params={p_start_date:start,p_end_date:availableEnd};
-      if (owner) params.p_owner = owner;
-      const entries=await rpc(owner ? 'mc_owner_results_sku_list' : 'mc_weekly_results_sku_list',params,controller.signal);
-      const fields=['br_sales','br_orders','br_units','sessions','sp_cost','sp_orders','sp_sales'];
-      if (!Array.isArray(entries) || entries.length>10000 || new Set(entries.map(v=>v?.parent_asin)).size!==entries.length ||
-          entries.some(r=>!r || !asin.test(r.parent_asin ?? '') || fields.some(k=>!(k in r) || (r[k]!==null && number(r[k])===null)))) {
-        throw new Error('父款经营明细列表格式有误。');
-      }
-      if (owner && controller === context && !controller.signal.aborted) {
-        for (const {parent_asin: key} of entries) {
-          if (!parents.has(key)) parents.set(key, {
-            parent:key, owners:[], ruleOnly:true, children:[{owners:[],operator:'',searchText:normalize(key)}],
-          });
-        }
-      }
-      if (openPeriod) return emptyList(pendingMessage, new Set(entries.map(r => r.parent_asin)));
-      return {listRows:new Map(entries.map(r=>[r.parent_asin,{sales:r.br_sales,orders:r.br_orders,units:r.br_units,visits:r.sessions}])),
-        listAds:new Map(entries.map(r=>[r.parent_asin,{sp_cost:r.sp_cost,sp_orders:r.sp_orders,sp_sales:r.sp_sales}])),visibleParents:new Set(entries.map(r=>r.parent_asin)),error:''};
-    } catch (e) {
-      if (e.status===401 || e.status===403) throw e;
-      if (owner) return emptyList(e.status===404 || e.code==='PGRST202' ? '负责人 SKU 列表接口尚未启用。' : '暂时无法读取负责人的 SKU 汇总，请重试。',new Set());
-      return emptyList(e.status===404 || e.code==='PGRST202' ? '父款经营明细列表接口尚未安装；可打开父 ASIN 查看明细。' :
-        '暂时无法读取父款汇总。可重试，或点开父 ASIN 查看明细。');
+  async function fetchOwnerGroups(controller) {
+    const filters = {p_owner:ui.resultOwner.value || null,p_operator:ui.resultOperator.value || null,
+      p_search:ui.resultSearch.value.trim() || null};
+    const result = await window.MCOwnerPeriods.list(ownerDateRanges(), ranges =>
+      rpc('mc_owner_results_products',{p_ranges:ranges,...filters},controller.signal),controller.signal);
+    if (result.owners.some(owner => owner.products.some(product =>
+      product.parent_asins.some(key => !asin.test(key))))) {
+      throw new Error('产品汇总中存在无效的父 ASIN，请核对产品目录。');
     }
+    return result;
   }
 
   async function fetchSkuPeriod(controller,daily,weekStart,start,end,parentAsin,owner) {
@@ -900,6 +949,10 @@
     const closed = to < lastClosed ? to : lastClosed;
     const subsidiary = from <= closed;
     const signal = controller.signal;
+    if (detailGroup) {
+      return window.MCProductResults.period({group:detailGroup,from,to,lastClosed,daily,weekStart,signal},
+        {rpc,optionalOtherAds,readDailyFees,readSkuWeeklyNotes,blankOtherAds,shiftDay,skuMetricKeys,skuSources});
+    }
     const [sku,otherAds,returns,dailyFees,rows] = await Promise.all([
       readSkuPeriod(from,to,lastClosed,parentAsin,signal,owner),
       subsidiary ? optionalOtherAds(from,closed,parentAsin,signal) : blankOtherAds(),
@@ -917,19 +970,20 @@
     detail = loaded;
     loadedContext = true;
     renderDetail();
-    if (!sku.ownerPartial) {
+    if (detailGroup) renderGroupContext([loaded.groupContext]);
+    if (!detailGroup && !sku.ownerPartial) {
       if (daily) showDailyFees();
       else if (rows.length) renderNotes(rows[0]);
     }
-    notice(ui.productStatus,sku.ownerInScope === false ? '所选期间此父款没有归属该负责人的 SKU。' : sku.ownerPartial ? partialOwnerNotice : daily || rows.length ? '' : '暂时无法读取本周费用，订单毛利估算留空。','warning');
+    notice(ui.productStatus,sku.ownerInScope === false ? '所选期间没有符合该负责人和产品范围的 SKU。' : detailGroup ? groupDetailNotice : sku.ownerPartial ? partialOwnerNotice : daily || rows.length ? '' : '暂时无法读取本周费用，订单毛利估算留空。','warning');
     if (focusDetail) {
-      (focusDetail === 'notes' && !sku.ownerPartial && rows.length ? ui.reviewFee : ui.selectedParent).focus();
+      (focusDetail === 'notes' && !detailGroup && !sku.ownerPartial && rows.length ? ui.reviewFee : ui.selectedParent).focus();
       focusDetail = false;
     }
     pageStatus(sku.error,sku.error ? 'error' : '',sku.error ? loadContext : null);
   }
 
-  async function loadContext() {
+  async function loadContext(deferSearch = false) {
     if (!auth || !week || saveRequest) return;
     context?.abort();
     const controller = new AbortController();
@@ -939,8 +993,9 @@
     const start = dayStart;
     const end = dayEnd;
     const parentAsin = parent || null;
+    const isDetail = !!(detailGroup || parentAsin);
     refreshOwnerChoiceRange();
-    const owner = ui.resultOwner.value;
+    const owner = detailGroup?.owner || '';
     renderSkuSource();
     loadedContext = false;
     hasList = false;
@@ -948,9 +1003,15 @@
     activeNoteKey = '';
     noteBase = null;
     lockWeeks(false);
-    ui.productList.hidden = !!parentAsin;
-    ui.resultProductFilters.hidden = !!parentAsin;
-    ui.productResults.hidden = !parentAsin;
+    ui.productList.hidden = isDetail;
+    ui.resultProductFilters.hidden = isDetail;
+    ui.productResults.hidden = !isDetail;
+    ui.scopeParents.hidden = true;
+    ui.scopeParents.replaceChildren();
+    ui.scopeSkuMembers.hidden = true;
+    ui.scopeSkuMembers.open = false;
+    ui.scopeSkuList.replaceChildren();
+    ui.clearResultFilters.disabled = !ui.resultOwner.value && !ui.resultOperator.value && !ui.resultSearch.value;
     ui.parentResults.replaceChildren();
     ui.parentTable.hidden = true;
     ui.parentEmpty.hidden = true;
@@ -964,40 +1025,75 @@
     updateFormState();
     notice(ui.notesStatus);
     notice(ui.productStatus);
-    if (parentAsin) {
-      ui.selectedParent.textContent = parentAsin;
-      ui.selectedOwner.textContent = owner || groupLabel(parents.get(parentAsin));
+    if (isDetail) {
+      ui.selectedScopeLabel.textContent = detailGroup ? {owner:'负责人',short_name:'产品简称',sku:'单 SKU'}[detailGroup.kind] : '父 ASIN';
+      ui.selectedParent.textContent = detailGroup ? (detailGroup.key || owner) : parentAsin;
+      ui.selectedOwner.textContent = detailGroup
+        ? [detailGroup.kind !== 'owner' ? '负责人 ' + owner : '',detailGroup.operator && '运营 ' + detailGroup.operator,
+          detailGroup.search && '搜索 ' + detailGroup.search].filter(Boolean).join(' · ')
+        : groupLabel(parents.get(parentAsin));
+      ui.backToProducts.textContent = parentOrigin ? '返回分组明细' : '返回负责人列表';
       ui.selectedWeek.textContent = daily ? rangeLabel(start,end) : selectedWeekText();
       selectTab(selectedTab);
     }
     pageStatus(daily ? '正在读取所选日期的结果…' : '正在读取所选周的结果…');
     try {
-      if (!daily && chosenWeeks.length > 1) { await loadMultiWeeks(controller,chosenWeeks.slice(),parentAsin,owner); return; }
-      if (parentAsin) {
-        await loadSkuContext(controller,daily,weekStart,start,end,parentAsin,owner);
+      if (isDetail) {
+        if (!daily && chosenWeeks.length > 1) await loadMultiWeeks(controller,chosenWeeks.slice(),parentAsin,owner);
+        else await loadSkuContext(controller,daily,weekStart,start,end,parentAsin,owner);
         return;
       }
-      const from = daily ? start : weekStart, to = daily ? end : shiftDay(weekStart,6);
-      const loaded = await fetchSkuList(controller,from,to,owner);
-      if (context !== controller || controller.signal.aborted || !auth) return;
-      listVisible = loaded.visibleParents; listRows = loaded.listRows; listAds = loaded.listAds; hasList = loadedContext = true;
-      renderList();
-      if (daily) notice(ui.resultsDailyListHint,'销售和流量按所选日汇总；缺日的指标留空，点开父 ASIN 可查看每日明细。');
-      if (returnParent) {
-        ui.parentResults.querySelector(`[data-result-parent="${returnParent}"]`)?.focus();
-        returnParent = '';
+      if (deferSearch) {
+        await new Promise(resolve => window.setTimeout(resolve,200));
+        if (context !== controller || controller.signal.aborted || !auth) return;
       }
-      pageStatus(loaded.error,loaded.error ? 'warning' : '',loaded.error && to < pacificToday() ? loadContext : null);
+      const result = await fetchOwnerGroups(controller);
+      if (context !== controller || controller.signal.aborted || !auth) return;
+      ownerGroups = result.owners;
+      const operator = ui.resultOperator.value;
+      const operators = new Set([...catalogOperators,...result.operators]);
+      if (operator) operators.add(operator);
+      ui.resultOperator.replaceChildren(new Option('全部运营人员',''),...[...operators].sort(collator.compare).map(v => new Option(v,v)));
+      ui.resultOperator.value = operator;
+      hasList = loadedContext = true;
+      renderList();
+      if (daily) notice(ui.resultsDailyListHint,'按所选日期合计。SKU 基础毛利未扣父款级费用，数据源缺日或指标缺值时显示「—」。');
+      const closedDays = result.days.filter(day => day.closed !== false);
+      const pending = result.days.length - closedDays.length;
+      const missing = Object.entries({...listMetricLabels,catalog_ready:'产品目录'}).flatMap(([key,label]) => {
+        const count = closedDays.filter(day => day[key] === false).length;
+        return count ? [label + ' 缺 ' + count + ' 天'] : [];
+      });
+      const status = [pending ? '所选期间有 ' + pending + ' 天尚未结束，整期合计待齐。' : '',
+        missing.length ? '所选期间待同步：' + missing.join('、') + '。' : ''].join('');
+      pageStatus(status,status ? 'warning' : '');
     } catch (error) {
       if (context === controller && !controller.signal.aborted && auth) pageStatus(explain(error),'error',loadContext);
     }
   }
 
-  function chooseParent(value, openNotes = false) {
-    if (saveRequest || !parents.has(value)) return;
+  function chooseGroup(ownerName, kind, key) {
+    if (saveRequest || !hasList) return;
+    const owner = ownerGroups.find(row => row.owner === ownerName);
+    if (!owner) return;
+    const product = kind === 'owner' ? null : owner.products.find(row => row.kind === kind && row.key === key);
+    if (kind !== 'owner' && !product) return;
+    detailGroup = {owner:ownerName,kind,key:product?.key || null,operator:ui.resultOperator.value || null,
+      search:ui.resultSearch.value.trim() || null,parentAsins:[]};
+    parent = '';
+    parentOrigin = null;
+    selectedTab = 'summary';
+    focusDetail = 'heading';
+    void loadContext();
+  }
+
+  function chooseParent(value) {
+    if (saveRequest || !detailGroup?.parentAsins.includes(value) || !asin.test(value)) return;
+    parentOrigin = detailGroup;
+    detailGroup = null;
     parent = value;
     selectedTab = 'summary';
-    focusDetail = mode === 'week' && openNotes ? 'notes' : 'heading';
+    focusDetail = 'heading';
     void loadContext();
   }
 
@@ -1244,14 +1340,21 @@
     ownerChoiceRange = '';
     catalogOwners = [];
     ownerChoiceCache.clear();
-    parents.clear(); listRows.clear(); listAds.clear(); listVisible=null; drafts.clear();
+    parents.clear(); ownerGroups = []; expandedOwners.clear(); catalogOperators = []; drafts.clear();
+    listSortKey = 'name'; listSortDirection = 1;
     dailyFeeDrafts.clear(); dailyFeeUnconfirmed.clear();
     week = parent = activeNoteKey = dayStart = dayEnd = '';
     mode = 'week';
     selectedTab = 'summary';
     detail = noteBase = null;
     loadedContext = hasList = focusDetail = false;
-    returnParent = '';
+    detailGroup = parentOrigin = returnGroup = null;
+    ui.scopeParents.replaceChildren();
+    ui.scopeParents.hidden = true;
+    ui.scopeSkuMembers.hidden = true;
+    ui.scopeSkuMembers.open = false;
+    ui.scopeSkuList.replaceChildren();
+    ui.scopeSkuCount.textContent = '';
     ui.results.hidden = ui.productResults.hidden = ui.appShell.hidden = true;
     ui.userEmail.textContent = '';
     ui.resultSearch.value = '';
@@ -1295,6 +1398,7 @@
       parents = parsed.groups;
       buildWeekPicker(available);
       catalogOwners = parsed.owners;
+      catalogOperators = parsed.operators;
       ui.resultOperator.replaceChildren(new Option('全部运营人员',''),...parsed.operators.map(value => new Option(value,value)));
       ui.resultsCatalogDate.textContent = catalog.snapshot_date;
       ui.resultsCatalogDate.dateTime = catalog.snapshot_date;
@@ -1314,8 +1418,8 @@
         } else if (dayLink) {
           dayStart = dayEnd = linkedDate;
         }
-        if (parents.has(linkedParent)) parent = linkedParent;
       }
+      if (parents.has(linkedParent)) parent = linkedParent;
       setChosenWeeks([week]);
       setDateControls();
       renderMode();
@@ -1370,27 +1474,53 @@
   ui.resultFeeWeek.addEventListener('change',changeFeeWeek);
   ui.resultView.addEventListener('change',() => changeMode(ui.resultView.value));
   ui.resultDateFilter.addEventListener('submit',queryDays);
-  ui.resultSearch.addEventListener('input',renderList);
+  ui.resultSearch.addEventListener('input',() => void loadContext(true));
   ui.resultOwner.addEventListener('focus',() => void loadHistoricalOwners());
   ui.resultOwner.addEventListener('pointerdown',() => void loadHistoricalOwners());
   ui.resultOwner.addEventListener('change',() => void loadContext());
-  ui.resultOperator.addEventListener('change',renderList);
+  ui.resultOperator.addEventListener('change',() => void loadContext());
   ui.clearResultFilters.addEventListener('click',() => {
-    const wasOwnerScoped = Boolean(ui.resultOwner.value);
     ui.resultSearch.value = ui.resultOwner.value = ui.resultOperator.value = '';
-    if (wasOwnerScoped) void loadContext();
-    else renderList();
+    void loadContext();
     ui.resultSearch.focus();
   });
+  for (const button of listSortButtons) {
+    button.addEventListener('click',() => {
+      const key = button.dataset.listSort;
+      listSortDirection = listSortKey === key ? -listSortDirection : key === 'name' ? 1 : -1;
+      listSortKey = key;
+      renderList();
+    });
+  }
   ui.parentResults.addEventListener('click',event => {
+    const toggle = event.target.closest('[data-owner-toggle]');
+    if (toggle) {
+      const owner = toggle.dataset.ownerToggle;
+      if (expandedOwners.has(owner)) expandedOwners.delete(owner);
+      else expandedOwners.add(owner);
+      renderList();
+      [...ui.parentResults.querySelectorAll('[data-owner-toggle]')].find(b => b.dataset.ownerToggle === owner)?.focus();
+      return;
+    }
+    const button = event.target.closest('[data-scope-detail]');
+    if (button) chooseGroup(button.dataset.owner,button.dataset.scopeDetail,button.dataset.productKey);
+  });
+  ui.scopeParents.addEventListener('click',event => {
     const button = event.target.closest('[data-result-parent]');
-    if (button) chooseParent(button.dataset.resultParent, button.dataset.resultNotes === 'true');
+    if (button) chooseParent(button.dataset.resultParent);
   });
   ui.backToProducts.addEventListener('click',() => {
     if (saveRequest) return;
-    returnParent = parent;
     parent = '';
     focusDetail = false;
+    if (parentOrigin) {
+      detailGroup = parentOrigin;
+      parentOrigin = null;
+      focusDetail = 'heading';
+    } else {
+      returnGroup = detailGroup;
+      detailGroup = null;
+    }
     void loadContext();
   });
   tabs.forEach((tab,index) => {
