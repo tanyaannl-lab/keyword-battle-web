@@ -11,6 +11,7 @@
   const pageSize = 50;
   const missing = '—';
   const windowDays = 30;
+  const shortWindows = [1,7,15];
   const dayMs = 86_400_000;
   const stockFreshnessMs = 30 * 3_600_000;
   const ageFreshnessDays = 7;
@@ -21,8 +22,9 @@
     ['product_short_name','产品简称'], ['parent_asin','父 ASIN'], ['owner','负责人'], ['asin','子 ASIN'], ['seller_sku','卖家 SKU'],
     ['fulfillable','当前可售','number'], ['reserved','预留','number'], ['unfulfillable','不可售','number'],
     ['in_transit','实际在途','number'], ['inbound_working','计划入库','number'],
-    ['ordered_units_30d','近 30 天订购件数','number'],
-    ['daily_average','日均订购件数','average'], ['sellable_days','预计可售天数','days'],
+    ['ordered_units_1d','近 1 天订购件数','number'], ['ordered_units_7d','近 7 天订购件数','number'],
+    ['ordered_units_15d','近 15 天订购件数','number'], ['ordered_units_30d','近 30 天订购件数','number'],
+    ['daily_average','日均订购件数（7 天）','average'], ['sellable_days','预计可售天数','days'],
   ];
   const extraColumns = [
     ['tracking_label','运营跟踪'], ['fnsku','FNSKU'], ['condition','商品状况'],
@@ -59,20 +61,21 @@
     ['age_0_90','0–90 天'], ['age_91_180','91–180 天'], ['age_181_330','181–330 天'],
     ['age_331_365','331–365 天'], ['age_366_455','366–455 天'], ['age_456_plus','456 天及以上'],
   ];
-  const ageTableKeys = [...ageBands.map(([key]) => key),'age_total'];
+  const ageTotals = [['age_total','六档合计'], ['age_over_180','超时合计（181 天起）']];
+  const ageTableKeys = [...ageBands,...ageTotals].map(([key]) => key);
   const ageYoungBands = [
     ['age_0_30','0–30 天'], ['age_31_60','31–60 天'], ['age_61_90','61–90 天'],
   ];
   const ageQuantityColumns = [...ageBands,...ageYoungBands];
   const ageCsvColumns = [
     ['age_snapshot_date','库龄快照日期（美西）'], ['report_snapshot_date','库龄来源报表日期（美西）'],
-    ...ageQuantityColumns.map(([key,label]) => [key,`库龄 · ${label}`]),
+    ...[...ageBands,...ageTotals,...ageYoungBands].map(([key,label]) => [key,`库龄 · ${label}`]),
   ];
   const ids = {
     shell: 'appShell', loading: 'loading', email: 'userEmail', logout: 'logoutBtn',
     timestamp: 'inventorySnapshotAt', stockState: 'inventoryStockState', stockTime: 'inventoryStockTime',
     stockLag: 'inventoryStockLag', reload: 'inventoryReload',
-    salesDates: 'inventorySalesDates', salesTimestamp: 'inventorySalesAt', salesTime: 'inventorySalesTime',
+    salesCoverage:'inventorySalesCoverage', salesDates: 'inventorySalesDates', salesTimestamp: 'inventorySalesAt', salesTime: 'inventorySalesTime',
     salesLag: 'inventorySalesLag', salesState: 'inventorySalesState',
     ageNotice: 'inventoryAgeNotice', ageState: 'inventoryAgeState', ageTime: 'inventoryAgeTime',
     ageTimestamp: 'inventoryAgeAt', ageReport: 'inventoryAgeReport', ageReportDate: 'inventoryAgeReportDate',
@@ -163,6 +166,11 @@
     if (!Number.isSafeInteger(tracking_count) || tracking_count < 0 || tracking_count > 5_000 ||
         !Number.isSafeInteger(tracking_matched_count) || tracking_matched_count < 0 ||
         tracking_matched_count > tracking_count) invalid();
+    const sales_br_end_date = isDay(data.sales_br_end_date) ? data.sales_br_end_date : null;
+    const sales_br_days = Object.fromEntries(shortWindows.map(days => {
+      const n = data.sales_br_days?.[days];
+      return [days,Number.isInteger(n) && n >= 0 && n <= days ? n : null];
+    }));
     const seen = new Set();
     const rows = data.rows.map(row => {
       if (!safeText(row?.seller_sku,255) || seen.has(row.seller_sku) ||
@@ -179,22 +187,26 @@
       const in_transit = row.inbound_shipped === null || row.inbound_receiving === null ?
         null : row.inbound_shipped + row.inbound_receiving;
       if (in_transit !== null && !Number.isSafeInteger(in_transit)) invalid();
-      const daily_average = row.ordered_units_30d === null ? null : row.ordered_units_30d / windowDays;
-      const sellable_days = row.fulfillable !== null && positive(row.ordered_units_30d) ?
-        row.fulfillable * windowDays / row.ordered_units_30d : null;
+      const shortSales = Object.fromEntries(shortWindows.map(days => {
+        const key = 'ordered_units_' + days + 'd', amount = row[key];
+        return [key,sales_br_end_date && sales_br_days[days] === days && Number.isSafeInteger(amount) && amount >= 0
+          ? amount : null];
+      }));
+      const daily_average = shortSales.ordered_units_7d === null ? null : shortSales.ordered_units_7d / 7;
+      const sellable_days = row.fulfillable !== null && daily_average > 0 ? row.fulfillable / daily_average : null;
       // Older inventory snapshots do not include the detail properties. A bad
       // optional value must not make the working base inventory unavailable.
       const quantities = Object.fromEntries(optionalDetailColumns.map(([key]) => [key,
         Number.isSafeInteger(row[key]) && row[key] >= 0 ? row[key] : null,
       ]));
-      const item = {...row, ...quantities, product_short_name:null, owner:null, parent_asin, inventoryParent:parent_asin,
+      const item = {...row, ...quantities, ...shortSales, product_short_name:null, owner:null, parent_asin, inventoryParent:parent_asin,
         in_transit, daily_average, sellable_days, tracking_label:row.tracked ? '是' : '否'};
       item.search = searchText(item);
       return item;
     });
     rows.sort(inventoryOrder);
     if (rows.some(row => row.tracked) !== (tracking_matched_count > 0)) invalid();
-    return {captured_at:data.captured_at, sales_start_date, sales_end_date, sales_captured_at,
+    return {captured_at:data.captured_at, sales_start_date, sales_end_date, sales_captured_at, sales_br_end_date, sales_br_days,
       tracking_count, tracking_matched_count, rows};
   }
 
@@ -277,6 +289,15 @@
     return row.asin && row.fnsku ? JSON.stringify([row.seller_sku,row.asin,row.fnsku]) : null;
   }
 
+  function bandTotal(quantities, bands) {
+    let total = 0;
+    for (const [key] of bands) {
+      if (quantities[key] === null) return null;
+      total += quantities[key];
+    }
+    return Number.isSafeInteger(total) ? total : null;
+  }
+
   function parseAgeSnapshot(data) {
     if (data === null) return null;
     const invalid = () => { throw new ReadError(200,'invalid'); };
@@ -288,13 +309,15 @@
       if (!safeText(row?.seller_sku,255) || typeof row.asin !== 'string' || !asinShape.test(row.asin) ||
           (row.fnsku !== null && (typeof row.fnsku !== 'string' || !fnskuShape.test(row.fnsku))) || !isDay(row.report_snapshot_date) ||
           (row.age_snapshot_date !== null && !isDay(row.age_snapshot_date)) ||
-          ageQuantityColumns.some(([key]) => row[key] !== null &&
+          ageQuantityColumns.some(([key]) => row[key] != null &&
             (!Number.isSafeInteger(row[key]) || row[key] < 0))) invalid();
       if (reportDate === null || row.report_snapshot_date > reportDate) reportDate = row.report_snapshot_date;
       const key = ageKey(row);
       if (key === null) continue;
       if (rows.has(key)) invalid();
-      rows.set(key,row);
+      const quantities = Object.fromEntries(ageQuantityColumns.map(([field]) => [field,row[field] ?? null]));
+      rows.set(key,{...row,...quantities,age_total:bandTotal(quantities,ageBands),
+        age_over_180:bandTotal(quantities,ageBands.slice(2))});
     }
     return {capturedAt:data.captured_at,reportDate,rows};
   }
@@ -413,11 +436,8 @@
 
   function fillAgeCells(row,cells) {
     const data = ageSnapshot?.rows.get(ageKey(row));
-    const amounts = ageBands.map(([key]) => data?.[key] ?? null);
-    const sum = amounts.every(value => value !== null) ? amounts.reduce((total,value) => total+value,0) : null;
-    amounts.push(Number.isSafeInteger(sum) ? sum : null);
     for (const [index,cell] of cells.entries()) {
-      const value = amounts[index];
+      const value = data?.[ageTableKeys[index]] ?? null;
       cell.textContent = formatCell(value,'number');
       cell.setAttribute('class',`results-num inventory-age-value${value === null ? ' results-missing' : ''}`);
     }
@@ -515,7 +535,7 @@
       date.textContent = data.age_snapshot_date;
       note.append(date);
     }
-    const items = [title,note];
+    const items = [title,note,ageList(data,ageTotals)];
     if (ageYoungBands.every(([key]) => data[key] !== null)) {
       const details = document.createElement('details');
       details.classList.add('inventory-age-young');
@@ -605,14 +625,15 @@
     if (!snapshot || !visible.length || catalogRequest) return;
     const csvColumns = [...columns,...extraColumns,...optionalDetailColumns];
     const header = [...csvColumns.map(([,label]) => label), ...ageCsvColumns.map(([,label]) => label), '库存快照时间（UTC）',
-      '订购统计起始日（美西）', '订购统计截止日（美西）', '订购报表采集时间（UTC）'].map(csvCell).join(',');
+      '订购统计起始日（美西）', '订购统计截止日（美西）', '订购报表采集时间（UTC）',
+      '近 1、7、15 天订购截止日（美西）'].map(csvCell).join(',');
     const outdated = stockDelayed() || salesDelayed();
     const blob = new Blob(['\uFEFF',header,'\r\n', ...visible.map(row => {
       const age = ageSnapshot?.rows.get(ageKey(row));
       return [...csvColumns.map(([key]) => key === 'sellable_days' && outdated ? null : row[key]),
         ...ageCsvColumns.map(([key]) => age?.[key] ?? null),
         snapshot.captured_at,
-        snapshot.sales_start_date,snapshot.sales_end_date,snapshot.sales_captured_at].map(csvCell).join(',') + '\r\n';
+        snapshot.sales_start_date,snapshot.sales_end_date,snapshot.sales_captured_at,snapshot.sales_br_end_date].map(csvCell).join(',') + '\r\n';
     })],
       {type:'text/csv;charset=utf-8'});
     const href = URL.createObjectURL(blob);
@@ -662,7 +683,7 @@
   }
 
   function salesDelayed() {
-    return !!snapshot?.sales_end_date && daysSincePacific(snapshot.sales_end_date) > salesFreshnessDays;
+    return !!snapshot?.sales_br_end_date && daysSincePacific(snapshot.sales_br_end_date) > salesFreshnessDays;
   }
 
   function showTime(field,time,value,display) {
@@ -682,6 +703,8 @@
     const salesLate = salesDelayed();
     const stockAt = snapshot?.captured_at;
     const salesAt = snapshot?.sales_captured_at;
+    const shortEnd = snapshot?.sales_br_end_date;
+    const longLate = !!snapshot?.sales_end_date && daysSincePacific(snapshot.sales_end_date) > salesFreshnessDays;
     const ageAt = ageSnapshot?.capturedAt;
     const ageDate = ageSnapshot?.reportDate;
     const ageLate = !!ageDate && daysSincePacific(ageDate) > ageFreshnessDays;
@@ -698,11 +721,22 @@
     sourceState(el.stockState,stockAt,stockLate,'暂无快照');
     showTime(el.stockTime,el.timestamp,stockAt,stockAt && dates.format(new Date(stockAt)));
     el.stockLag.hidden = !stockLate;
-    sourceState(el.salesState,salesAt,salesLate,'尚未同步');
-    el.salesDates.textContent = salesAt ? `统计区间（美西）：${snapshot.sales_start_date} 至 ${snapshot.sales_end_date}` :
-      (stockStatus === 'ready' || stockStatus === 'empty') ? '近 30 天订购报表尚未同步。' : '';
+    sourceState(el.salesState,salesAt || shortEnd,salesLate || longLate,'尚未同步');
+    if (!incoming && !failed && (salesAt || shortEnd) && !salesLate && !longLate &&
+        (!salesAt || !shortEnd || shortWindows.some(days => snapshot.sales_br_days[days] !== days))) {
+      showState(el.salesState,'empty','部分已同步');
+    }
+    el.salesDates.textContent = snapshot ? [
+      shortEnd ? '近 1、7、15 天截止日（美西）：' + shortEnd + '。' : '近 1、7、15 天订购数据尚未同步。',
+      salesAt ? '近 30 天（美西）：' + snapshot.sales_start_date + ' 至 ' + snapshot.sales_end_date + '。' : '近 30 天订购报表尚未同步。',
+    ].join(' ') : '';
+    el.salesCoverage.textContent = shortEnd ? '日报覆盖：' + shortWindows.map(days =>
+      (snapshot.sales_br_days[days] ?? missing) + '/' + days + ' 天').join('、') + '。' : '';
+    el.salesCoverage.hidden = !shortEnd;
     showTime(el.salesTime,el.salesTimestamp,salesAt,salesAt && dates.format(new Date(salesAt)));
-    el.salesLag.hidden = !salesLate;
+    el.salesLag.textContent = [salesLate ? '近 1、7、15 天订购截止日距今超过 3 天。' : '',
+      longLate ? '近 30 天订购截止日距今超过 3 天。' : ''].join('');
+    el.salesLag.hidden = !salesLate && !longLate;
 
     if (ageStatus === 'loading') showState(el.ageState,'loading','读取中');
     else if (ageStatus === 'failed') showState(el.ageState,'failed',ageAt ? '显示上次读取' : '读取失败');
@@ -713,7 +747,7 @@
     showTime(el.ageTime,el.ageTimestamp,ageAt,ageAt && dates.format(new Date(ageAt)));
     el.ageLag.hidden = !ageLate;
 
-    const reason = stockLate && salesLate ? '当前库存和订购数据' : stockLate ? '当前库存' : '订购数据';
+    const reason = stockLate && salesLate ? '当前库存和近 7 天订购数据' : stockLate ? '当前库存' : '近 7 天订购数据';
     const message = stockLate || salesLate ? `${reason}较旧，预计可售天数暂不显示，导出也留空。库存及原始订购统计仍可查看。` : '';
     if (el.coverageNotice.textContent !== message) el.coverageNotice.textContent = message;
     el.coverageNotice.hidden = !message;
