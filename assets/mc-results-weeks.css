@@ -125,3 +125,38 @@
 .mc-weekly-results .results-scope-members {font-size:.86rem;margin:.4rem 0}
 .mc-weekly-results .results-scope-members summary {width:fit-content;color:var(--results-teal);cursor:pointer}
 .mc-weekly-results .results-scope-members ul {display:flex;flex-wrap:wrap;gap:.25rem 1rem;margin:.35rem 0;padding:0;list-style:none;overflow-wrap:anywhere}
+
+/* Keep the keyword or attribute visible when the serial number scrolls out. */
+.results-analysis-content .results-table [data-column="row_number"]:first-child { left: auto; white-space: nowrap; }
+.results-analysis-content .results-table th:nth-child(2) { position: sticky; left: 0; }
+.results-analysis-content .results-table thead th:nth-child(2) { z-index: 3; }
+.results-analysis-content .results-table tbody th[scope="row"] { z-index: 1; }
+.results-analysis-content .results-table tbody tr:not([data-summary]) > th[scope="row"] { background: #fff; }
+
+.mc-weekly-results .results-heading-line {
+  display: block;
+  white-space: nowrap;
+}
+.mc-weekly-results .results-table-compact :is(.results-column-label, .results-column-hint) {
+  white-space: nowrap;
+}
+.mc-weekly-results .results-analysis-sort {
+  padding-inline-end: 1em;
+}
+.mc-weekly-results .results-analysis-sort-icon {
+  position: absolute;
+  inset-inline-end: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.mc-weekly-results #parentTable th[aria-sort] .results-column-sort {
+  position: relative;
+  padding-inline-end: 1em;
+}
+.mc-weekly-results #parentTable th[aria-sort] .results-column-sort::after {
+  position: absolute;
+  inset-inline-end: 0;
+  top: 50%;
+  transform: translateY(-50%);
+}

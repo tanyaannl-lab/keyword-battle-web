@@ -29,8 +29,8 @@
     'FBA 退货率': ['FBA 退货率', '当日收退 / 发货'],
     'FBA 周退货率': ['FBA 退货率', '全周收退 / 发货'],
     '广告费占总销售额': ['广告费占', '总销售额'],
-    'SP 归因销售额占比参考': ['SP 归因销售额占比', '参考'],
-    '广告归因销售额占比（参考）': ['广告归因销售额占比', '参考'],
+    'SP 归因销售额占比参考': ['SP 归因销售额', '占比参考'],
+    '广告归因销售额占比（参考）': ['广告归因销售额', '占比（参考）'],
     '订单毛利（估算）': ['订单毛利', '估算'],
     '订单毛利率（估算）': ['订单毛利率', '估算'],
   });
@@ -393,7 +393,15 @@
     const threshold = /^(.*?)\[([^\]]+)\]$/.exec(column.label);
     const [label, hint] = compactHeadings[column.label] ||
       (threshold ? [threshold[1].replace(/^计算:/, ''), `[${threshold[2]}]`] : [column.label]);
-    heading.append(element('span', 'results-column-label', label));
+    const caption = element('span', 'results-column-label', label);
+    // Split at a metric boundary while keeping the original label and sort key.
+    const halves = !hint && label.length >= 5 &&
+      /^(已归属广告|交易订单|自然单(?=占比)|广告单(?=占比)|APP流量|客户(?=搜索词)|自然|广告|全部|订单|交易|(?:SP|SB|SD) (?=归因))(.+)$/.exec(label);
+    if (halves) caption.replaceChildren(
+      element('span', 'results-heading-line', halves[1]),
+      element('span', 'results-heading-line', halves[2])
+    );
+    heading.append(caption);
     if (hint) heading.append(element('span', 'results-column-hint', hint));
     if (label !== column.label || hint) {
       heading.title = column.label;
@@ -419,7 +427,7 @@
     return heading;
   }
 
-  function renderTable(target, { columns, rows, week, label, note, emptyText, summary, summaryLabel, sort }) {
+  function renderTable(target, { columns, rows, week, label, note, emptyText, summary, summaryLabel, sort, numbered = false }) {
     if (!target) return;
     const wrapper = element('div', 'results-table-scroll');
     wrapper.tabIndex = 0;
@@ -429,6 +437,7 @@
     table.setAttribute('aria-label', label);
     const head = element('thead');
     const headings = element('tr');
+    if (numbered) headings.append(renderColumnHeading(col('row_number', '序号', 'int')));
     for (const column of columns) headings.append(renderColumnHeading(column, sort));
     head.append(headings);
     const body = element('tbody');
@@ -447,10 +456,16 @@
       const fragment = document.createDocumentFragment();
       const start = (page - 1) * pageSize;
       const pageRows = rows.slice(start, start + pageSize);
+      let rowNumber = start;
       if (summary) pageRows.unshift(summary);
       for (const row of pageRows) {
         const tr = element('tr');
         if (summary && row === summary) tr.dataset.summary = 'true';
+        if (numbered) {
+          const cell = element('td', 'results-number', row === summary ? '' : String(++rowNumber));
+          cell.dataset.column = 'row_number';
+          tr.append(cell);
+        }
         const current = Boolean(week && own(row, 'week_start') === week);
         if (current) tr.dataset.selectedWeek = 'true';
         columns.forEach((column, index) => {
@@ -491,7 +506,7 @@
       if (!rows.length) {
         const tr = element('tr');
         const cell = element('td', 'results-table-note', emptyText);
-        cell.colSpan = columns.length;
+        cell.colSpan = columns.length + (numbered ? 1 : 0);
         tr.append(cell);
         fragment.append(tr);
       }
@@ -697,7 +712,7 @@
       }
       const scope=attr?'属性可能覆盖同一搜索词；汇总中的词频为不同搜索词数，展现、花费和订单等按搜索词去重。':
         '汇总中的点击天数按日期去重，日均值以这些日期为分母。';
-      renderTable(data,{columns,rows:visible,summary,
+      renderTable(data,{columns,rows:visible,summary,numbered:true,
         label,note:[note,scope,'比率用筛选后的合计重算；点击列名可排序。'].filter(Boolean).join(' '),
         emptyText:rows.length?'没有符合筛选条件的记录。':emptyText,
         sort:{key:sortKey,direction,choose(column,refocus) {

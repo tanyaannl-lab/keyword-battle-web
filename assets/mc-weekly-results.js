@@ -71,7 +71,7 @@
   let parent = '';
   let selectedTab = 'summary';
   let ownerGroups = [];
-  let catalogOperators = [];
+  let operatorScope = '';
   const expandedOwners = new Set();
   let listSortKey = 'name', listSortDirection = 1;
   let detailGroup = null, parentOrigin = null, returnGroup = null;
@@ -192,7 +192,6 @@
     const allOwners = new Set();
     const skuCounts = new Map();
     for (const item of data.products) skuCounts.set(item?.sku, (skuCounts.get(item?.sku) ?? 0) + 1);
-    const allOperators = new Set();
     for (const item of data.products) {
       if (!asin.test(item?.parent_asin ?? '') || !asin.test(item.asin ?? '') || typeof item.sku !== 'string' ||
           !Array.isArray(item.owners) || item.owners.some(owner => typeof owner !== 'string')) {
@@ -203,8 +202,6 @@
       for (const owner of itemOwners) group.owners.add(owner);
       if (skuCounts.get(item.sku) === 1 && item.sku.trim() &&
           item.owners.length === 1 && itemOwners.length === 1) allOwners.add(itemOwners[0]);
-      const operator = typeof item.operator_name === 'string' ? item.operator_name.trim() : '';
-      if (operator) allOperators.add(operator);
       grouped.set(item.parent_asin, group);
     }
     // The optional list is sourced from past directories and approved overrides. Add
@@ -219,7 +216,6 @@
     return {
       groups: new Map([...grouped].sort(([a],[b]) => compare(a,b)).map(([key,group]) => [key, {...group, owners:[...group.owners].sort(compare)}])),
       owners:[...allOwners].sort(compare),
-      operators:[...allOperators].sort(compare),
     };
   }
 
@@ -235,6 +231,17 @@
     ui.resultOwner.replaceChildren(new Option('全部负责人',''), ...[...choices].sort(collator.compare)
       .map(value => new Option(value, value)));
     ui.resultOwner.value = selected;
+  }
+
+  function renderOperatorChoices(choices, loading = false) {
+    const selected = ui.resultOperator.value;
+    const options = [...choices].sort(collator.compare).map(value => new Option(value,value));
+    if (selected && !choices.includes(selected)) {
+      const label = loading ? selected : selected + '（当前范围无匹配）';
+      options.push(new Option(label,selected));
+    }
+    ui.resultOperator.replaceChildren(new Option('全部运营人员',''),...options);
+    ui.resultOperator.value = selected;
   }
 
   function refreshOwnerChoiceRange() {
@@ -1059,6 +1066,13 @@
     const parentAsin = parent || null;
     const isDetail = !!(detailGroup || parentAsin);
     refreshOwnerChoiceRange();
+    if (!isDetail) {
+      const filterScope = JSON.stringify([ownerDateRanges(),ui.resultOwner.value]);
+      if (operatorScope !== filterScope) {
+        operatorScope = filterScope;
+        renderOperatorChoices([],true);
+      }
+    }
     const owner = detailGroup?.owner || '';
     renderSkuSource();
     loadedContext = false;
@@ -1115,11 +1129,7 @@
       const result = await fetchOwnerGroups(controller);
       if (context !== controller || controller.signal.aborted || !auth) return;
       ownerGroups = result.owners;
-      const operator = ui.resultOperator.value;
-      const operators = new Set([...catalogOperators,...result.operators]);
-      if (operator) operators.add(operator);
-      ui.resultOperator.replaceChildren(new Option('全部运营人员',''),...[...operators].sort(collator.compare).map(v => new Option(v,v)));
-      ui.resultOperator.value = operator;
+      renderOperatorChoices(result.operators);
       hasList = loadedContext = true;
       renderList();
       if (daily) notice(ui.resultsDailyListHint,'按所选日期合计。SKU 基础毛利未扣父款级费用，数据源缺日或指标缺值时显示「—」。');
@@ -1409,7 +1419,7 @@
     ownerChoiceRange = '';
     catalogOwners = [];
     ownerChoiceCache.clear();
-    parents.clear(); ownerGroups = []; expandedOwners.clear(); catalogOperators = []; drafts.clear();
+    parents.clear(); ownerGroups = []; expandedOwners.clear(); operatorScope = ''; drafts.clear();
     listSortKey = 'name'; listSortDirection = 1;
     dailyFeeDrafts.clear(); dailyFeeUnconfirmed.clear();
     week = parent = activeNoteKey = dayStart = dayEnd = '';
@@ -1468,8 +1478,6 @@
       parents = parsed.groups;
       buildWeekPicker(available);
       catalogOwners = parsed.owners;
-      catalogOperators = parsed.operators;
-      ui.resultOperator.replaceChildren(new Option('全部运营人员',''),...parsed.operators.map(value => new Option(value,value)));
       ui.resultsCatalogDate.textContent = catalog.snapshot_date;
       ui.resultsCatalogDate.dateTime = catalog.snapshot_date;
       week = available[1] ?? available[0];
