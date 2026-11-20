@@ -74,8 +74,89 @@
       whole_parent:parents.length === 1 && blocks.every(block => block.whole_parent), days, totals, fba_rows:fbaRows};
   }
 
+  function eligibleAdDays(payload, groupKind) {
+    const skuOnly = groupKind !== 'owner';
+    const scope = {mode:skuOnly ? 'sku' : 'parents',complete:true,byDate:{}};
+    const byParent = new Map();
+    const allowed = new Set(payload.parents);
+    const validList = values => Array.isArray(values) && values.every(value => allowed.has(value));
+    for (const day of payload.days) {
+      let known = false, parents = [], selectedParents = [];
+      if (validList(day.selected_parents) && validList(day.ad_fee_parents) &&
+          day.ad_fee_parents.every(parent => day.selected_parents.includes(parent))) {
+        known = day.catalog_ready !== false;
+        selectedParents = [...new Set(day.selected_parents)];
+        if (known && !skuOnly) parents = [...new Set(day.ad_fee_parents)];
+      } else if (day.selected_parents === undefined && day.ad_fee_parents === undefined &&
+                 day.catalog_ready !== false && payload.whole_parent) {
+        // An older reader can certify one whole parent for the entire requested interval.
+        known = true;
+        selectedParents = [payload.parent_asin];
+        if (!skuOnly) parents = [payload.parent_asin];
+      }
+      const complete = skuOnly || (known && selectedParents.length === parents.length);
+      const reportDate = day.report_date;
+      scope.byDate[reportDate] = {known,complete,selectedParents,parents,readError:false};
+      if (!complete) scope.complete = false;
+      for (const parent of parents) {
+        if (!byParent.has(parent)) byParent.set(parent,new Set());
+        byParent.get(parent).add(reportDate);
+      }
+    }
+    return {scope,byParent};
+  }
+
+  async function readParentAds(plan, signal, {optionalOtherAds,blankOtherAds,shiftDay}) {
+    const {scope,byParent} = plan;
+    const ads = blankOtherAds();
+    const statuses = new Map(), conflictingWeeks = new Set();
+    const tasks = [...byParent.entries()];
+    let next = 0;
+    async function worker() {
+      while (next < tasks.length && !signal.aborted) {
+        const [parent, dates] = tasks[next++];
+        const ordered = [...dates].sort();
+        let part;
+        try {
+          part = await optionalOtherAds(ordered[0],ordered[ordered.length-1],parent,signal);
+        } catch {
+          // One failed parent must not discard other parents or the already-loaded SKU facts.
+        }
+        if (signal.aborted) return;
+        if (!part || part.error) {
+          for (const date of dates) scope.byDate[date].readError = true;
+          ads.error = true;
+          continue;
+        }
+        // The RPC validates a single daily row per parent/channel. Keep it only on eligible days.
+        for (const row of part.rows) {
+          if (dates.has(row.report_date)) ads.rows.push(row);
+        }
+        // File status is store-wide for a week and channel; it carries no spend quantity.
+        for (const entry of part.coverage) {
+          const end = shiftDay(entry.week_start,6);
+          if (!ordered.some(date => date >= entry.week_start && date <= end)) continue;
+          const key = entry.week_start + '/' + entry.channel;
+          if (statuses.has(key) && statuses.get(key).status !== entry.status) conflictingWeeks.add(entry.week_start);
+          else statuses.set(key,entry);
+        }
+      }
+    }
+    await Promise.all(Array.from({length:Math.min(2,tasks.length)},worker));
+    for (const week of conflictingWeeks) {
+      const end = shiftDay(week,6);
+      ads.error = true;
+      for (const [date,day] of Object.entries(scope.byDate)) {
+        if (day.parents.length && date >= week && date <= end) day.readError = true;
+      }
+    }
+    ads.coverage = [...statuses.values()];
+    ads.pending = ads.coverage.filter(entry => !['mapped','empty'].includes(entry.status));
+    return ads;
+  }
+
   async function period({group, from, to, lastClosed, daily, weekStart, signal}, readers) {
-    const {rpc, optionalOtherAds, blankOtherAds, readDailyFees, readSkuWeeklyNotes,
+    const {rpc, blankOtherAds, readDailyFees, readSkuWeeklyNotes,
       shiftDay, skuMetricKeys, skuSources} = readers;
     const closed = to < lastClosed ? to : lastClosed;
     const dates = [];
@@ -83,7 +164,8 @@
     const expected = new Set(dates.filter(date => date <= closed));
     const missing = Object.fromEntries(skuSources.map(source => [source, 'missing']));
     const sku = {days:dates.map(report_date => ({report_date, coverage:missing})), totals:null,
-      error:'', unfinished:closed < to, productGroup:true, ownerPartial:true, ownerInScope:null};
+      error:'', unfinished:closed < to, productGroup:true, ownerPartial:true, ownerInScope:null,
+      parentAdScope:{mode:group.kind === 'owner' ? 'parents' : 'sku',complete:false,byDate:{}}};
     const result = {sku, otherAds:blankOtherAds(), returns:{rows:[], error:false},
       dailyFees:daily ? {rows:[], error:false} : null, rows:[], search:{state:'idle'},
       groupContext:{wholeParent:false, parentAsin:null, parents:[], skus:[]}};
@@ -101,14 +183,14 @@
         ? {rows:payload.fba_rows, error:false} : {rows:[], error:true};
       result.groupContext = {wholeParent:payload.whole_parent, parentAsin:payload.parent_asin, parents:payload.parents,
         skus:Array.isArray(payload.skus) ? payload.skus.filter(sku => typeof sku === 'string') : []};
-      if (payload.whole_parent) {
-        const key = payload.parent_asin;
-        [result.otherAds, result.dailyFees, result.rows] = await Promise.all([
-          optionalOtherAds(from, closed, key, signal),
-          daily ? readDailyFees(from, closed, key, signal) : null,
-          daily ? [] : readSkuWeeklyNotes(weekStart, key, signal),
-        ]);
-      }
+      const plan = eligibleAdDays(payload,group.kind);
+      sku.parentAdScope = plan.scope;
+      const feeParent = payload.whole_parent ? payload.parent_asin : null;
+      [result.otherAds,result.dailyFees,result.rows] = await Promise.all([
+        readParentAds(plan,signal,readers),
+        daily && feeParent ? readDailyFees(from,closed,feeParent,signal) : result.dailyFees,
+        !daily && feeParent ? readSkuWeeklyNotes(weekStart,feeParent,signal) : [],
+      ]);
     } catch (error) {
       sku.error = error.status === 404 || error.code === 'PGRST202'
         ? '负责人和产品明细接口尚未安装。' : '暂时无法读取负责人和产品明细，请重试。';

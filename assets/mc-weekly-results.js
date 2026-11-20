@@ -88,7 +88,11 @@
   const dailyFeeUnconfirmed = new Set();
   let dailyFeeRefreshing = false;
 
-  const groupDetailNotice = '按当前筛选范围内的 SKU 统计。跨父款或仅覆盖部分父款时显示 SKU 基础毛利。关键词和属性可在对应页签按父 ASIN 查看，整父费用可进入父款明细查看。';
+  function groupDetailNotice() {
+    return detailGroup?.kind === 'owner'
+      ? 'SB、SD 按父 ASIN 扣费。某天完整归属本负责人的父款，其当天花费计入一次。可点明细标题旁的父 ASIN 核对。'
+      : '这里按所选 SKU 统计。SB、SD 花费计在父 ASIN，可点明细标题旁的父 ASIN 查看金额。';
+  }
   const partialOwnerNotice = '此负责人只覆盖部分 SKU。SP、经营和 FBA 按所选负责人统计；整父费用和 SB、SD 无法拆分时显示 SKU 基础毛利。';
   const feeWeek = () => detail?.periods ? ui.resultFeeWeek.value : week;
   const feeScopeIsEditable = () => {
@@ -380,7 +384,7 @@
     const partial = detail.periods.some(period => period.sku.ownerPartial && period.sku.ownerInScope !== false);
     const weeksOutOfScope = detail.periods.filter(period => period.sku.ownerInScope === false).length;
     const rangeNote = weeksOutOfScope ? `其中 ${weeksOutOfScope} 周没有归属该负责人的 SKU，已从表格剔除。` : '';
-    notice(ui.productStatus, rangeNote + (detailGroup ? groupDetailNotice : partial ? partialOwnerNotice : `已选 ${weeks.length} 周；周总结和产品广告结构均按周展示，费用保存到指定周次。`));
+    notice(ui.productStatus, rangeNote + (detailGroup ? groupDetailNotice() : partial ? partialOwnerNotice : `已选 ${weeks.length} 周；周总结和产品广告结构均按周展示，费用保存到指定周次。`));
     if(focusDetail){(focusDetail==='notes' && editableWeeks.length ? ui.resultFeeWeek : ui.selectedParent).focus();focusDetail=false;}
     const failed=weeks.filter((w,i)=>values[i].sku?.error);
     pageStatus(failed.length ? '部分周经营明细读取失败：'+failed.map(weekLabel).join('；') : '',
@@ -534,7 +538,7 @@
   function renderGroupContext(contexts) {
     if (!detailGroup) return;
     const skus = [...new Set(contexts.flatMap(part => part?.skus ?? []))].sort(collator.compare);
-    if (detailGroup.kind === 'short_name' && skus.length) {
+    if ((detailGroup.kind === 'owner' || detailGroup.kind === 'short_name') && skus.length) {
       ui.scopeSkuCount.textContent = '包含 ' + skus.length + ' 个 SKU';
       ui.scopeSkuList.replaceChildren(...skus.map(sku => {
         const item = document.createElement('li');
@@ -1046,7 +1050,7 @@
       if (daily) showDailyFees();
       else if (rows.length) renderNotes(rows[0]);
     }
-    notice(ui.productStatus,sku.ownerInScope === false ? '所选期间没有符合该负责人和产品范围的 SKU。' : detailGroup ? groupDetailNotice : sku.ownerPartial ? partialOwnerNotice : daily || rows.length ? '' : '暂时无法读取本周费用，订单毛利估算留空。','warning');
+    notice(ui.productStatus,sku.ownerInScope === false ? '所选期间没有符合该负责人和产品范围的 SKU。' : detailGroup ? groupDetailNotice() : sku.ownerPartial ? partialOwnerNotice : daily || rows.length ? '' : '暂时无法读取本周费用，订单毛利估算留空。','warning');
     if (focusDetail) {
       (focusDetail === 'notes' && !detailGroup && !sku.ownerPartial && rows.length ? ui.reviewFee : ui.selectedParent).focus();
       focusDetail = false;
