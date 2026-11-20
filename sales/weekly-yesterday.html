@@ -10,6 +10,13 @@
   <link rel="stylesheet" href="../assets/mc-weekly-source-nav.css?v=20261113-1">
   <link rel="stylesheet" href="../assets/mc-weekly-results.css?v=20261113-1">
   <link rel="stylesheet" href="../assets/mc-daily-sku.css?v=20261114-1">
+  <style>
+    @container (min-width: 761px) {
+      .mc-daily-sku .sku-day-controls {
+        grid-template-columns: minmax(9rem, 1fr) minmax(8rem, 1fr) minmax(10rem, 1.35fr) minmax(9rem, 1.2fr) max-content;
+      }
+    }
+  </style>
 </head>
 <body>
 <div class="shell workspace-shell workspace-sales" id="appShell" hidden>
@@ -69,7 +76,7 @@
         <p class="results-market">MC · AMAZON US</p>
         <p class="results-path">每周报表 <span aria-hidden="true">›</span> 利润表</p>
         <h1 id="weekly-yesterday">每日经营明细</h1>
-        <p class="results-intro">按卖家 SKU 查看一天的流量、销售、广告、订单和交易。日期按美国太平洋时间计算，默认选择昨天。</p>
+        <p class="results-intro">按卖家 SKU 查看一天的流量、销售、广告、订单和交易。选择负责人可查看当天目录里唯一绑定给该负责人的 SKU。日期按美国太平洋时间计算，默认选择昨天。</p>
       </header>
 
       <div class="results-controls sku-day-controls" role="group" aria-label="筛选每日经营明细">
@@ -80,6 +87,10 @@
         <label class="results-field" for="skuParent">
           <span>父 ASIN</span>
           <select id="skuParent"><option value="">全部父 ASIN</option></select>
+        </label>
+        <label class="results-field" for="skuOwner">
+          <span>负责人</span>
+          <select id="skuOwner" disabled><option value="">全部负责人</option></select>
         </label>
         <label class="results-field" for="skuSearch">
           <span>搜索 SKU 或 ASIN</span>
@@ -94,6 +105,7 @@
           <div>
             <h2 id="skuHeading">每日经营明细</h2>
             <p id="skuCatalogDate" class="sku-day-catalog"></p>
+            <a id="skuOwnerWeek" hidden>查看该负责人本周汇总</a>
           </div>
           <div class="sku-day-sources" aria-label="报表同步状态">
             <p id="skuCoverageBr" class="sku-day-source"></p>
@@ -124,6 +136,6 @@
 <noscript><style>#loading{display:none}</style><p class="auth-loading">请启用 JavaScript 后查看每日经营明细。</p></noscript>
 <script src="../assets/config.js"></script>
 <script src="../assets/auth-client.js"></script>
-<script src="../assets/mc-daily-sku.js?v=20261117-parent1"></script>
+<script src="../assets/mc-daily-sku.js?v=20261120-owner-pivot1"></script>
 </body>
 </html>

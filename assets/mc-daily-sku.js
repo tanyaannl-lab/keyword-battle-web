@@ -11,7 +11,7 @@
   const rowStates = new Set(['reported', 'not_reported', 'pending', 'conflict']);
   const sessionSources = new Set(['sku', 'child_asin']);
   const cfg = window.KB_CONFIG;
-  const ids = ['appShell', 'loading', 'logoutBtn', 'userEmail', 'skuDate', 'skuParent', 'skuSearch', 'skuReload', 'skuStatus', 'skuData', 'skuHeading', 'skuCatalogDate', 'skuCoverageBr', 'skuCoverageSp', 'skuCoverageOrders', 'skuCoverageTransactions', 'skuSections', 'skuScroll', 'skuTable', 'skuTableHead', 'skuTableBody', 'skuCount', 'skuPrev', 'skuNext'];
+  const ids = ['appShell', 'loading', 'logoutBtn', 'userEmail', 'skuDate', 'skuParent', 'skuOwner', 'skuOwnerWeek', 'skuSearch', 'skuReload', 'skuStatus', 'skuData', 'skuHeading', 'skuCatalogDate', 'skuCoverageBr', 'skuCoverageSp', 'skuCoverageOrders', 'skuCoverageTransactions', 'skuSections', 'skuScroll', 'skuTable', 'skuTableHead', 'skuTableBody', 'skuCount', 'skuPrev', 'skuNext'];
   const ui = Object.fromEntries(ids.map(id => [id, document.getElementById(id)]));
   const query = new URLSearchParams(location.search);
   const dates = new Intl.DateTimeFormat('en-US', {timeZone:marketTime, calendar:'gregory', numberingSystem:'latn', year:'numeric', month:'2-digit', day:'2-digit'});
@@ -73,6 +73,7 @@
   const states = {pending:'报表尚未同步', not_reported:'同步报表里没有此 SKU 的记录', conflict:'无法唯一归属到该 SKU'};
   const dateKeys = new Set(['report_date','week','week_sat','week_sun','week_label','month']);
   let auth, refreshAuth, dayRequest, catalogRequest, current, generation = 0, page = 0;
+  let selectedOwner = '';
   const groupStarts = [];
 
   function parseDay(text) {
@@ -147,6 +148,9 @@
     page = 0;
     ui.skuData.hidden = true;
     ui.skuTableBody.replaceChildren();
+    setOwnerChoices(null);
+    ui.skuOwnerWeek.hidden = true;
+    ui.skuOwnerWeek.href = './weekly-results.html#weekly-results';
     for (const key of ['skuHeading','skuCatalogDate','skuCoverageBr','skuCoverageSp','skuCoverageOrders','skuCoverageTransactions','skuCount']) ui[key].textContent = '';
   }
 
@@ -155,6 +159,7 @@
     dayRequest?.abort();
     catalogRequest?.abort();
     auth = refreshAuth = dayRequest = catalogRequest = null;
+    selectedOwner = '';
     clearRows();
     ui.skuParent.replaceChildren(new Option('全部父 ASIN',''));
     ui.skuSearch.value = '';
@@ -307,10 +312,34 @@
     return states[state] ?? (profitKeys.has(key) ? '报表或成本资料尚不完整，无法计算毛利' : '报表未提供该值，或缺少计算所需的成本资料');
   }
 
+  function boundOwner(row) {
+    return row.catalog_status === 'matched' && row.sku.trim() && row.owners.length === 1 ? row.owners[0].trim() : '';
+  }
+
+  function setOwnerChoices(day) {
+    const labels = new Set((day?.rows ?? []).map(boundOwner).filter(Boolean));
+    const options = [...labels].sort((a,b) => a.localeCompare(b,'zh-CN')).map(label => new Option(label,label));
+    if (day && selectedOwner && !labels.has(selectedOwner)) {
+      options.push(new Option(`${selectedOwner}（当天范围无匹配）`,selectedOwner));
+    }
+    ui.skuOwner.replaceChildren(new Option('全部负责人',''),...options);
+    ui.skuOwner.value = day ? selectedOwner : '';
+    ui.skuOwner.disabled = !day;
+  }
+
   function renderPage(resetVertical = false) {
     if (!current) return;
     const search = ui.skuSearch.value.trim().toLowerCase();
-    const rows = search ? current.rows.filter(row => [row.sku,row.asin,row.parent_asin].some(value => value?.toLowerCase().includes(search))) : current.rows;
+    const rows = current.rows.filter(row => (!selectedOwner || boundOwner(row) === selectedOwner) &&
+      (!search || [row.sku,row.asin,row.parent_asin].some(value => value?.toLowerCase().includes(search))));
+    ui.skuHeading.textContent = [current.date,current.parent || '全部父 ASIN',selectedOwner].filter(Boolean).join(' · ');
+    ui.skuOwnerWeek.hidden = !selectedOwner || !rows.length;
+    if (!ui.skuOwnerWeek.hidden) {
+      const params = new URLSearchParams({week:iso(monday(parseDay(current.date))),date:current.date,owner:selectedOwner});
+      ui.skuOwnerWeek.href = `./weekly-results.html?${params}#weekly-results`;
+    } else {
+      ui.skuOwnerWeek.href = './weekly-results.html#weekly-results';
+    }
     const last = Math.max(0, Math.ceil(rows.length / pageSize) - 1);
     page = Math.min(page,last);
     const body = rows.slice(page * pageSize,(page + 1) * pageSize).map((row, rowIndex) => {
@@ -353,7 +382,7 @@
     });
     if (!body.length) {
       const none = make('tr');
-      const cell = make('td',search ? '没有匹配的 SKU 或 ASIN。' : '当天没有这个范围的 SKU 记录。');
+      const cell = make('td',search ? '没有匹配的 SKU 或 ASIN。' : selectedOwner ? '当天所选范围没有唯一绑定给该负责人的卖家 SKU。' : '当天没有这个范围的 SKU 记录。');
       cell.colSpan = columns.length;
       cell.classList.add('sku-day-no-rows');
       none.append(cell);
@@ -379,7 +408,7 @@
 
   function showDay(day) {
     current = day;
-    ui.skuHeading.textContent = `${day.date} · ${day.parent || '全部父 ASIN'}`;
+    setOwnerChoices(day);
     ui.skuCatalogDate.textContent = day.catalogDate ? `产品目录版本：${day.catalogDate}` : '产品目录尚未同步';
     reportCoverage(ui.skuCoverageBr,'业务报告',day.coverage.br);
     reportCoverage(ui.skuCoverageSp,'SP 广告',day.coverage.sp);
@@ -449,7 +478,7 @@
       if (selected) parents.add(selected);
       else if (preferred && asinPattern.test(preferred)) parents.add(preferred);
       ui.skuParent.replaceChildren(new Option('全部父 ASIN',''), ...[...parents].sort().map(value =>
-        new Option(ruleOnly.has(value) ? `${value}（归属维护）` : value,value)));
+        new Option(ruleOnly.has(value) ? `${value}（历史或指定归属）` : value,value)));
       ui.skuParent.value = selected;
     } catch (error) {
       if (catalogRequest === controller && !controller.signal.aborted && auth && error?.status === 401) reportError(error,true);
@@ -493,6 +522,7 @@
   makeHeaders();
   ui.skuDate.addEventListener('change',loadDay);
   ui.skuParent.addEventListener('change',loadDay);
+  ui.skuOwner.addEventListener('change',() => { selectedOwner = ui.skuOwner.value; page = 0; renderPage(true); });
   ui.skuSearch.addEventListener('input',() => { page = 0; renderPage(true); });
   ui.skuReload.addEventListener('click',() => { void loadCatalog(); void loadDay(); });
   ui.skuPrev.addEventListener('click',() => { if (page > 0) { page--;renderPage(true); } });

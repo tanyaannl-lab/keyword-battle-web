@@ -90,7 +90,7 @@
 
   function groupDetailNotice() {
     return detailGroup?.kind === 'owner'
-      ? 'SB、SD 按父 ASIN 扣费。某天完整归属本负责人的父款，其当天花费计入一次。可点明细标题旁的父 ASIN 核对。'
+      ? '按每日报表日期，用产品目录绑定的卖家 SKU 汇总该负责人的经营数据。完整归属的父款另计当天 SB、SD 花费。'
       : '这里按所选 SKU 统计。SB、SD 花费计在父 ASIN，可点明细标题旁的父 ASIN 查看金额。';
   }
   const partialOwnerNotice = '此负责人只覆盖部分 SKU。SP、经营和 FBA 按所选负责人统计；整父费用和 SB、SD 无法拆分时显示 SKU 基础毛利。';
@@ -673,7 +673,7 @@
 
   function renderSkuSource() {
     const daily = mode === 'day';
-    notice(ui.skuPreviewNotice,'销售、流量、SP、订单和交易均来自每日经营明细。');
+    notice(ui.skuPreviewNotice,'销售、流量、SP、订单和交易均来自每日经营明细，按当天产品目录中的卖家 SKU 归到负责人。');
     ui.resultsSummaryHint.textContent = (daily ? '每个美西自然日一行。' : '每个美西自然周一行。') +
       '首行合计当前筛选范围，比率按合计数重算。';
     ui.dailyFeesHint.textContent = '按父 ASIN 和美西日期保存，单位 USD，计入当天的订单毛利估算。';
@@ -1493,6 +1493,9 @@
       const today = pacificToday();
       const dayLink = validDay(linkedDate) && linkedDate >= earliestSkuDay &&
         linkedDate <= shiftDay(today,-1);
+      const ownerParam = previewParams.get('owner');
+      const linkedOwner = !linkedParent && (weekLink || dayLink) && ownerParam && ownerParam.length <= 512 &&
+        ownerParam.trim() === ownerParam && !/[\u0000-\u001f\u007f]/u.test(ownerParam) ? ownerParam : '';
       if (weekLink || dayLink) {
         if (weekLink) {
           week = linkedWeek;
@@ -1502,11 +1505,20 @@
         }
       }
       if (parents.has(linkedParent)) parent = linkedParent;
+      if (linkedOwner) {
+        renderOwnerChoices([linkedOwner]);
+        ui.resultOwner.value = linkedOwner;
+      }
       setChosenWeeks([week]);
       setDateControls();
       renderMode();
       ui.results.hidden = false;
-      void loadContext();
+      const loading = loadContext();
+      const initialContext = context;
+      await loading;
+      if (linkedOwner && context === initialContext && auth && !initialContext?.signal.aborted) {
+        chooseGroup(linkedOwner,'owner',null);
+      }
     } catch (error) {
       if (bootstrap === controller && !controller.signal.aborted && auth) pageStatus(explain(error),'error',loadInitial);
     }
