@@ -13,7 +13,6 @@
   const otherAdChannels = channelOrder.slice(1);
   const channelMetrics = ['cost', 'sales', 'orders'];
   const manualFeeKeys = ['review_fee', 'offsite_fee', 'other_fee'];
-  const adShareNotice = '归因销售额占比 = 表内广告归因销售额 ÷ 同期销售额，仅供参考。各广告类型的归因窗口可能不同，归因订单合计未跨类型去重。';
   const numberKinds = new Set(['usd', 'num', 'int', 'pct']);
   const compactHeadings = Object.freeze({
     '出现次数(多个日期与活动)': ['出现次数', '多日/多活动'],
@@ -29,8 +28,6 @@
     'FBA 退货率': ['FBA 退货率', '当日收退 / 发货'],
     'FBA 周退货率': ['FBA 退货率', '全周收退 / 发货'],
     '广告费占总销售额': ['广告费占', '总销售额'],
-    'SP 归因销售额占比参考': ['SP 归因销售额', '占比参考'],
-    '广告归因销售额占比（参考）': ['广告归因销售额', '占比（参考）'],
     '订单毛利（估算）': ['订单毛利', '估算'],
     '订单毛利率（估算）': ['订单毛利率', '估算'],
   });
@@ -87,40 +84,24 @@
     col('order_label', '出单标识'),
   ]);
 
-  function reportColumn(key, label, kind, tone = 'ad') {
-    return Object.freeze({ ...col(key, label, kind), tone });
+  function reportColumn(key, prefix, suffix, kind, tone = 'ad') {
+    return Object.freeze({ ...col(key, prefix + suffix, kind), tone, lines: Object.freeze([prefix, suffix]) });
   }
 
   const advertisingMetrics = [
-    col('ad_scope', '统计范围'),
-    col('sales', '销售额', 'usd'),
-    reportColumn('sp_sales', 'SP 归因销售额', 'usd'),
-    reportColumn('sp_sales_share', 'SP 归因销售额占比参考', 'pct'),
-    reportColumn('sp_cost', 'SP 广告费', 'usd'),
-    reportColumn('sp_orders', 'SP 归因订单', 'int'),
-    reportColumn('sp_impressions', 'SP 展现', 'int'),
-    reportColumn('sp_clicks', 'SP 点击', 'int'),
-    reportColumn('sp_acos', 'SP ACOS', 'pct'),
-    reportColumn('sp_units', 'SP 归因销量', 'int'),
-    reportColumn('organic_sales', '自然销售额', 'usd', 'organic'),
-    reportColumn('organic_orders', '自然订单', 'int', 'organic'),
-    reportColumn('organic_clicks', '自然点击量', 'int', 'organic'),
-    reportColumn('organic_conversion_rate', '自然转化率', 'pct', 'organic'),
-    reportColumn('base_ad_cost', '根基广告', 'usd'),
-    reportColumn('expansion_ad_cost', '拓词广告', 'usd'),
-    col('all_terms', '全部流量词', 'int'),
-    reportColumn('organic_terms', '自然流量词', 'int', 'organic'),
-    reportColumn('sp_terms', 'SP 广告词', 'int'),
-    col('ac_terms', 'AC 推荐词', 'int'),
-    col('data_coverage', '数据状态'),
-  ];
-
-  const combinedAdColumns = [
-    reportColumn('ad_sales', '已归属广告销售额', 'usd'),
-    reportColumn('ad_sales_share', '广告归因销售额占比（参考）', 'pct'),
-    reportColumn('ad_cost', '已归属广告花费', 'usd'),
-    reportColumn('ad_orders', '已归属广告订单', 'int'),
-    reportColumn('ad_acos', '已归属广告 ACOS', 'pct'),
+    col('sales', '总销售额', 'usd'),
+    reportColumn('sp_cost', 'SP', '广告费', 'usd'),
+    reportColumn('sp_sales', 'SP广告', '销售额', 'usd'),
+    reportColumn('sp_sales_share', 'SP广告', '销售额占比', 'pct'),
+    reportColumn('sp_orders', 'SP广告', '订单', 'int'),
+    reportColumn('sp_impressions', 'SP广告', '展现', 'int'),
+    reportColumn('sp_clicks', 'SP广告', '点击量', 'int'),
+    reportColumn('sp_conversion_rate', 'SP广告', '转化率', 'pct'),
+    reportColumn('organic_sales', '自然', '销售额', 'usd', 'organic'),
+    reportColumn('organic_sales_share', '自然', '销售额占比', 'pct', 'organic'),
+    reportColumn('organic_orders', '自然', '订单', 'int', 'organic'),
+    reportColumn('organic_clicks', '自然', '点击量', 'int', 'organic'),
+    reportColumn('organic_conversion_rate', '自然', '转化率', 'pct', 'organic'),
   ];
 
   function element(name, className, content) {
@@ -149,6 +130,7 @@
     const adSales = numeric(row.ad_sales);
     const orders = numeric(row.br_orders);
     const adOrders = numeric(row.ad_orders);
+    const spOrders = numeric(row.sp_orders);
     const isCount = value => Number.isSafeInteger(value) && value >= 0;
     const adReadIssue = row.ad_read_error ? 'SB、SD 数据读取失败。' :
       row.coverage?.sp !== 'ready' ? 'SP 报表未齐。' : '';
@@ -160,15 +142,21 @@
     if (!salesIssue && difference < -Number.EPSILON * Math.max(1, sales, adSales) * 4) {
       salesIssue = '广告归因销售额超过同期 BR 销售额，无法估算自然销售额。';
     }
-    const orderIssue = adReadIssue || (!isCount(orders) || !isCount(adOrders) || !isCount(numeric(row.sp_orders))
+    const orderIssue = adReadIssue || (!isCount(orders) || !isCount(adOrders) || !isCount(spOrders)
       ? '缺少有效的 BR 订单商品数或广告归因订单。' : '');
     const splitIssue = orderIssue || (adOrders > orders ? '广告归因订单超过同期 BR 订单商品数，无法估算自然订单。' : '');
-    if (salesIssue) reasons.organic_sales = [salesIssue];
+    const organicSales = salesIssue ? null : Math.max(0, difference);
+    if (salesIssue) reasons.organic_sales = reasons.organic_sales_share = [salesIssue];
+    else if (sales === 0) reasons.organic_sales_share = ['同期 BR 总销售额为零。'];
     if (splitIssue) reasons.organic_orders = reasons.organic_order_share = [splitIssue];
 
     const hasOtherAds = otherAdChannels.some(channel => row.ad_channels.includes(channel));
     const spClicks = numeric(row.sp_clicks);
     const spImpressions = numeric(row.sp_impressions);
+    const spConversionIssue = row.coverage?.sp !== 'ready' ? 'SP 报表未齐。' :
+      !isCount(spOrders) || !isCount(spClicks) ? '缺少有效的 SP 归因订单或 SP 广告点击量。' :
+      spClicks === 0 ? 'SP 广告点击量为零。' : '';
+    if (spConversionIssue) reasons.sp_conversion_rate = [spConversionIssue];
     const clickIssue = adReadIssue || (hasOtherAds ? '已归属的 SB 或 SD 报表未提供对应点击量。' :
       !row.ad_channels.includes('SP') || !isCount(spClicks) ? '缺少已计入广告渠道的点击量。' : '');
     const adClicks = clickIssue ? null : spClicks;
@@ -190,7 +178,9 @@
     if (organicConversionIssue) reasons.organic_conversion_rate = [organicConversionIssue];
 
     return {
-      organic_sales: salesIssue ? null : Math.max(0, difference),
+      sp_conversion_rate: spConversionIssue ? null : ratio(spOrders, spClicks),
+      organic_sales: organicSales,
+      organic_sales_share: ratio(organicSales, sales),
       organic_orders: organicOrders,
       organic_order_share: ratio(organicOrders, orders),
       ad_order_share: orderIssue ? null : ratio(adOrders, orders),
@@ -299,26 +289,14 @@
     });
   }
 
-  function advertisingColumns(rows, daily) {
-    const seen = new Set(rows.flatMap(row => row.ad_channels));
-    const columns = [
-      daily ? col('report_date', '周期', 'date') : col('week_start', '周期', 'week'),
+  function advertisingColumns(daily) {
+    return [
+      daily ? col('report_date', '日期', 'date') : col('week_start', '日期', 'week'),
       ...advertisingMetrics,
     ];
-    const attributed = otherAdChannels.filter(channel => seen.has(channel));
-    if (attributed.length) columns.push(...combinedAdColumns);
-    for (const channel of attributed) {
-      const prefix = channel.toLowerCase();
-      columns.push(
-        reportColumn(prefix + '_sales', channel + ' 归因销售额', 'usd'),
-        reportColumn(prefix + '_cost', channel + ' 广告费', 'usd'),
-        reportColumn(prefix + '_orders', channel + ' 归因订单', 'int'),
-      );
-    }
-    return columns;
   }
 
-  function advertisingNotice(rows, daily, error, spError, showSalesShare = true) {
+  function advertisingNotice(rows, daily) {
     const seen = new Set(rows.flatMap(row => row.ad_channels));
     const names = channelOrder.filter(channel => seen.has(channel));
     const pending = new Set(rows.flatMap(row => row.ad_pending));
@@ -327,13 +305,13 @@
     const join = values => otherAdChannels.filter(channel => values.has(channel)).join('、');
     const notices = [
       names.length ? `统计范围：${names.length === 1 ? `仅 ${names[0]}` : names.join(' + ')}，只计入能归属所选范围的数据。` : '所选范围暂无可归属的广告数据。',
-      names.length ? (showSalesShare ? adShareNotice : '各广告类型的归因窗口可能不同，归因订单未跨类型去重。') : '',
+      '总销售额取同期 BR 销售额。SP 广告销售额占比和自然销售额占比均以总销售额为分母。SP 广告转化率为 SP 归因订单除以 SP 广告点击量。',
+      names.length > 1 ? '估算自然销售额和自然订单时扣除所列统计范围内各广告渠道的归因数据。各渠道归因窗口可能不同，归因订单未跨渠道去重。' : '',
       seen.has('SP') ? spNotice : '',
       pending.size ? `${join(pending)} 有广告报表，但部分或全部记录未能归属产品，未归属部分未计入。` : '',
       missingReports.size ? `部分期间缺少 ${join(missingReports)} 报表，这些期间先按已知费用估算毛利。` : '',
       confirmedEmpty.length ? `${confirmedEmpty.join('、')} 在本表期间的源报表无记录。` : '',
-      error ? '暂时无法核对 SB、SD，未把缺失数据按 0 计。' : '',
-      spError ? '暂时无法读取 SP，表内金额未包含缺失的 SP 数据。' : '',
+      rows.some(row => row.ad_read_error) ? '暂时无法核对 SB、SD，未把缺失数据按 0 计。' : '',
       daily ? `按报表实际日期展示；有可归属广告数据的日期：${rows.filter(row => row.ad_channels.length).length} / ${rows.length}。` : '',
     ];
     return notices.filter(Boolean).join(' ');
@@ -396,12 +374,9 @@
       (threshold ? [threshold[1].replace(/^计算:/, ''), `[${threshold[2]}]`] : [column.label]);
     const caption = element('span', 'results-column-label', label);
     // Split at a metric boundary while keeping the original label and sort key.
-    const halves = !hint && label.length >= 5 &&
-      /^(已归属广告|交易订单|自然单(?=占比)|广告单(?=占比)|APP流量|客户(?=搜索词)|自然|广告|全部|订单|交易|(?:SP|SB|SD) (?=归因))(.+)$/.exec(label);
-    if (halves) caption.replaceChildren(
-      element('span', 'results-heading-line', halves[1]),
-      element('span', 'results-heading-line', halves[2])
-    );
+    const lines = column.lines || (!hint && label.length >= 5 &&
+      /^(已归属广告|交易订单|自然单(?=占比)|广告单(?=占比)|APP流量|客户(?=搜索词)|自然|广告|全部|订单|交易|(?:SP|SB|SD) (?=归因))(.+)$/.exec(label)?.slice(1));
+    if (lines) caption.replaceChildren(...lines.map(line => element('span', 'results-heading-line', line)));
     heading.append(caption);
     if (hint) heading.append(element('span', 'results-column-hint', hint));
     if (label !== column.label || hint) {
@@ -1085,7 +1060,7 @@
     controls.append(field, clear);
     if (ads) {
       const legend = element('div', 'results-metric-legend');
-      legend.append(element('span', 'metric-ad', '广告指标'), element('span', 'metric-organic', '自然指标'));
+      legend.append(element('span', 'metric-ad', 'SP 广告指标'), element('span', 'metric-organic', '自然指标'));
       controls.append(legend);
     }
     const data = element('div');
@@ -1101,14 +1076,14 @@
       const summary = summarizeSkuRows(rows, daily);
       const statusNotes = [];
       if (summary?._adScopeNote) statusNotes.push(summary._adScopeNote+'。');
-      if (!ads && summary) {
+      if (summary) {
         if (summary.data_coverage !== '四类报表已齐') statusNotes.push(summary.data_coverage);
         if (summary.ad_read_error || summary.ad_missing_reports.length || summary.ad_pending.length) {
           statusNotes.push('广告统计范围：' + summary.ad_scope);
         }
       }
       renderTable(data, {
-        columns: ads ? advertisingColumns(rows, daily) : skuSummaryColumns(daily),
+        columns: ads ? advertisingColumns(daily) : skuSummaryColumns(daily),
         rows, label, summary, note: statusNotes.join(' · '),
         summaryLabel: '筛选汇总（' + rows.length + (daily ? ' 天）' : ' 周）'),
         emptyText: ads ? '所选期间暂无广告数据。' : '所选期间暂无经营数据。',
@@ -1116,7 +1091,7 @@
       const organicNote = '自然销售额为 BR 销售额减去已归属广告销售额，自然订单为 BR 订单商品数减去已归属广告订单，均为估算值。广告归因可能跨日或跨 SKU。';
       const clickNote = '按模板以 BR 会话数作为总点击量的估算值。自然点击量 = 会话数 − 已归属广告点击量，自然转化率 = 自然订单 ÷ 估算自然点击量。';
       const lines = ads ? [
-        advertisingNotice(rows, daily, rows.some(row => row.ad_read_error), false),
+        advertisingNotice(rows, daily),
         organicNote,
         clickNote,
         '当前仅 SP 提供点击和展现数据。计入 SB 或 SD 时，依赖全渠道点击或展现的数据留空。',

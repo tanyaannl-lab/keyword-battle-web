@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="../assets/workspace-nav.css?v=20261110">
   <link rel="stylesheet" href="../assets/mc-weekly-source-nav.css?v=20261113-1">
   <link rel="stylesheet" href="../assets/mc-weekly-results.css?v=20261113-1">
-  <link rel="stylesheet" href="../assets/mc-weekly-inventory.css?v=20261119-windows1">
+  <link rel="stylesheet" href="../assets/mc-weekly-inventory.css?v=20261120-inventory2">
 </head>
 <body>
 <div class="shell workspace-shell workspace-sales" id="appShell" hidden>
@@ -125,7 +125,7 @@
           <button class="results-button results-button-primary" type="button" id="inventoryDownload" disabled>导出筛选结果</button>
         </div>
 
-        <p class="results-table-note" id="inventoryHelp">每行一个卖家 SKU。产品简称、父 ASIN 和负责人取自产品目录。库存取自亚马逊 FBA，订购件数取自亚马逊业务报告。实际在途为已发往亚马逊与接收中的件数之和。日均订购件数按近 7 天订购件数 ÷ 7 计算。预计可售天数按当前可售库存 ÷ 未四舍五入的 7 天日均计算。「—」表示缺少数据或无法计算。CSV 导出当前筛选的全部页及 FBA 明细。</p>
+        <p class="results-table-note" id="inventoryHelp">每行一个卖家 SKU。产品简称、父 ASIN 和负责人取自产品目录。库存取自亚马逊 FBA，订购件数取自亚马逊业务报告。实际在途为已发往亚马逊与接收中的件数之和。总库存取亚马逊返回的库存总量。7、15、30 天的日均分别按该期订购件数除以天数计算，预计可售天数按当前可售库存除以该期未舍入的日均计算。「—」表示缺少数据或无法计算。CSV 导出当前筛选的全部页及 FBA 明细。</p>
         <p class="results-table-note" id="inventoryDetailHelp">仓间调拨在 API 中属于预留。亚马逊库存总量为 API 原始字段，口径与卖家后台的「现有」不同。调查中按 1–10 天、11–20 天和 21 天及以上分档。库龄在表格右侧。六档合计涵盖全部库龄，超时合计从第 181 天起算。各合计所需的分档齐全时才显示件数。展开「库存明细」可查看该 SKU 的库龄快照日期和 0–90 天细分。库龄快照可能与当前库存不同日。</p>
         <p class="results-table-note inventory-source-warning" id="inventoryCoverageNotice" role="status" hidden></p>
         <p class="results-table-note" id="inventoryAgeNotice" role="status" hidden></p>
@@ -138,26 +138,31 @@
 
         <div id="inventoryTable" class="results-table-wrap inventory-table-wrap" tabindex="0" role="region" aria-label="FBA 库存表" hidden>
           <table class="results-table results-table-compact inventory-table" aria-describedby="inventoryHelp inventoryDetailHelp">
-            <colgroup span="16"></colgroup>
+            <colgroup span="21"></colgroup>
             <colgroup span="8"></colgroup>
             <thead>
               <tr>
-                <th scope="col" rowspan="2" data-column="product_short_name">产品简称</th>
-                <th scope="col" rowspan="2" class="inventory-asin">父 ASIN</th>
                 <th scope="col" rowspan="2" data-column="owner">负责人</th>
-                <th scope="col" rowspan="2" class="inventory-asin">子 ASIN</th>
-                <th scope="col" rowspan="2" class="inventory-sku">卖家 SKU</th>
-                <th scope="col" rowspan="2" class="results-number">当前可售</th>
-                <th scope="col" rowspan="2" class="results-number">预留</th>
-                <th scope="col" rowspan="2" class="results-number">不可售</th>
-                <th scope="col" rowspan="2" class="results-number">实际在途</th>
-                <th scope="col" rowspan="2" class="results-number">计划入库</th>
-                <th scope="col" rowspan="2" class="results-number" data-column="ordered_units_1d">近 1 天订购件数</th>
-                <th scope="col" rowspan="2" class="results-number" data-column="ordered_units_7d">近 7 天订购件数</th>
-                <th scope="col" rowspan="2" class="results-number" data-column="ordered_units_15d">近 15 天订购件数</th>
-                <th scope="col" rowspan="2" class="results-number" data-column="ordered_units_30d">近 30 天订购件数</th>
-                <th scope="col" rowspan="2" class="results-number" title="近 7 天订购件数 ÷ 7">日均订购件数（7 天）</th>
-                <th scope="col" rowspan="2" class="results-number" title="当前可售库存 ÷ 近 7 天日均订购件数">预计可售天数</th>
+                <th scope="col" rowspan="2" data-column="parent_asin" class="inventory-asin">父 ASIN</th>
+                <th scope="col" rowspan="2" data-column="seller_sku" class="inventory-sku">卖家 SKU</th>
+                <th scope="col" rowspan="2" data-column="asin" class="inventory-asin">子 ASIN</th>
+                <th scope="col" rowspan="2" data-column="product_short_name">产品简称</th>
+                <th scope="col" rowspan="2" data-column="fulfillable" class="results-number">当前可售</th>
+                <th scope="col" rowspan="2" data-column="reserved" class="results-number">预留</th>
+                <th scope="col" rowspan="2" data-column="unfulfillable" class="results-number">不可售</th>
+                <th scope="col" rowspan="2" data-column="in_transit" class="results-number">实际在途</th>
+                <th scope="col" rowspan="2" data-column="inbound_working" class="results-number">计划入库</th>
+                <th scope="col" rowspan="2" data-column="total_quantity" class="results-number" title="亚马逊 FBA 库存接口返回的库存总量">总库存</th>
+                <th scope="col" rowspan="2" data-column="ordered_units_1d" class="results-number">近 1 天<span class="inventory-sold-units">订购件数</span></th>
+                <th scope="col" rowspan="2" data-column="ordered_units_7d" class="results-number">近 7 天<span class="inventory-sold-units">订购件数</span></th>
+                <th scope="col" rowspan="2" data-column="ordered_units_15d" class="results-number">近 15 天<span class="inventory-sold-units">订购件数</span></th>
+                <th scope="col" rowspan="2" data-column="ordered_units_30d" class="results-number">近 30 天<span class="inventory-sold-units">订购件数</span></th>
+                <th scope="col" rowspan="2" data-column="daily_average" class="results-number" title="近 7 天订购件数 ÷ 7">日均（7 天）</th>
+                <th scope="col" rowspan="2" data-column="sellable_days" class="results-number" title="预计可售天数 = 当前可售库存 ÷ 未舍入的 7 天日均订购件数">预计（7 天）</th>
+                <th scope="col" rowspan="2" data-column="daily_average_15d" class="results-number" title="近 15 天订购件数 ÷ 15">日均（15 天）</th>
+                <th scope="col" rowspan="2" data-column="sellable_days_15d" class="results-number" title="预计可售天数 = 当前可售库存 ÷ 未舍入的 15 天日均订购件数">预计（15 天）</th>
+                <th scope="col" rowspan="2" data-column="daily_average_30d" class="results-number" title="近 30 天订购件数 ÷ 30">日均（30 天）</th>
+                <th scope="col" rowspan="2" data-column="sellable_days_30d" class="results-number" title="预计可售天数 = 当前可售库存 ÷ 未舍入的 30 天日均订购件数">预计（30 天）</th>
                 <th scope="colgroup" colspan="8" id="inventory-age-group" class="inventory-age-group">库龄（件）</th>
               </tr>
               <tr>
@@ -187,6 +192,6 @@
 <noscript><style>#loading{display:none}</style><p class="auth-loading">请启用 JavaScript 后查看 FBA 库存。</p></noscript>
 <script src="../assets/config.js"></script>
 <script src="../assets/auth-client.js"></script>
-<script src="../assets/mc-weekly-inventory.js?v=20261119-windows1"></script>
+<script src="../assets/mc-weekly-inventory.js?v=20261120-inventory2"></script>
 </body>
 </html>

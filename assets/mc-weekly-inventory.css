@@ -78,6 +78,7 @@
 .mc-fba-inventory .inventory-table thead th,
 .mc-fba-inventory .inventory-table tbody > tr > td:first-child:not([colspan]) { position: static; }
 .mc-fba-inventory .inventory-table thead .results-number { min-width: 3rem; }
+.mc-fba-inventory .inventory-sold-units { display: block; white-space: nowrap; }
 .mc-fba-inventory .inventory-table thead .inventory-age-group { text-align: center; background: #e3f1ed; color: #155c50; }
 .mc-fba-inventory .inventory-table thead .inventory-age-heading { min-width: 4.4rem; white-space: nowrap; background: #eef7f4; }
 .mc-fba-inventory .inventory-table :is(.inventory-age-group, [data-column="age_0_90"]) { border-inline-start: 1px solid #c9e0d9; }
