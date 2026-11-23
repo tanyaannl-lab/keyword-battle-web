@@ -471,7 +471,7 @@
               (row._skuProfitOnly ? 'SKU 毛利 ' : '已知毛利 ') + dollars.format(known) +
                 (row._deductedParentAds ? '（已扣可归属父款广告）' : '');
             const summary = element('summary', '', caption);
-            summary.setAttribute('aria-label', column.label + '未结算，' + caption + '，展开原因');
+            summary.setAttribute('aria-label', column.label + '，' + caption + '，展开原因');
             const list = element('ul');
             reasons.forEach(text=>list.append(element('li','',text)));
             info.append(summary,list);
@@ -813,6 +813,12 @@
     total.coverage = Object.fromEntries(['br', 'sp'].map(source =>
       [source, periods.every(row => row.coverage?.[source] === 'ready') ? 'ready' : 'missing']));
     Object.assign(total, productTrafficMetrics(total, total._missingReasons));
+    for (const key of ['sessions','app_session_share','txn_refund','returns_rate']) {
+      if (numeric(total[key]) !== null) continue;
+      const messages = periods.flatMap(row => (row._missingReasons?.[key] ?? []).map(
+        message => row[periodKey] + ' · ' + message));
+      if (messages.length) total._missingReasons[key] = messages;
+    }
     for (const key of ['order_profit_net', 'txn_profit', 'order_gross_margin']) {
       if (total[key] !== null) continue;
       const incomplete = periods.filter(row => numeric(row[key]) === null);
@@ -977,6 +983,38 @@
         return why;
       }
       const missingReasons={};
+      const waitingOnWeek = !daily && sku?.unfinished;
+      function sourceReason(source, label, unresolved) {
+        if (sku?.error) return '经营明细读取失败，请重新查询。';
+        if (waitingOnWeek) return '本周尚未结束，可按日查看已发布的日期。';
+        if (row.coverage?.[source] !== 'ready') return label + '尚未覆盖所选期间。';
+        return unresolved;
+      }
+      if (numeric(row.txn_refund) === null) {
+        missingReasons.txn_refund = [sourceReason('transactions','按美西入账日统计的交易报表','交易报表已到，所选 SKU 的退款金额仍待核对。')];
+      }
+      if (numeric(row.sessions) === null) {
+        missingReasons.sessions = [sourceReason('br','SKU 销售与流量报表','SKU 报表已到，所选范围的会话数仍缺少可归属的流量数据。')];
+      }
+      if (ratio(row.sessions_app,row.sessions) === null) {
+        missingReasons.app_session_share = missingReasons.sessions ?? [numeric(row.sessions) === 0
+          ? '所选范围的总会话数为 0，无法计算 APP 占比。'
+          : sourceReason('br','SKU 销售与流量报表','所选范围的 APP 会话数缺失。')];
+      }
+      const returnUnits = daily ? numeric(dailyMovement?.return_units) : weeklyFba.returned;
+      const shippedUnits = daily ? numeric(dailyMovement?.shipped_units) : weeklyFba.shipped;
+      const returnRate = daily ? ratio(returnUnits,shippedUnits) : weeklyFba.rate;
+      if (returnRate === null) {
+        if (!daily) missingReasons.returns_rate = [waitingOnWeek ? '本周尚未结束，可按日查看收退与发货件数。' : weeklyFba.note];
+        else if (returns?.error) missingReasons.returns_rate = ['FBA 收退或发货数据读取失败，请重新查询。'];
+        else if (returnUnits === null || shippedUnits === null) {
+          missingReasons.returns_rate = [['收退',returnUnits,dailyMovement?.return_report],
+            ['发货',shippedUnits,dailyMovement?.shipment_report]]
+            .filter(([,value]) => value === null).map(([label,,published]) => published === true
+              ? 'FBA '+label+'报表已到，本次选择的 SKU 无法确认对应件数。'
+              : published === false ? '当天 FBA '+label+'报表尚未入库。' : '当天 FBA '+label+'件数暂缺。');
+        } else missingReasons.returns_rate = ['当天 FBA 发货件数为 0，无法计算退货率。'];
+      }
       if (net===null) missingReasons.order_profit_net=missingReasons.order_gross_margin=reasons('order_profit',orderProfit);
       else if (!(numeric(row.order_sales)>0)) missingReasons.order_gross_margin=['订单销售额为零、负数或缺失，无法计算毛利率。'];
       if (txnNet===null) missingReasons.txn_profit=reasons('txn_profit',txnProfit);
@@ -986,9 +1024,7 @@
         ad_scope:adScopeNote ? row.ad_scope+'（'+adScopeNote+'）' : row.ad_scope,
         txn_profit:txnNet,
         order_gross_margin:ratio(net,row.order_sales),
-        _returnUnits:daily ? numeric(dailyMovement?.return_units) : weeklyFba.returned,
-        _shippedUnits:daily ? numeric(dailyMovement?.shipped_units) : weeklyFba.shipped,
-        returns_rate:daily ? ratio(dailyMovement?.return_units,dailyMovement?.shipped_units) : weeklyFba.rate,
+        _returnUnits:returnUnits, _shippedUnits:shippedUnits, returns_rate:returnRate,
         app_session_share:ratio(row.sessions_app,row.sessions),unit_session_rate:ratio(row.br_units,row.sessions),
         ad_cost_of_sales:ratio(row.ad_cost,row.br_sales)};
     });
