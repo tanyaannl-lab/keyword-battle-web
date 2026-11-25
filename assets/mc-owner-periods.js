@@ -2,7 +2,8 @@
   'use strict';
   const dayMs = 86400000;
   const batchSize = 7;
-  const metrics = ['br_sales','br_orders','br_units','sessions','sp_cost','sp_orders','sp_sales','order_profit'];
+  const orderMetrics = ['order_sales','order_orders','order_units'];
+  const metrics = [...orderMetrics,'br_sales','br_orders','br_units','sessions','sp_cost','sp_orders','sp_sales','order_profit'];
   const coverageFields = ['active_days','br_days','sp_days','orders_days','transactions_days'];
   const statusFields = ['closed','catalog_ready','br','sp','orders','transactions'];
   const sorted = values => [...values].sort();
@@ -59,7 +60,9 @@
 
   function addGroup(target, source) {
     for (const metric of metrics) {
-      const n = source.totals?.[metric];
+      const value = source.totals?.[metric];
+      // Older list responses have no order-list totals. Keep those cells pending.
+      const n = value === undefined && orderMetrics.includes(metric) ? null : value;
       if (n !== null && !Number.isFinite(n)) throw bad();
       if (n === null || target.totals[metric] === null) target.totals[metric] = null;
       else target.totals[metric] = addAmount(target.totals[metric],n);

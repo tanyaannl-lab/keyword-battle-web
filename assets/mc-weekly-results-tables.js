@@ -8,7 +8,7 @@
   const dollars = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
   const percent = new Intl.NumberFormat('en-US', { style: 'percent', maximumFractionDigits: 2 });
   const spNotice = 'SP 指商品推广，订单和销售额采用 7 天归因，可能包含其他 SKU。仅展示能归属所选范围的数据。';
-  const weeklyReturnsNotice = 'FBA 周退货率 = 全周收退件数 ÷ 全周发货件数。退货和发货数据都需齐全 7 天；当周无发货时显示「—」。该比率反映当周进出量。';
+  const weeklyReturnsNotice = '退货件数率按全周 FBA 收退件数合计除以发货件数合计计算。两份 FBA 报告均需覆盖全周，且发货件数须大于零。';
   const channelOrder = ['SP', 'SB', 'SD'];
   const otherAdChannels = channelOrder.slice(1);
   const channelMetrics = ['cost', 'sales', 'orders'];
@@ -125,10 +125,10 @@
   }
 
   function productTrafficMetrics(row, reasons) {
-    // BR and advertising have different attribution windows. A negative residual is not a natural sale.
-    const sales = numeric(row.br_sales);
+    // Order-list totals and attributed advertising can cover different purchase dates. A negative residual is not a natural sale.
+    const sales = numeric(row.sales);
     const adSales = numeric(row.ad_sales);
-    const orders = numeric(row.br_orders);
+    const orders = numeric(row.orders);
     const adOrders = numeric(row.ad_orders);
     const spOrders = numeric(row.sp_orders);
     const isCount = value => Number.isSafeInteger(value) && value >= 0;
@@ -136,18 +136,18 @@
       row.coverage?.sp !== 'ready' ? 'SP 报表未齐。' : '';
     let salesIssue = adReadIssue;
     if (!salesIssue && (sales === null || sales < 0 || adSales === null || adSales < 0 || numeric(row.sp_sales) === null)) {
-      salesIssue = '缺少有效的 BR 销售额或广告归因销售额。';
+      salesIssue = '缺少有效的订单列表销售额或广告归因销售额。';
     }
     const difference = salesIssue ? null : sales - adSales;
     if (!salesIssue && difference < -Number.EPSILON * Math.max(1, sales, adSales) * 4) {
-      salesIssue = '广告归因销售额超过同期 BR 销售额，无法估算自然销售额。';
+      salesIssue = '广告归因销售额超过同期订单列表销售额，无法估算自然销售额。';
     }
     const orderIssue = adReadIssue || (!isCount(orders) || !isCount(adOrders) || !isCount(spOrders)
-      ? '缺少有效的 BR 订单商品数或广告归因订单。' : '');
-    const splitIssue = orderIssue || (adOrders > orders ? '广告归因订单超过同期 BR 订单商品数，无法估算自然订单。' : '');
+      ? '缺少有效的订单列表订单数或广告归因订单。' : '');
+    const splitIssue = orderIssue || (adOrders > orders ? '广告归因订单超过同期订单列表订单数，无法估算自然订单。' : '');
     const organicSales = salesIssue ? null : Math.max(0, difference);
     if (salesIssue) reasons.organic_sales = reasons.organic_sales_share = [salesIssue];
-    else if (sales === 0) reasons.organic_sales_share = ['同期 BR 总销售额为零。'];
+    else if (sales === 0) reasons.organic_sales_share = ['同期订单列表销售额为零。'];
     if (splitIssue) reasons.organic_orders = reasons.organic_order_share = [splitIssue];
 
     const hasOtherAds = otherAdChannels.some(channel => row.ad_channels.includes(channel));
@@ -166,7 +166,7 @@
       adClicks === 0 ? '广告点击量为零。' : '');
     // The workbook specifies BR sessions as its total-click proxy.
     const visits = numeric(row.sessions);
-    const organicClickIssue = clickIssue || (row.coverage?.br !== 'ready' || !isCount(visits) ? '缺少有效的 BR 总访客数。' :
+    const organicClickIssue = clickIssue || (!isCount(visits) ? '当前范围缺少可归属的业务报告会话数。' :
       adClicks > visits ? '广告点击量超过总访客数，无法估算自然点击量。' : '');
     const organicClicks = organicClickIssue ? null : visits - adClicks;
     const organicOrders = splitIssue ? null : orders - adOrders;
@@ -305,7 +305,7 @@
     const join = values => otherAdChannels.filter(channel => values.has(channel)).join('、');
     const notices = [
       names.length ? `统计范围：${names.length === 1 ? `仅 ${names[0]}` : names.join(' + ')}，只计入能归属所选范围的数据。` : '所选范围暂无可归属的广告数据。',
-      '总销售额取同期 BR 销售额。SP 广告销售额占比和自然销售额占比均以总销售额为分母。SP 广告转化率为 SP 归因订单除以 SP 广告点击量。',
+      '总销售额取自同期订单列表。SP 广告销售额占比和自然销售额占比均以总销售额为分母。SP 广告转化率为 SP 归因订单除以 SP 广告点击量。',
       names.length > 1 ? '估算自然销售额和自然订单时扣除所列统计范围内各广告渠道的归因数据。各渠道归因窗口可能不同，归因订单未跨渠道去重。' : '',
       seen.has('SP') ? spNotice : '',
       pending.size ? `${join(pending)} 有广告报表，但部分或全部记录未能归属产品，未归属部分未计入。` : '',
@@ -383,6 +383,7 @@
       heading.title = column.label;
       heading.setAttribute('aria-label', column.label);
     }
+    if (column.description) heading.title = column.description;
     if (sort) {
       const active = sort.key === column.key;
       const direction = active ? sort.direction : null;
@@ -725,13 +726,29 @@
 
   const skuSources = [['br','BR'],['sp','SP'],['orders','订单'],['transactions','交易']];
   const skuFinanceColumns = [
-    col('order_sales','订单销售额','usd'), col('order_orders','订单 SKU 单数合计','int'),
+    col('order_sales','订单销售额','usd'), col('order_orders','订单数','int'),
     col('order_units','订单销量','int'), col('order_profit_net','订单毛利（估算）','usd'),
     col('order_gross_margin','订单毛利率（估算）','pct'),
     col('txn_sales','交易订单销售额','usd'), col('txn_orders','交易 SKU 单数合计','int'),
     col('txn_units','交易销量','int'), col('txn_total','交易净额','usd'), col('txn_refund','交易退款','usd'),
     col('txn_profit','交易毛利（估算）','usd'),
   ];
+
+  function orderBasisNote(days) {
+    const labels = {
+      operator_archive:'运营原始订单归档',
+      amazon_api:'已定稿的 API 订单周报',
+      live:'日常订单列表',
+      parent_live:'整父明细的日常订单列表',
+      pending:'等待本周订单快照',
+    };
+    const counts = new Map();
+    for (const day of days) {
+      const label = labels[day.coverage?.order_basis];
+      if (label) counts.set(label, (counts.get(label) || 0) + 1);
+    }
+    return [...counts].map(([label, n]) => label + ' ' + n + ' 天').join('、');
+  }
 
   function skuContextCoverage(days) {
     const ready = key => days.filter(day=>day.coverage?.[key] === 'ready').length;
@@ -741,7 +758,7 @@
   }
 
   const skuAdditiveFields = [
-    'br_sales', 'br_orders', 'br_units', 'sessions_app', 'sessions',
+    'br_sales', 'br_orders', 'br_units', 'sales', 'orders', 'order_profit_basis_sales', 'sessions_app', 'sessions',
     ...skuFinanceColumns.filter(column => column.kind !== 'pct').map(column => column.key),
     'ad_sales', 'ad_cost', 'ad_orders', 'sp_sales', 'sp_cost', 'sp_orders',
     'sp_impressions', 'sp_clicks', 'sp_units', ...manualFeeKeys,
@@ -750,15 +767,22 @@
 
   const skuRatioFields = {
     app_session_share: ['sessions_app', 'sessions'],
-    unit_session_rate: ['br_units', 'sessions'],
-    order_gross_margin: ['order_profit_net', 'order_sales'],
+    order_gross_margin: ['order_profit_net', 'order_profit_basis_sales'],
     returns_rate: ['_returnUnits', '_shippedUnits'],
-    ad_cost_of_sales: ['ad_cost', 'br_sales'],
-    ad_sales_share: ['ad_sales', 'br_sales'],
+    ad_cost_of_sales: ['ad_cost', 'sales'],
+    ad_sales_share: ['ad_sales', 'sales'],
     ad_acos: ['ad_cost', 'ad_sales'],
-    sp_sales_share: ['sp_sales', 'br_sales'],
+    sp_sales_share: ['sp_sales', 'sales'],
     sp_acos: ['sp_cost', 'sp_sales'],
   };
+
+  function operatingRatios(row) {
+    const ready = source => row.coverage?.[source] === 'ready';
+    return {
+      order_session_rate: ready('orders') ? ratio(row.orders, row.sessions) : null,
+      refund_amount_share: ready('transactions') && ready('orders') ? ratio(row.txn_refund, row.sales) : null,
+    };
+  }
 
   function summarizeSkuRows(rows, daily) {
     if (!rows.length) return null;
@@ -767,8 +791,6 @@
     const total = {};
     const sum = (items, key) => addKnown(items.map(row => numeric(row[key])));
     for (const key of skuAdditiveFields) total[key] = sum(periods, key);
-    total.sales = total.br_sales;
-    total.orders = total.br_orders;
     for (const [key, [numerator, denominator]] of Object.entries(skuRatioFields)) {
       total[key] = ratio(total[numerator], total[denominator]);
     }
@@ -810,10 +832,10 @@
     total._knownOrderProfit = addKnown(periods.map(row => row.order_profit_net ?? row._knownOrderProfit));
     total._knownTxnProfit = addKnown(periods.map(row => row.txn_profit ?? row._knownTxnProfit));
     total._missingReasons = {};
-    total.coverage = Object.fromEntries(['br', 'sp'].map(source =>
+    total.coverage = Object.fromEntries(skuSources.map(([source]) =>
       [source, periods.every(row => row.coverage?.[source] === 'ready') ? 'ready' : 'missing']));
-    Object.assign(total, productTrafficMetrics(total, total._missingReasons));
-    for (const key of ['sessions','app_session_share','txn_refund','returns_rate']) {
+    Object.assign(total, productTrafficMetrics(total, total._missingReasons), operatingRatios(total));
+    for (const key of ['sales','orders','sessions','app_session_share','txn_refund','returns_rate','order_session_rate','refund_amount_share']) {
       if (numeric(total[key]) !== null) continue;
       const messages = periods.flatMap(row => (row._missingReasons?.[key] ?? []).map(
         message => row[periodKey] + ' · ' + message));
@@ -849,7 +871,7 @@
     const shipmentsDays = shipped.filter(value=>value !== null).length;
     const allShipped = addKnown(shipped);
     const allReturned = addKnown(returned);
-    const zeroShipments = !unfinished && allShipped === 0 ? '所选周 FBA 发货件数为 0，无法计算退货率。' : '';
+    const zeroShipments = !unfinished && allShipped === 0 ? '所选周 FBA 发货件数为 0，无法计算退货件数率。' : '';
     return {
       returned:unfinished ? null : allReturned,
       shipped:unfinished ? null : allShipped,
@@ -869,7 +891,7 @@
   function explainSkuProfit(day,metric) {
     const issues=Array.isArray(day?.profit_issues) ? day.profit_issues.filter(v=>v?.metric===metric) : [];
     if (!issues.length) {
-      const missing=Object.keys(profitSourceNames).filter(k=>k!=='br' && (metric==='order_profit'||k!=='orders') && day?.coverage?.[k]!=='ready');
+      const missing=Object.keys(profitSourceNames).filter(k=>k!=='br' && (metric==='order_profit'||k!=='orders') && (k==='orders' ? (day?.coverage?.order_finance ?? day?.coverage?.orders) : day?.coverage?.[k])!=='ready');
       if (missing.length) return '待同步：'+missing.map(k=>profitSourceNames[k]).join('、');
       if (day?.conflict_count>0) return '存在归属冲突，需核对 SKU 归属和毛利输入。';
       return '缺少成本或计算所需的原始字段；请核对每日经营明细的输入。';
@@ -916,16 +938,21 @@
     const partialProduct = sku?.productGroup === true && ownerPartial;
     const scope = sku?.parentAdScope;
     const readError = Boolean(otherAds?.error || (sku?.productGroup === true && !otherAds));
-    const baseRows = (daily ? days : [{...sku?.totals,week_start:week,coverage:weekCoverage}]).map(raw => ({
-      ...raw,
-      skuReadError:Boolean(sku?.error),
-      _parentAds:parentAdsForPeriod(scope,daily ? [raw.report_date] : days.map(day => day.report_date),ownerPartial,readError),
-      data_coverage:sku?.error ? '经营数据读取失败' : coverageText(raw.coverage),
-      sales:raw.br_sales,
-      orders:raw.br_orders,
-      sp_sales_share:ratio(raw.sp_sales,raw.br_sales),
-      sp_acos:ratio(raw.sp_cost,raw.sp_sales),
-    }));
+    const baseRows = (daily ? days : [{...sku?.totals,week_start:week,coverage:weekCoverage}]).map(raw => {
+      const ordersReady = !sku?.error && raw.coverage?.orders === 'ready';
+      const sales = ordersReady ? numeric(raw.order_sales) : null;
+      return {
+        ...raw,
+        skuReadError:Boolean(sku?.error),
+        _parentAds:parentAdsForPeriod(scope,daily ? [raw.report_date] : days.map(day => day.report_date),ownerPartial,readError),
+        data_coverage:sku?.error ? '经营数据读取失败' : coverageText(raw.coverage),
+        sales,
+        order_profit_basis_sales:numeric(Object.hasOwn(raw,'order_profit_basis_sales') ? raw.order_profit_basis_sales : raw.order_sales),
+        orders:ordersReady ? numeric(raw.order_orders) : null,
+        sp_sales_share:ratio(raw.sp_sales,sales),
+        sp_acos:ratio(raw.sp_cost,raw.sp_sales),
+      };
+    });
     const adRows = (otherAds?.rows ?? []).filter(row => scope
       ? scope.mode === 'parents' && scope.byDate?.[row.report_date]?.parents?.includes(row.parent_asin)
       : !ownerPartial);
@@ -987,19 +1014,51 @@
       function sourceReason(source, label, unresolved) {
         if (sku?.error) return '经营明细读取失败，请重新查询。';
         if (waitingOnWeek) return '本周尚未结束，可按日查看已发布的日期。';
+        if (source === 'orders' && (daily ? [row] : days).some(day => day.coverage?.order_basis === 'pending')) {
+          return '订单周报正在等待定稿。';
+        }
         if (row.coverage?.[source] !== 'ready') return label + '尚未覆盖所选期间。';
         return unresolved;
+      }
+      if (row.sales === null) {
+        missingReasons.sales = [sourceReason('orders','订单列表','当前范围的订单列表销售额待核对。')];
+      }
+      if (row.orders === null) {
+        missingReasons.orders = [sourceReason('orders','订单列表','当前范围的订单列表订单数待核对。')];
       }
       if (numeric(row.txn_refund) === null) {
         missingReasons.txn_refund = [sourceReason('transactions','按美西入账日统计的交易报表','交易报表已到，所选 SKU 的退款金额仍待核对。')];
       }
       if (numeric(row.sessions) === null) {
-        missingReasons.sessions = [sourceReason('br','SKU 销售与流量报表','SKU 报表已到，所选范围的会话数仍缺少可归属的流量数据。')];
+        missingReasons.sessions = [sku?.error ? '经营明细读取失败，请重新查询。' : waitingOnWeek ? '本周尚未结束，可按日查看已发布的日期。' : '所选范围缺少可归属的业务报告会话数。'];
       }
       if (ratio(row.sessions_app,row.sessions) === null) {
         missingReasons.app_session_share = missingReasons.sessions ?? [numeric(row.sessions) === 0
           ? '所选范围的总会话数为 0，无法计算 APP 占比。'
-          : sourceReason('br','SKU 销售与流量报表','所选范围的 APP 会话数缺失。')];
+          : '所选范围缺少可归属的 APP 会话数。'];
+      }
+      const operating = operatingRatios(row);
+      if (operating.order_session_rate === null) {
+        const reasons = [];
+        if (row.coverage?.orders !== 'ready' || numeric(row.order_orders) === null) {
+          reasons.push(sourceReason('orders','订单列表','所选 SKU 的订单列表订单数缺失。'));
+        }
+        if (numeric(row.sessions) === null) {
+          reasons.push(...missingReasons.sessions);
+        }
+        if (!reasons.length) reasons.push('所选范围的总会话数须大于零，才能计算总转化率。');
+        missingReasons.order_session_rate = [...new Set(reasons)];
+      }
+      if (operating.refund_amount_share === null) {
+        const reasons = [];
+        if (row.coverage?.transactions !== 'ready' || numeric(row.txn_refund) === null) {
+          reasons.push(sourceReason('transactions','交易报表','所选 SKU 的交易退款金额缺失。'));
+        }
+        if (row.coverage?.orders !== 'ready' || numeric(row.order_sales) === null) {
+          reasons.push(sourceReason('orders','订单列表','所选 SKU 的订单列表销售额缺失。'));
+        }
+        if (!reasons.length) reasons.push('所选范围的订单列表销售额须大于零，才能计算退款金额占比。');
+        missingReasons.refund_amount_share = [...new Set(reasons)];
       }
       const returnUnits = daily ? numeric(dailyMovement?.return_units) : weeklyFba.returned;
       const shippedUnits = daily ? numeric(dailyMovement?.shipped_units) : weeklyFba.shipped;
@@ -1013,20 +1072,20 @@
             .filter(([,value]) => value === null).map(([label,,published]) => published === true
               ? 'FBA '+label+'报表已到，本次选择的 SKU 无法确认对应件数。'
               : published === false ? '当天 FBA '+label+'报表尚未入库。' : '当天 FBA '+label+'件数暂缺。');
-        } else missingReasons.returns_rate = ['当天 FBA 发货件数为 0，无法计算退货率。'];
+        } else missingReasons.returns_rate = ['当天 FBA 发货件数为 0，无法计算退货件数率。'];
       }
       if (net===null) missingReasons.order_profit_net=missingReasons.order_gross_margin=reasons('order_profit',orderProfit);
-      else if (!(numeric(row.order_sales)>0)) missingReasons.order_gross_margin=['订单销售额为零、负数或缺失，无法计算毛利率。'];
+      else if (!(numeric(row.order_profit_basis_sales)>0)) missingReasons.order_gross_margin=['订单销售额为零、负数或缺失，无法计算毛利率。'];
       if (txnNet===null) missingReasons.txn_profit=reasons('txn_profit',txnProfit);
-      return {...row,...fees,...productTrafficMetrics(row,missingReasons),_missingReasons:missingReasons,order_profit_net:net,
+      return {...row,...fees,...operating,...productTrafficMetrics(row,missingReasons),_missingReasons:missingReasons,order_profit_net:net,
         _knownOrderProfit:knownOrder,_knownTxnProfit:knownTxn,_skuProfitOnly:adState.skuOnly,
         _deductedParentAds:adCost > 0,_adScopeNote:adScopeNote,
         ad_scope:adScopeNote ? row.ad_scope+'（'+adScopeNote+'）' : row.ad_scope,
         txn_profit:txnNet,
-        order_gross_margin:ratio(net,row.order_sales),
+        order_gross_margin:ratio(net,row.order_profit_basis_sales),
         _returnUnits:returnUnits, _shippedUnits:shippedUnits, returns_rate:returnRate,
-        app_session_share:ratio(row.sessions_app,row.sessions),unit_session_rate:ratio(row.br_units,row.sessions),
-        ad_cost_of_sales:ratio(row.ad_cost,row.br_sales)};
+        app_session_share:ratio(row.sessions_app,row.sessions),
+        ad_cost_of_sales:ratio(row.ad_cost,row.sales)};
     });
     const costModes = new Set(days.map(day => day.profit_cost_mode).filter(Boolean));
     const costNote = costModes.size === 1 && costModes.has('daily') ? '成本按子 ASIN 和美西日期读取。' :
@@ -1038,7 +1097,11 @@
       daily ? (returns?.error ? '暂时无法读取 FBA 退货和发货数据。' : '') : weeklyFba.note,
       feeUnavailable ? '暂时无法核对手动费用，完整订单毛利待核对。' : '',
     ].filter(Boolean).join(' ');
-    return { week, rows: summaryRows, note };
+    const orderDays = days.map(day => {
+      if (sku?.productGroup || day.coverage?.order_basis || day.coverage?.orders !== 'ready') return day;
+      return {...day, coverage:{...day.coverage,order_basis:'parent_live'}};
+    });
+    return { week, rows: summaryRows, note, orderDays };
   }
 
   function skuSummaryColumns(daily) {
@@ -1046,24 +1109,27 @@
       daily ? col('report_date', '日期', 'date') : col('week_start', '日期', 'week'),
       col('order_profit_net', '利润', 'usd'),
       col('order_gross_margin', '毛利率', 'pct'),
-      col('br_sales', '销售额', 'usd'),
+      {...col('sales', '销售额', 'usd'), description:'订单列表销售额，按当前范围的卖家 SKU 合计。'},
       col('organic_sales', '自然销售额', 'usd'),
       col('ad_sales', '广告销售额', 'usd'),
-      col('br_orders', '订单', 'int'),
+      {...col('orders', '订单数', 'int'), description:'定稿周按订单号和订单商品编号识别有效订单行，再汇总所选的卖家 SKU。'},
       col('organic_orders', '自然订单', 'int'),
       col('ad_orders', '广告订单', 'int'),
       col('organic_order_share', '自然单占比', 'pct'),
       col('ad_order_share', '广告单占比', 'pct'),
       col('ad_cost', '广告费', 'usd'),
       col('ad_cost_of_sales', '广告费占总销售额', 'pct'),
-      col('txn_refund', '退货金额', 'usd'),
-      col('returns_rate', '退货率', 'pct'),
+      col('txn_refund', '退款金额', 'usd'),
+      {...col('refund_amount_share', '退款金额占比', 'pct'), lines:['退款金额','占比'],
+        description:'交易表退款金额 ÷ 订单列表销售额。'},
+      {...col('returns_rate', '退货件数率', 'pct'), lines:['退货','件数率'],
+        description:'FBA 收退件数 ÷ FBA 发货件数。'},
       col('app_session_share', 'APP流量占比', 'pct'),
       col('sessions', '总访客数', 'int'),
       col('ad_clicks', '广告点击量', 'int'),
       col('organic_clicks', '自然点击量', 'int'),
       col('ad_ctr', '广告点击率', 'pct'),
-      col('unit_session_rate', '总转化', 'pct'),
+      {...col('order_session_rate', '总转化率', 'pct'), description:'订单列表订单数 ÷ 业务报告总会话数。'},
       col('organic_conversion_rate', '自然转化', 'pct'),
       col('ad_conversion_rate', '广告转化', 'pct'),
     ];
@@ -1111,6 +1177,10 @@
       clear.disabled = !select.value;
       const summary = summarizeSkuRows(rows, daily);
       const statusNotes = [];
+      const sourceDays = shownPeriods.flatMap(period => period.orderDays || [])
+        .filter(day => !daily || !select.value || day.report_date === select.value);
+      const orderSource = orderBasisNote(sourceDays);
+      if (orderSource) statusNotes.push(orderSource);
       if (summary?._adScopeNote) statusNotes.push(summary._adScopeNote+'。');
       if (summary) {
         if (summary.data_coverage !== '四类报表已齐') statusNotes.push(summary.data_coverage);
@@ -1124,7 +1194,7 @@
         summaryLabel: '筛选汇总（' + rows.length + (daily ? ' 天）' : ' 周）'),
         emptyText: ads ? '所选期间暂无广告数据。' : '所选期间暂无经营数据。',
       });
-      const organicNote = '自然销售额为 BR 销售额减去已归属广告销售额，自然订单为 BR 订单商品数减去已归属广告订单，均为估算值。广告归因可能跨日或跨 SKU。';
+      const organicNote = '自然销售额为订单列表销售额减去已归属广告销售额，自然订单为订单列表订单数减去已归属广告订单，均为估算值。广告归因可能跨日或跨 SKU。';
       const clickNote = '按模板以 BR 会话数作为总点击量的估算值。自然点击量 = 会话数 − 已归属广告点击量，自然转化率 = 自然订单 ÷ 估算自然点击量。';
       const lines = ads ? [
         advertisingNotice(rows, daily),
@@ -1133,12 +1203,15 @@
         '当前仅 SP 提供点击和展现数据。计入 SB 或 SD 时，依赖全渠道点击或展现的数据留空。',
       ] : [
         skuProfitPolicyNote(),
-        'SKU 基础毛利计入商品成本、SP 和交易退款。完整订单毛利再扣除可归属的手动费用和 SB、SD 花费。毛利率以订单报表销售额为分母。表内销售额取自 BR 销售与流量报告。',
+        'SKU 基础毛利计入商品成本、SP 和交易退款。完整订单毛利再扣除可归属的手动费用和 SB、SD 花费。毛利率沿用计算该毛利时的订单销售额。',
         organicNote,
-        '订单取 BR 订单商品数。总访客数取 BR 会话数。APP流量占比为 APP 会话数除以总会话数。总转化为 BR 订购件数除以总会话数。',
+        '订单数和销售额取自按美西下单日汇总的订单列表。总访客数为业务报告会话数，APP 流量占比为 APP 会话数除以总会话数。',
+        '总转化率按订单列表订单数除以业务报告会话数计算。定稿周按订单号和订单商品编号识别有效订单行，含已标价的待处理订单，排除已取消或无法履约的行。',
         clickNote,
         '广告点击率 = 已归属广告点击量 ÷ 同范围的广告展现量。广告转化 = 已归属广告订单 ÷ 同范围的广告点击量。当前仅 SP 提供点击和展现数据，计入 SB 或 SD 时，相应指标留空。',
-        '退货金额取交易报表的退款金额。' + (daily ? '退货率为当日 FBA 收退件数除以发货件数。' : weeklyReturnsNotice),
+        '退款金额占比按交易表退款金额除以订单列表销售额计算。' + (daily ? '退货件数率为当日 FBA 收退件数除以发货件数。' : weeklyReturnsNotice),
+        ...(summary ? ['业务报告对照（当前筛选）：订单商品数 ' + format(summary.br_orders,'int').text +
+          '，订购商品销售额 ' + format(summary.br_sales,'usd').text + '。'] : []),
         ...shownPeriods.map(period => (daily ? '所查日期范围：' : weekLabel(period.week) + '：') + period.note),
       ];
       detailsBody.replaceChildren(...lines.filter(Boolean).map(line => element('p', 'results-table-note', line)));

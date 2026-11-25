@@ -491,10 +491,10 @@
       const cell = makeCell(tr, format(listMetric(row.totals,key),formatter), true);
       cell.dataset.column = key;
     };
-    numeric('br_sales',usd);
-    numeric('br_orders',integer);
+    numeric('order_sales',usd);
+    numeric('order_orders',integer);
     if (mode === 'day') {
-      numeric('br_units',integer);
+      numeric('order_units',integer);
       numeric('sessions',integer);
     } else {
       numeric('sp_cost',usd);
@@ -683,7 +683,7 @@
   function changeMode(next) {
     if (!['day','week'].includes(next) || saveRequest || mode === next || !week) return;
     mode = next;
-    const hiddenSort = (next === 'day' ? ['sp_cost','sp_orders','sp_acos'] : ['br_units','sessions']).includes(listSortKey);
+    const hiddenSort = (next === 'day' ? ['sp_cost','sp_orders','sp_acos'] : ['order_units','sessions']).includes(listSortKey);
     if (hiddenSort) { listSortKey = 'name'; listSortDirection = 1; }
     notice(ui.resultDateFeedback);
     if (mode === 'day') {
