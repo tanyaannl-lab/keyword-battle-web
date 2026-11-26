@@ -15,7 +15,7 @@
 
   // This function runs in the opaque frame. Only the review's own storage
   // entries are seeded. No workspace token or other account key enters it.
-  function initStorage(entries, channel, parentOrigin, available, week) {
+  function initStorage(entries, channel, parentOrigin, available, week, weekOptions) {
     const values = new Map(entries);
     const bootstrap = document.currentScript;
     const policy = bootstrap.previousElementSibling;
@@ -59,6 +59,15 @@
       document.body.prepend(message);
     }
     document.addEventListener('DOMContentLoaded', () => {
+      const picker = document.getElementById('filter-week');
+      if (picker && weekOptions.some(option => option.value === week)) {
+        picker.replaceChildren(...weekOptions.map(option => new Option(option.label, option.value)));
+        picker.value = week;
+        picker.closest('label').hidden = false;
+        picker.addEventListener('change', () => {
+          parent.postMessage({channel, selectWeek:picker.value}, parentOrigin);
+        });
+      }
       parent.postMessage({channel, ready:true}, parentOrigin);
     }, {once:true});
     if (denied) document.addEventListener('DOMContentLoaded', warn, {once:true});
@@ -82,7 +91,7 @@
     iframe.removeAttribute('src');
   }
 
-  function mount(iframe, template, userId, feed, business) {
+  function mount(iframe, template, userId, feed, business, weekOptions = [], onSelectWeek) {
     const week = feed.week;
     if (!userId || !/^\d{4}-\d{2}-\d{2}$/.test(week) || typeof template !== 'string' || !/<head\s*>/i.test(template))
       throw new Error('看板文件格式或周次无效。');
@@ -100,7 +109,7 @@
         }
       }
     } catch { available = false; }
-    const args = safeJSON([entries,channel,location.origin,available,week]);
+    const args = safeJSON([entries,channel,location.origin,available,week,weekOptions]);
     const runtime = '<script type="application/json" id="mc-ads-runtime">' + safeJSON({feed,business}) + '<\/script>';
     const init = '<script>(' + initStorage.toString() + ')(...' + args + ');<\/script>';
     const policy = '<meta data-mc-frame-policy http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'unsafe-inline\'; style-src \'unsafe-inline\'; img-src data: blob:; object-src \'none\'; base-uri \'none\'; form-action \'none\'">';
@@ -115,6 +124,12 @@
       if (data.ready === true) {
         state.ready = true;
         updateBusiness(iframe, week, state.business);
+        return;
+      }
+      if (typeof data.selectWeek === 'string') {
+        if (data.selectWeek !== week && weekOptions.some(option => option.value === data.selectWeek)) {
+          onSelectWeek?.(data.selectWeek);
+        }
         return;
       }
       if (!validKey(data.name)) return;

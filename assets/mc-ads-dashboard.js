@@ -78,7 +78,7 @@
 
   async function getTemplate(signal) {
     if (template) return template;
-    const res = await fetch('../assets/mc-ads-view.html?v=20261126-weekly1', {signal,redirect:'error'});
+    const res = await fetch('../assets/mc-ads-view.html?v=20261126-weekpicker', {signal,redirect:'error'});
     if (!res.ok) throw new Error('看板页面文件未能加载，请检查网页包是否已完整发布。');
     template = await res.text();
     return template;
@@ -120,7 +120,8 @@
       const [html,feed] = await Promise.all([getTemplate(run.signal),
         rpc('mc_ads_dashboard_week_read',{p_week:week},run.signal).then(data=>readFeed(data,week))]);
       if (selection !== run) return;
-      MCAdsFrame.mount(frame,html,auth.user.id,feed,business);
+      const options = Array.from(picker.options, option => ({value:option.value, label:option.text}));
+      MCAdsFrame.mount(frame,html,auth.user.id,feed,business,options,selectWeek);
       panel.hidden = true;
       frame.hidden = false;
     } catch (error) {
@@ -163,13 +164,15 @@
     }
   }
 
-  picker.addEventListener('change', () => {
-    if (!weeks.includes(picker.value)) return;
+  function selectWeek(week) {
+    if (!weeks.includes(week)) return;
+    picker.value = week;
     const address = new URL(location.href);
-    address.searchParams.set('week',picker.value);
+    address.searchParams.set('week',week);
     history.replaceState(null,'',address);
-    void chooseWeek(picker.value);
-  });
+    void chooseWeek(week);
+  }
+  picker.addEventListener('change', () => selectWeek(picker.value));
   retry.addEventListener('click',openDashboard);
   id('logoutBtn').addEventListener('click', async () => {
     reset();
