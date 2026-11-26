@@ -208,7 +208,90 @@ html[data-hier-demo="true"] .hero{background:linear-gradient(106deg,#24374b,#345
 .hd-mark :focus-visible,.hd-toolbar :focus-visible{outline:2px solid #98601d;outline-offset:2px}
 .hd-toolbar [hidden],.hd-mark [hidden]{display:none}
 @media print{.hd-mark,.hd-toolbar{display:none}}
-</style></head>
+</style><style>
+#review-placements .mci-modes,#review-placements .mci-tools,#review-placements .mci-preview-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 14px}
+#review-placements .mc-inline-mode,#review-placements [data-sort],#review-placements [data-expand]{border:none;color:#416256;background:transparent;font:inherit;cursor:pointer}
+#review-placements .mc-inline-mode{font-weight:650;padding:6px 10px;border-bottom:3px solid transparent}
+#review-placements .mc-inline-mode[aria-pressed=true]{color:#0c654c;background:#e7f2eb;border-bottom-color:#126b53}
+#review-placements .mci-tools{border-block:1px solid #dce8e1;background:#f7faf8}
+#review-placements .mci-tools label{display:flex;align-items:center;gap:5px}
+#review-placements .mci-primary{cursor:pointer;background:#126b53;color:white;font-weight:650;border:1px solid #126b53;border-radius:6px;padding:5px 11px}
+#review-placements .mci-tools button:disabled{cursor:default;opacity:.48}
+#review-placements #inline-review-open{margin-left:auto}
+#review-placements #inline-message,#review-placements #inline-preview{padding:9px 14px;background:#f0f7f2;border-bottom:1px solid #c8dccf}
+#review-placements .mci-preview-head{padding:2px 0 6px}.mci-preview-head b{margin-right:auto}
+#review-placements .mci-preview-list{max-height:220px;overflow:auto}
+#review-placements .mci-preview-list p{display:flex;flex-wrap:wrap;gap:6px;margin:0;padding:4px 0;border-top:1px solid #dce8e1}
+#review-placements .mci-preview-list strong{margin-left:auto}
+#review-placements .mci-wrap{max-height:clamp(370px,65vh,780px);overflow:auto;background:white;border:1px solid #d5e1d9}
+#review-placements .mci-campaign-table{min-width:960px;width:100%;border-collapse:separate;border-spacing:0}
+#review-placements .mci-campaign-table>thead>tr>th{position:sticky;top:0;z-index:2;background:#f3f7f4}
+#review-placements .mci-campaign-table :is(th,td){white-space:nowrap;text-align:right;padding:7px 8px;border-bottom:1px solid #e2eae5}
+#review-placements .mci-campaign-table tr>:first-child{text-align:left}
+#review-placements .mci-campaign>th{font-weight:600;white-space:normal;min-width:190px;max-width:340px;overflow-wrap:anywhere}
+#review-placements .mci-children>td{padding:6px 10px;background:#f6f9f7}
+#review-placements .mci-child-table{width:100%;border-collapse:collapse;background:transparent}
+#review-placements .mci-child-table .mci-date-row>td{padding-block:1px;border:0}
+#review-placements .mci-selected{background:#e7f3e9}
+#review-placements input[type=checkbox]{accent-color:#16745b;vertical-align:middle}
+#review-placements .mci-field{display:inline-flex;gap:3px;align-items:center;padding:2px 6px;border:1px solid #a9bdaf;border-radius:5px;background:#fff;font-size:12px}
+#review-placements .mci-field input{border:0;border-radius:3px;width:60px;padding:3px 2px;color:#163e30;background:white;font:inherit}
+#review-placements .mci-field input[aria-invalid=true]{outline:2px solid #9c4a1b}
+#review-placements .mci-inputcell small,#review-placements .mci-group small{display:block;color:#426651}
+#review-placements .mci-group{padding:7px 3px;text-align:left;font-weight:600}
+#review-placements .mci-group small{display:inline;font-weight:400;margin-left:5px}
+#review-placements .mci-dates summary,#review-placements .mci-terms summary{cursor:pointer;font-size:12px;font-weight:400;color:#346d57;width:fit-content}
+#review-placements .mci-terms ul{font-weight:400;white-space:normal;overflow-wrap:anywhere;max-width:320px;max-height:180px;overflow:auto}
+#review-placements .mci-terms li{text-align:left}
+#review-placements .mci-dates>div{max-height:170px;overflow:auto;background:white}
+#review-placements [data-sort]{padding:2px;font-weight:650}
+#review-placements [aria-sort=ascending] [data-sort],#review-placements [aria-sort=descending] [data-sort]{color:#126b53}
+@media(max-width:600px){#review-placements .mci-modes,#review-placements .mci-tools{padding:7px 8px;gap:5px}#review-placements .mc-inline-mode{padding:5px}#review-placements .mci-wrap{max-width:100%}#review-placements .mci-campaign-table{min-width:930px}}
+
+</style>
+<style>
+#filter-open{flex:0 0 auto;min-height:34px;border:1px solid #9cbcae;border-radius:6px;padding:5px 13px;background:#f5faf7;color:var(--brand);font-weight:650;font-size:13px}
+#filter-open:hover,#filter-open[aria-expanded=true]{background:#e4f1e9;border-color:#61967c}
+#filter-panel{padding:16px 20px 13px;margin:0 0 15px;border:1px solid #c4d9cc;border-radius:10px;background:#fff}
+#filter-panel .filter-heading{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:13px}
+#filter-panel .filter-heading h2{font-size:18px;line-height:1.4;color:var(--ink)}
+#filter-panel .filter-heading p{margin-top:2px;color:var(--muted);font-size:12px}
+#filter-panel .filter-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px 19px}
+#filter-panel .filter-control{display:grid;gap:5px;min-width:0;align-content:start;text-align:left}
+#filter-panel .filter-caption{display:flex;align-items:baseline;gap:5px;font-size:13px;font-weight:650;color:var(--ink)}
+#filter-panel .filter-unit{color:var(--muted);font-size:11px;font-weight:500}
+#filter-panel .range-fields{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);align-items:center;gap:5px}
+#filter-panel .range-fields span{color:#738b7e}
+#filter-panel .range-fields input,#filter-panel select{width:100%;min-width:0;height:32px;border:1px solid #bdcec3;border-radius:5px;background:#fff;color:var(--ink);padding:4px 8px;font-size:13px}
+#filter-panel input::placeholder{color:#75877d}
+#filter-panel input[aria-invalid]{border-color:#a6542e;background:#fff7ef}
+#filter-panel .filter-actions{display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid var(--line);padding-top:11px;margin-top:14px}
+#filter-panel .filter-actions>div{display:flex;gap:8px}
+#filter-panel #filter-error{margin-top:10px;color:#953f18;font-size:13px}
+#active-filters{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:0 0 12px}
+#active-filters .condition-prefix{font-size:12px;color:var(--muted);font-weight:650}
+#active-filters .condition-chip{border:1px solid #cbddd1;background:#eaf3ec;border-radius:5px;padding:3px 8px;font-size:12px;color:var(--brand)}
+#active-filters .condition-chip span{margin-left:7px;color:#587567}
+#active-filters .condition-chip:hover{border-color:#6f9b81;background:#e2eee6}
+#filter-panel .condition-clear,#active-filters .condition-clear{padding:4px 2px;color:var(--brand);font-size:12px}
+#filter-panel .condition-clear:hover,#active-filters .condition-clear:hover{text-decoration:underline}
+@media(max-width:840px){#filter-panel .filter-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:11px 15px}}
+@media(max-width:500px){#filter-panel{padding:13px 12px;margin-bottom:12px}#filter-panel .filter-grid{grid-template-columns:minmax(0,1fr)}#filter-panel .filter-control{display:grid;grid-template-columns:72px minmax(0,1fr);align-items:center;gap:9px}#filter-panel .filter-caption{flex-wrap:wrap;gap:3px;line-height:1.2}}
+
+.review-filters #filter-open{margin-left:0;white-space:nowrap}
+.review-console #filter-panel{margin:0 19px 12px;background:#fbfdfb}
+.review-console #active-filters{padding:0 19px;margin:0 0 12px}
+#filter-panel .filter-actions button{font:inherit;cursor:pointer}
+#filter-panel .filter-actions .secondary,#filter-panel .filter-actions .primary{padding:5px 12px;min-height:32px;border-radius:6px;font-size:13px;font-weight:620}
+#filter-panel .filter-actions .secondary{background:#fff;color:var(--brand);border:1px solid #b5cbbd}
+#filter-panel .filter-actions .primary{background:var(--brand);border:1px solid var(--brand);color:#fff}
+#filter-panel .filter-actions .primary:hover{background:#105641}
+#filter-panel .filter-actions .condition-clear,#active-filters .condition-clear{border:0;background:transparent}
+#filter-panel :focus-visible,#active-filters button:focus-visible{outline:2px solid #ae7c36;outline-offset:2px}
+@media(max-width:700px){.review-console #filter-panel{margin:0 9px 10px}.review-console #active-filters{padding:0 12px}}
+
+</style>
+</head>
 <body>
 <nav class="site-nav" aria-label="页面导航"><div class="shell nav-inner"><a class="logo" href="#top" data-section-anchor><span class="brandmark">MC</span><span>经营分析</span></a><span class="app-name">SP 广告看板</span><div class="nav-right"><span class="preview" hidden></span><button class="outline" id="print" type="button"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" aria-hidden="true"><path d="M7 8V3h10v5M6 17H3V9h18v8h-3M7 14h10v7H7z"/><path d="M16 11h2"/></svg>打印</button></div></div></nav>
 <main id="top" class="shell">
@@ -835,7 +918,7 @@ function realSearchRows(view,period){
   const dailySpendAndSales=new Map();
   let sourceCount=0,sharedCount=0,missingCount=0,omittedCount=0,omittedCents=0;
   for(const [day,g,t,q,costC,adSalesC,adOrders,clicks,impressions] of realSearchFacts){
-    if(!dates.has(day))continue;
+    if(!dates.has(day)||!mcCampaignAllowed(realSearchGroups[g][0]))continue;
     const scope=searchScopeAt(day,g);
     if(!scope.common.includes(view.id)){
       if(scope.possible.has(view.id)){
@@ -1055,19 +1138,19 @@ function childPerformanceTable(list,dates,totalsFn,nameLabel,view=currentView())
       const metric=business[key];
       return '<td title="'+hierarchyText(metric.note)+'">'+format(metric.value)+'</td>';
     }).join(''):'';
-    const mark=listId&&t?hierarchyChildDraft(view,selectedDates,node,node.kind==='campaign'?node:path.campaign,
+    const mark=listId&&t&&!mcInlineAds.canUse(view)?hierarchyChildDraft(view,selectedDates,node,node.kind==='campaign'?node:path.campaign,
       node.kind==='adgroup'?node:path.adgroup,t,listId):'';
     return '<tr><td>'+mark+hierarchyLink(node.id,node.label,'hier-name')+(caption?' '+caption:'')+
       (description?'<div class="hier-desc">'+hierarchyText(description)+'</div>':'')+'</td>'+operatingCells+
       hierarchyPerformanceCells(t)+'</tr>';
   });
-  return hierarchyPerformanceMarkup(rows,nameLabel,showBusiness,listId);
+  return hierarchyPerformanceMarkup(rows,nameLabel,showBusiness,mcInlineAds.canUse(view)?null:listId);
 }
 function hierarchyRealTargets(view,dates){
   const campaign=hierarchyById.get(view.parent);
   const {targets,note,omittedCount,omittedCents}=bandActivityTargets(view,dates,campaign.campaignId,view.adGroupId);
-  const listId=hierarchyDraftLists.adgroup;
-  const rows=targets.map(row=>'<tr><td>'+hierarchyChildDraft(view,dates,row,campaign,view,row,listId)+
+  const listId=null;
+  const rows=targets.map(row=>'<tr><td>'+
     hierarchyText(row.label)+'<div class="hier-desc">'+hierarchyText(row.matchType)+'</div></td>'+hierarchyPerformanceCells(row)+'</tr>');
   const omitted=omittedCount?' 有 '+countText(omittedCount)+' 条记录跨产品归属，花费 '+money(omittedCents)+'，未计入本层。':'';
   const table=rows.length?hierarchyPerformanceMarkup(rows,'投放对象',false,listId):
@@ -1515,7 +1598,7 @@ function attributeScopeCounts(view,dates,targetId,selection){
   // still count original daily records, including those withheld from this view.
   const counts={sourceCount:0,sharedCount:0,missingCount:0,omittedCount:0,omittedCents:0};
   for(const [day,g,t,,costC] of realSearchFacts){
-    if(!dates.has(day)||realSearchTargets[t][0]!==targetId)continue;
+    if(!dates.has(day)||!mcCampaignAllowed(realSearchGroups[g][0])||realSearchTargets[t][0]!==targetId)continue;
     const scope=searchScopeAt(day,g);
     if(scope.common.includes(view.id)){
       counts.sourceCount++;
@@ -2210,8 +2293,8 @@ function setFilterOptions(select,options,value){
 
 function syncReviewWorkspace(view){
   const path=scopeAncestors(view);
-  const operators=hierarchyChildren.get(path.store.id)||[];
-  const products=(path.operator?[path.operator]:operators).flatMap(operator=>hierarchyChildren.get(operator.id)||[]);
+  const operators=mcSourceChildren(path.store.id);
+  const products=(path.operator?[path.operator]:operators).flatMap(operator=>mcSourceChildren(operator.id));
   const ops=operators.map(n=>[n.id,n.label]);
   const items=products.map(n=>[n.id,n.label]);
   setFilterOptions(document.getElementById('filter-operator'),[['','全部运营'],...ops],path.operator?.id||'');
@@ -2221,7 +2304,10 @@ function syncReviewWorkspace(view){
   const draftLabels={portfolio:'选择广告加入草稿',campaign:'选择广告组加入草稿',adgroup:'选择投放加入草稿'};
   draftStart.hidden=!draftLabels[view.kind]||reviewPage==='pair'||
     (view.kind!=='portfolio'&&!document.getElementById('hier-children').querySelector('[data-hd-row]'));
-  if(!draftStart.hidden)draftStart.textContent=draftLabels[view.kind];
+  if(mcInlineAds.canUse(view)){
+    draftStart.hidden=reviewPage==='pair';
+    draftStart.textContent='就地调整投放';
+  }else if(!draftStart.hidden)draftStart.textContent=draftLabels[view.kind];
   const switcher=document.getElementById('review-dataset');
   if(switcher)switcher.textContent=view.demo?'返回真实数据':'演示完整层级';
   if(reviewPage==='attributes'){
@@ -2259,6 +2345,12 @@ function initReviewWorkspace(){
   const byId=id=>document.getElementById(id);
   byId('hd-start').addEventListener('click',()=>{
     setReviewPage('effects');
+    if(mcInlineAds.canUse(currentView())){
+      const section=byId('review-placements');
+      section.scrollIntoView({block:'start'});
+      section.querySelector('.mc-inline-mode[aria-pressed=true]')?.focus({preventScroll:true});
+      return;
+    }
     const section=byId(currentView().kind==='portfolio'?'review-placements':'hier-children');
     section.querySelector('[data-hd-row]')?.focus({preventScroll:true});
     section.scrollIntoView({block:'start'});
@@ -2365,7 +2457,7 @@ function demoPlacementRows(campaign){
   return rows;
 }
 function placementScope(view,period){
-  const campaigns=view.kind==='campaign'?[view]:(hierarchyChildren.get(view.id)||[]);
+  const campaigns=(view.kind==='campaign'?[view]:(hierarchyChildren.get(view.id)||[])).filter(c=>view.demo||mcCampaignAllowed(c.campaignId));
   const campaignIds=new Set(campaigns.map(c=>c.campaignId));
   const dateSet=new Set(period.map(row=>row.day));
   const source=view.demo?campaigns.flatMap(demoPlacementRows):placementState.rows;
@@ -4348,7 +4440,7 @@ function pairProductSeries(product,store,dates){
 }
 
 function pairAvailableProducts(store){
-  return (hierarchyChildren.get(store.id)||[]).flatMap(owner=>hierarchyChildren.get(owner.id)||[])
+  return mcSourceChildren(store.id).flatMap(owner=>mcSourceChildren(owner.id)).map(node=>hierarchyById.get(node.id))
     .filter(product=>product.kind==='product'&&!product.unmapped)
     .sort((a,b)=>a.label.localeCompare(b.label,'zh-CN')||a.id.localeCompare(b.id));
 }
@@ -4456,7 +4548,7 @@ function applyOperatingResponse(week, response) {
   }
   businessRowsByNode = rows;
   for (const id of operatingScopes.values()) {
-    for (const day of hierarchyById.get(id).rows) {
+    for (const day of (mcFullHierarchy || hierarchyById).get(id).rows) {
       const row = rows.get(id + '/' + day.day);
       day.orders = Number.isFinite(row?.orders) ? row.orders : null;
       day.salesC = Number.isFinite(row?.sales) ? Math.round(row.sales * 100) : null;
@@ -4493,6 +4585,10 @@ function operatingStatusNote() {
 }
 
 function businessSummary(view, dates) {
+  if(!view.demo && mcProjectedIds!==null){
+    const absent={value:null,note:'经营指标按店铺、运营和产品统计，无法拆到单个广告活动。'};
+    return {orders:absent,organicOrders:absent,profitRate:absent};
+  }
   const records = dates.map(({day}) => operatingDay(view, day));
   const complete = records.length;
   const missing = count => {
@@ -4703,6 +4799,7 @@ function bandActivitySourceIndex(){
   }
   for(const fact of realSearchFacts){
     const [campaignId,groupId]=realSearchGroups[fact[1]];
+    if(!mcCampaignAllowed(campaignId))continue;
     const key=JSON.stringify([campaignId,groupId]);
     if(!searchFacts.has(key))searchFacts.set(key,[]);
     searchFacts.get(key).push(fact);
@@ -5500,6 +5597,314 @@ function initializeHierarchyDraftSelection(){
 
 </script><script>
 'use strict';
+/* The difference between whole-campaign placement metrics and attributable target rows
+   matters here. Existing reporting helpers provide the same scopes as the dashboard. */
+const mcInlineAds = (()=>{
+  const labels={placement:'广告位加价',keyword:'关键词竞价',product:'商品定投竞价'};
+  const cols=[
+    ['name','广告活动'],['strategy','竞价策略'],['cost','花费'],['sales','销售额'],['orders','订单'],
+    ['acos','ACOS'],['ctr','点击率'],['cvr','转化率'],['roas','ROAS']
+  ];
+  const h=hierarchyText;
+  let mode='placement', order={key:'cost',up:false}, context=null;
+  let selected=new Set(), inputs=new Map(), expanded=new Set(), pending=[], notice='', bulk='';
+  const saved=new Map();
+  const storeName=key=>'mc-ads:review:inline-v1:'+feed.week+':'+key;
+  const root=()=>document.getElementById('review-placements');
+  const canUse=view=>!view.demo && ['portfolio','campaign','adgroup'].includes(view.kind);
+  function valid(raw,kind){
+    const s=String(raw??'').trim();
+    const validText=kind==='placement'?/^\d+$/.test(s):/^(?:\d+(?:\.\d{1,2})?|\.\d{1,2})$/.test(s);
+    if(!validText)return null;
+    const value=Number(s);
+    if(!Number.isFinite(value)||!Number.isSafeInteger(Math.round(value*100))||(kind!=='placement'&&value<=0))return null;
+    return kind==='placement'?String(value):value.toFixed(2);
+  }
+  function displayValue(raw,kind=mode){return kind==='placement'?raw+'%':'$'+Number(raw).toFixed(2);}
+  function localValue(row){
+    if(!saved.has(row.id)){
+      let value=null;
+      try{value=valid(localStorage.getItem(storeName(row.id)),row.kind);}catch{}
+      saved.set(row.id,value);
+    }
+    return saved.get(row.id);
+  }
+  // Every scope that refers to the same real campaign/target uses the same saved setting.
+  function idOf(kind,campaign,group,item){
+    return encodeURIComponent(JSON.stringify([kind,String(campaign),String(group||''),String(item)]));
+  }
+  function targets(view,period){
+    const data=realSearchRows(view,period);
+    const rows=new Map();
+    for(const q of data.rows){
+      const [objectId,type]=realSearchTargets[q.t];
+      let kind;
+      if(['EXACT','PHRASE','BROAD'].includes(type))kind='keyword';
+      if(type==='TARGETING_EXPRESSION')kind='product';
+      if(kind!==mode)continue;
+      const [campaign,group]=realSearchGroups[q.g];
+      if(view.kind==='adgroup' && String(view.adGroupId)!==String(group))continue;
+      const id=idOf(kind,campaign,group,objectId);
+      let rec=rows.get(id);
+      if(!rec){
+        rec={id,kind,label:(kind==='product'?'商品定投':(targetTypeNames[type]||type)+'匹配')+' · '+objectId,campaign:String(campaign),
+          group:String(group),groupLabel:q.groupLabel||group,objectId,editable:true,terms:[],sum:Object.fromEntries(placementValues.map(k=>[k,0]))};
+        rows.set(id,rec);
+      }
+      rec.terms.push({term:realSearchTerms[q.q],costC:q.costC,clicks:q.clicks});
+      for(const k of placementValues)rec.sum[k]+=q[k];
+    }
+    const byCampaign=new Map();
+    for(const r of rows.values()){
+      if(!byCampaign.has(r.campaign))byCampaign.set(r.campaign,[]);
+      byCampaign.get(r.campaign).push(r);
+    }
+    return {byCampaign,omitted:data.omittedCount};
+  }
+  function slots(cid,rows){
+    const grouped=new Map(Object.keys(placementLabels).map(k=>[k,[]]));
+    for(const r of rows){if(!grouped.has(r.slot))grouped.set(r.slot,[]);grouped.get(r.slot).push(r);}
+    return Array.from(grouped,([slot,records])=>({
+      id:idOf('placement',cid,'',slot),kind:'placement',campaign:cid,label:placementBadgeNames[slot]||placementLabel(slot),slot,
+      sum:placementSummary(records),dates:records,editable:Object.hasOwn(placementLabels,slot)
+    }));
+  }
+  function getModel(view,period){
+    const basis=view.kind==='adgroup'?hierarchyById.get(view.parent):view;
+    const scope=placementScope(basis,period);
+    const placements=new Map();
+    for(const r of scope.rows){
+      const key=String(r.campaignId);
+      if(!placements.has(key))placements.set(key,[]);
+      placements.get(key).push(r);
+    }
+    const tg=mode==='placement'?null:targets(view,period);
+    const campaigns=new Map(), reportedDates=new Set();
+    let reported=0;
+    for(const campaign of scope.campaigns){
+      const id=String(campaign.campaignId);
+      if(campaigns.has(id)||window.mcCampaignScope?.allowed(id)===false)continue;
+      const rows=placements.get(id)||[];
+      const children=mode==='placement'?slots(id,rows):(tg.byCampaign.get(id)||[]);
+      if(!children.length)continue;
+      if(rows.length){
+        reported++;
+        for(const row of rows){
+          const first=reportWeek.slot(row.from),last=reportWeek.slot(row.to);
+          for(let day=first;day<=last;day++)reportedDates.add(day);
+        }
+      }
+      const strategies=[...new Set(rows.map(r=>r.strategy).filter(Boolean))].sort();
+      campaigns.set(id,{campaign,id,children,sum:placementSummary(rows),strategy:strategies.join(' / ')||null});
+    }
+    const rows=new Map();
+    for(const c of campaigns.values())for(const r of c.children)if(r.editable)rows.set(r.id,r);
+    return {view,period,campaigns,rows,reported,daysCovered:reportedDates.size,rangePending:scope.rangePending,omitted:tg?.omitted||0};
+  }
+  function metric(c,key){
+    if(key==='name')return c.campaign.label;
+    if(key==='strategy')return c.strategy;
+    const s=c.sum;
+    if(!s)return null;
+    if(key==='cost')return s.costC;
+    if(key==='sales')return s.adSalesC;
+    if(key==='orders')return s.adOrders;
+    const r=key==='acos'?rate(s.costC,s.adSalesC):key==='ctr'?rate(s.clicks,s.impressions):key==='cvr'?rate(s.adOrders,s.clicks):ratio(s.adSalesC,s.costC);
+    return r==null?null:Number(r.toFixed(2));
+  }
+  function compare(a,b){
+    const l=metric(a,order.key),r=metric(b,order.key);
+    if(l==null||r==null)return Number(l==null)-Number(r==null);
+    return (order.up?1:-1)*(typeof l==='string'?l.localeCompare(r,'zh-CN',{numeric:true}):l-r);
+  }
+  function mark(attr,key,label){return '<input type="checkbox" '+attr+'="'+h(key)+'" aria-label="'+h(label)+'">';}
+  function head(label,key){
+    const active=order.key===key;
+    return '<th scope="col" aria-sort="'+(active?(order.up?'ascending':'descending'):'none')+'">'+
+      (key==='name'?mark('data-mci-all','','选择当前活动列表全部可调行')+' ':'')+'<button type="button" data-sort="'+key+'">'+label+
+      ' <span aria-hidden="true">'+(active?(order.up?'↑':'↓'):'↕')+'</span></button></th>';
+  }
+  function rowName(r){
+    if(r.kind==='placement'){
+      const css=Object.hasOwn(placementLabels,r.slot)?r.slot:'other';
+      return '<span class="pl-badge" data-tone="'+css+'">'+h(r.label)+'</span>';
+    }
+    let evidence='';
+    if(r.terms.length){
+      evidence='<details class="mci-terms"><summary>买家搜索词（'+r.terms.length+'）</summary><ul>'+
+        r.terms.slice().sort((a,b)=>b.clicks-a.clicks||b.costC-a.costC).map(q=>'<li>'+h(q.term)+' · '+countText(q.clicks)+' 次点击</li>').join('')+'</ul></details>';
+    }
+    return '<b>'+h(r.label)+'</b>'+evidence;
+  }
+  function childRow(r,c){
+    const label=r.label+' · '+c.campaign.label, savedValue=r.editable?localValue(r):null, isPlacement=r.kind==='placement';
+    const field=r.editable?'<label class="mci-field"><input type="text" autocomplete="off" inputmode="'+(isPlacement?'numeric':'decimal')+
+      '" data-edit="'+h(r.id)+'" aria-label="'+h(label+' '+(isPlacement?'新加价比例':'新竞价美元'))+'" placeholder="'+(isPlacement?'比例':'金额')+
+      '" value="'+h(inputs.get(r.id)||'')+'"><span>'+(isPlacement?'%':'USD')+'</span></label>'+
+      (savedValue==null?'':'<small>本地 '+displayValue(savedValue)+'</small>'):'仅展示';
+    const dateLink=isPlacement&&r.dates.length?'<details class="mci-dates"><summary>按日期查看</summary>'+
+      '<div>'+placementDateTable(r.dates,r.label)+'</div></details>':'';
+    return '<tr class="mci-record"><th scope="row">'+(r.editable?mark('data-mark',r.id,'选择'+label)+' ':'')+rowName(r)+'</th>'+
+      placementDetailCells(r.sum)+'<td>'+(r.editable?'未读取':'—')+'</td><td class="mci-inputcell">'+field+'</td></tr>'+
+      (dateLink?'<tr class="mci-date-row"><td colspan="12">'+dateLink+'</td></tr>':'');
+  }
+  function detail(c){
+    const isPlacement=mode==='placement';
+    const groups=new Map();
+    for(const r of c.children){
+      const id=r.group||'';
+      if(!groups.has(id))groups.set(id,[]);
+      groups.get(id).push(r);
+    }
+    return Array.from(groups,([gid,items])=>{
+      const groupNode=gid&&(hierarchyChildren.get(c.campaign.id)||[]).find(n=>String(n.adGroupId)===gid);
+      const groupLabel=groupNode?hierarchyLink(groupNode.id,items[0].groupLabel,'hier-name'):h(items[0].groupLabel);
+      const groupTitle=gid?'<div class="mci-group">广告组 · '+groupLabel+' <small>ID '+h(gid)+'</small></div>':'';
+      return groupTitle+'<table class="mci-child-table" aria-label="'+h(c.campaign.label+' '+labels[mode])+'">'+placementHead([
+        isPlacement?'广告位':(mode==='keyword'?'关键词':'商品定投'),'曝光','点击','CTR','花费','销售额','订单','转化率','ACOS','ROAS',isPlacement?'当前加价':'当前竞价',isPlacement?'新加价比例':'新竞价'
+      ])+'<tbody>'+items.slice().sort((a,b)=>isPlacement?0:b.sum.costC-a.sum.costC).map(r=>childRow(r,c)).join('')+'</tbody></table>';
+    }).join('');
+  }
+  function campaignBlock(c){
+    const hasOpen=expanded.has(c.id),s=c.sum;
+    const link=context.view.kind==='portfolio'?hierarchyLink(c.campaign.id,c.campaign.label,'hier-name'):h(c.campaign.label);
+    return '<tr class="mci-campaign"><th scope="row">'+mark('data-mci-campaign',c.id,'选择'+c.campaign.label+'下的全部可调行')+
+      ' <button data-expand="'+h(c.id)+'" type="button" aria-expanded="'+hasOpen+'" aria-label="'+h((hasOpen?'收起':'展开')+c.campaign.label)+'">'+(hasOpen?'▾':'▸')+'</button> '+link+'</th>'+
+      '<td>'+h(c.strategy||'—')+'</td>'+placementAmountCells(s)+(s?'<td>'+placementAcos(s)+'</td><td>'+pct(s.clicks,s.impressions)+'</td><td>'+pct(s.adOrders,s.clicks)+'</td><td>'+roas(s)+'</td>':'<td>—</td>'.repeat(4))+'</tr>'+
+      (hasOpen?'<tr class="mci-children"><td colspan="9">'+detail(c)+'</td></tr>':'');
+  }
+  function selectedRows(){return Array.from(selected,id=>context.rows.get(id)).filter(Boolean);}
+  function batchControls(){
+    return '<div class="mci-tools"><span>已选 <b id="inline-selected-count">0</b> 项</span><button type="button" class="hier-action" id="inline-clear">清除选择</button>'+
+      '<label>统一设为 <span class="mci-field"><input id="inline-bulk-input" aria-label="批量目标值" type="text" autocomplete="off" inputmode="'+(mode==='placement'?'numeric':'decimal')+
+      '" value="'+h(bulk)+'" placeholder="数值"><span>'+(mode==='placement'?'%':'USD')+'</span></span></label><button type="button" class="hier-action" id="inline-bulk-set">填入所选行</button>'+
+      '<button type="button" class="mci-primary" id="inline-review-open">核对调整</button></div>';
+  }
+  function preview(){
+    return '<div id="inline-preview"'+(pending.length?'':' hidden')+'><div class="mci-preview-head"><b>核对 '+pending.length+' 项本地调整</b><button class="hier-action" id="inline-cancel-preview" type="button">返回修改</button>'+
+      '<button class="mci-primary" id="inline-confirm-local" type="button">确认本地调整</button></div><div class="mci-preview-list">'+pending.map(({r,value})=>'<p><b>'+h(r.label)+'</b> · '+h(context.campaigns.get(r.campaign).campaign.label)+
+      (r.group?' · '+h(r.groupLabel):'')+' <strong>'+displayValue(value)+'</strong></p>').join('')+'</div></div>';
+  }
+  function paint(){
+    const host=root(), permitted=context.view.kind==='adgroup'?['keyword','product']:Object.keys(labels);
+    const ranked=Array.from(context.campaigns.values()).sort(compare);
+    const modesHtml='<div class="mci-modes" role="group" aria-label="调整对象">'+permitted.map(m=>'<button type="button" class="mc-inline-mode" data-mode="'+m+'" aria-pressed="'+(mode===m)+'">'+labels[m]+'</button>').join('')+'</div>';
+    const suffix=context.rangePending?' 部分报告跨越所选日期，仅统计完整落在范围内的记录。':'';
+    let note=mode==='placement'?'活动与广告位按整场活动统计。加价填写目标百分比，0% 代表取消加价。':'活动合计取自广告位报表。下方按搜索词报告的广告组及投放 ID 汇总，竞价单位为美元。';
+    if(context.omitted)note+=' 有 '+countText(context.omitted)+' 条共用广告组记录无法唯一归属，详见搜索词分析。';
+    const rows=ranked.map(campaignBlock).join('');
+    const table='<div class="hier-table-wrap mci-wrap" role="region" tabindex="0" aria-label="广告活动指标与调整"><table class="mci-campaign-table"><thead><tr>'+cols.map(([k,l])=>head(l,k)).join('')+'</tr></thead><tbody>'+rows+'</tbody></table></div>';
+    const noRows='<p class="table-note">当前范围和日期没有'+(mode==='product'?'可归属的商品定投':mode==='keyword'?'可归属的关键词':'符合条件的广告活动')+'记录。</p>';
+    const title=mode==='placement'?'广告活动与广告位':mode==='keyword'?'广告活动与关键词':'广告活动与商品定投';
+    host.hidden=false;
+    const coverage=context.reported+' / '+ranked.length+' 个活动有广告位记录 · 报告覆盖 '+context.daysCovered+' / '+context.period.length+' 天';
+    host.innerHTML=diagnosisSection(title,coverage+' · '+dateRange(context.period),modesHtml+
+      '<p class="table-note">'+note+suffix+' 当前设置未读取，确认的调整保存在当前浏览器。</p>'+batchControls()+
+      '<p id="inline-message" role="status" '+(notice?'':'hidden')+'>'+h(notice)+'</p>'+preview()+(rows?table:noRows));
+    syncChecks();
+  }
+  function syncChecks(){
+    const host=root(),n=selectedRows().length;
+    host.querySelector('#inline-selected-count').textContent=n;
+    for(const id of ['inline-clear','inline-bulk-set','inline-review-open'])host.querySelector('#'+id).disabled=!n;
+    for(const el of host.querySelectorAll('[data-mark]')){
+      el.checked=selected.has(el.dataset.mark);el.closest('tr').classList.toggle('mci-selected',el.checked);
+    }
+    const groupState=(el,rows)=>{
+      const checked=rows.filter(r=>selected.has(r.id)).length;
+      el.checked=rows.length>0&&rows.length===checked;el.indeterminate=checked>0&&checked<rows.length;el.disabled=!rows.length;
+    };
+    for(const el of host.querySelectorAll('[data-mci-campaign]'))groupState(el,context.campaigns.get(el.dataset.mciCampaign).children.filter(r=>r.editable));
+    const all=host.querySelector('[data-mci-all]');if(all)groupState(all,[...context.rows.values()]);
+  }
+  function dismiss(){
+    pending=[];notice='';
+    const box=root().querySelector('#inline-preview'),msg=root().querySelector('#inline-message');
+    if(box)box.hidden=true;if(msg)msg.hidden=true;
+  }
+  function expected(){return mode==='placement'?'请填写大于或等于 0 的整数百分比。':'请填写大于 0 的美元竞价，最多两位小数。';}
+  function status(message){notice=message;const msg=root().querySelector('#inline-message');msg.hidden=false;msg.textContent=message;}
+  function openReview(){
+    dismiss();
+    const list=selectedRows();
+    for(const r of list){
+      if(valid(inputs.get(r.id),r.kind)!==null)continue;
+      expanded.add(r.campaign);notice=r.label+' · '+expected();paint();
+      const input=Array.from(root().querySelectorAll('[data-edit]')).find(el=>el.dataset.edit===r.id);
+      if(input){input.setAttribute('aria-invalid','true');input.focus();}return;
+    }
+    pending=list.map(r=>({r,value:valid(inputs.get(r.id),r.kind)}));paint();
+    root().querySelector('#inline-confirm-local')?.focus({preventScroll:true});
+    root().querySelector('#inline-preview')?.scrollIntoView({block:'nearest'});
+  }
+  function confirm(){
+    if(!pending.length)return;
+    let memoryOnly=false;
+    for(const {r,value} of pending){
+      try{localStorage.setItem(storeName(r.id),value);}catch{memoryOnly=true;}
+      saved.set(r.id,value);inputs.delete(r.id);selected.delete(r.id);
+    }
+    notice='已在本地确认 '+pending.length+' 项。'+(memoryOnly?'浏览器限制存储，本次打开期间可查看。':'可在对应行查看本地值。');
+    pending=[];paint();
+  }
+  function onClick(event){
+    if(!canUse(currentView())||!context)return;
+    const button=event.target.closest('button');if(!button)return;
+    if(button.matches('[data-mode]')){if(mode!==button.dataset.mode){mode=button.dataset.mode;render(currentView(),selectedDays(days));}return;}
+    if(button.matches('[data-sort]')){
+      const key=button.dataset.sort;
+      order={key,up:order.key===key?!order.up:['strategy','name'].includes(key)};
+      paint();root().querySelector('[data-sort="'+key+'"]').focus({preventScroll:true});return;
+    }
+    if(button.matches('[data-expand]')){
+      const id=button.dataset.expand;
+      if(expanded.has(id))expanded.delete(id);else expanded.add(id);
+      paint();Array.from(root().querySelectorAll('[data-expand]')).find(b=>b.dataset.expand===id)?.focus({preventScroll:true});return;
+    }
+    if(button.id==='inline-clear'){selected.clear();dismiss();syncChecks();return;}
+    if(button.id==='inline-bulk-set'){
+      dismiss();const value=valid(bulk,mode);
+      if(value===null){status(expected());root().querySelector('#inline-bulk-input').focus();return;}
+      for(const r of selectedRows())inputs.set(r.id,value);
+      notice='已在 '+selectedRows().length+' 行填入 '+displayValue(value)+'。';paint();return;
+    }
+    if(button.id==='inline-review-open')openReview();
+    if(button.id==='inline-cancel-preview'){dismiss();root().querySelector('#inline-review-open').focus();}
+    if(button.id==='inline-confirm-local')confirm();
+  }
+  function changeMark(event){
+    const el=event.target;if(!canUse(currentView())||!context||!el.matches('[data-mark],[data-mci-all],[data-mci-campaign]'))return;
+    const list=el.hasAttribute('data-mark')?[context.rows.get(el.dataset.mark)]:el.hasAttribute('data-mci-all')?[...context.rows.values()]:context.campaigns.get(el.dataset.mciCampaign).children;
+    dismiss();
+    for(const r of list)if(r?.editable){if(el.checked)selected.add(r.id);else selected.delete(r.id);}
+    syncChecks();
+  }
+  function edit(event){
+    const el=event.target;if(!canUse(currentView())||!context)return;
+    if(el.id==='inline-bulk-input'){bulk=el.value;dismiss();return;}
+    if(!el.hasAttribute('data-edit'))return;
+    dismiss();el.removeAttribute('aria-invalid');
+    selected.add(el.dataset.edit);inputs.set(el.dataset.edit,el.value);syncChecks();
+  }
+  let lastScope='', bound=false;
+  function render(view,period){
+    if(!canUse(view)){lastScope='';context=null;return false;}
+    if(view.kind==='adgroup'&&mode==='placement')mode='keyword';
+    const scope=JSON.stringify([view.id,period.map(d=>d.day),mode]);
+    context=getModel(view,period);
+    if(scope!==lastScope){
+      selected.clear();inputs.clear();expanded.clear();bulk='';
+      const first=Array.from(context.campaigns.values()).sort(compare)[0];if(first)expanded.add(first.id);
+      lastScope=scope;
+    }
+    for(const key of selected)if(!context.rows.has(key))selected.delete(key);
+    pending=[];notice='';
+    if(!bound){const host=root();host.addEventListener('click',onClick);host.addEventListener('change',changeMark);host.addEventListener('input',edit);bound=true;}
+    paint();return true;
+  }
+  return {render,canUse};
+})();
+
 const days=reportWeek.dates.map((date,index)=>({day:16+index,salesC:null,orders:null}));
 const weekDays=['一','二','三','四','五','六','日'];
 const $=id=>document.getElementById(id);
@@ -5522,7 +5927,10 @@ const icons={
 function icon(id){return '<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+icons[id]+'</svg>';}
 const state={selection:'week',modes:new Set(['cost','adSales','cvr']),sort:'day',asc:true};
 function selectedDays(rows){return rows.filter(r=>state.selection==='week'||(state.selection==='work'&&r.day<=20)||(state.selection==='end'&&r.day>=21)||state.selection===r.day);}
-function chosen(){return selectedDays(currentView().rows);}
+function chosen(){
+  const view=currentView(),rows=selectedDays(view.rows);
+  return mcProjectedIds===null?rows:rows.filter(row=>view.presentDays.includes(row.day));
+}
 function totals(rows){
   const total={};
   for(const key of ['salesC','adSalesC','costC','orders','adOrders','clicks','impressions']){
@@ -5663,8 +6071,179 @@ function updateSourceNotes(view){
     ? '演示数据。点击率与转化率按所选日期的合计数重算。'
     : 'SP 推广商品日报 · 7 天归因。点击率、转化率、ACOS 和 ROAS 按所选范围的合计数计算。订单和销售额取各日报导出时的数值，后续归因可能补入。';
 }
+'use strict';
+
+// Keep the full report for navigation and rebuild scope from source when the
+// user changes dates or conditions. The IDs admitted by the placement report
+// are applied to promoted-SKU and search-term facts independently.
+const mcFilterFields = ['cost','sales','orders','acos','ctr','cvr','roas'];
+const mcPromotedFields = ['costC','adSalesC','adOrders','clicks','impressions'];
+let mcFilterCriteria = {};
+let mcFullHierarchy, mcFullChildren;
+let mcProjectedIds = null;
+let mcIndexPeriod = '', mcIndexedPlacementRows, mcPlacementSummaries = new Map();
+let mcLastProjection = '';
+const mcSourceChildren = id => (mcFullChildren || hierarchyChildren).get(id) || [];
+function mcValue(sum, key) {
+  if (!sum) return null;
+  const {costC, adSalesC, adOrders, clicks, impressions} = sum;
+  const value = {cost:costC/100, sales:adSalesC/100, orders:adOrders,
+    acos:rate(costC,adSalesC), ctr:rate(clicks,impressions), cvr:rate(adOrders,clicks),
+    roas:ratio(adSalesC,costC)}[key];
+  return Number.isFinite(value) ? Number(value.toFixed(2)) : null;
+}
+function mcIndexPlacements(dates) {
+  const key = dates.map(row=>row.day).join(',');
+  if (mcIndexPeriod===key && mcIndexedPlacementRows===placementState.rows) return;
+  mcIndexPeriod = key;
+  mcIndexedPlacementRows = placementState.rows;
+  const selected = new Set(dates.map(row=>row.day));
+  const byId = new Map();
+  for (const row of placementState.rows) {
+    const first = reportWeek.slot(row.from), last = reportWeek.slot(row.to);
+    if (first===null || last===null || last<first) continue;
+    let covered = true;
+    for (let day=first; day<=last; day++) if (!selected.has(day)) {covered=false;break;}
+    if (!covered) continue;
+    const id=String(row.campaignId);
+    if (!byId.has(id)) byId.set(id, {sum:Object.fromEntries(mcPromotedFields.map(k=>[k,0])),strategies:new Set()});
+    const item=byId.get(id);
+    if (row.strategy) item.strategies.add(row.strategy);
+    for (const k of mcPromotedFields) item.sum[k]+=row[k];
+  }
+  mcPlacementSummaries = byId;
+  mcLastProjection = '';
+}
+function mcMatchesCampaign(item) {
+  if (!item) return false;
+  if (mcFilterCriteria.strategy && !item.strategies.has(mcFilterCriteria.strategy)) return false;
+  for (const key of mcFilterFields) {
+    const range=mcFilterCriteria[key];
+    if (!range) continue;
+    const val=mcValue(item.sum,key);
+    if (val===null || (range.min!=null && val<range.min) || (range.max!=null && val>range.max)) return false;
+  }
+  return true;
+}
+function mcCampaignAllowed(id) {
+  return mcProjectedIds===null || mcProjectedIds.has(String(id));
+}
+function mcCampaignsUnder(view) {
+  if (!view || view.demo) return [];
+  const byId = mcFullHierarchy || hierarchyById;
+  const node = byId.get(view.id);
+  if (!node) return [];
+  if (node.campaignId!=null) return [String(node.campaignId)];
+  const ids = new Set(), open=[node];
+  while (open.length) {
+    const cursor=open.pop();
+    if(cursor.kind==='campaign') ids.add(String(cursor.campaignId));
+    else open.push(...mcSourceChildren(cursor.id));
+  }
+  return [...ids];
+}
+function mcCampaignStrategies(){
+  const ids=mcCampaignsUnder(currentView());
+  const result=new Set();
+  for (const id of ids) for (const strategy of mcPlacementSummaries.get(id)?.strategies??[]) result.add(strategy);
+  return [...result].sort();
+}
+function mcCampaignInfo(){
+  const ids=mcCampaignsUnder(currentView());
+  return {total:ids.length,matched:ids.filter(id=>mcCampaignAllowed(id)).length,
+    missing:ids.filter(id=>!mcPlacementSummaries.has(id)).length};
+}
+function mcProjectHierarchy(whitelist) {
+  const views=new Map(), children=new Map(), populated=new Set();
+  // Keep routes (including the current route when zero campaigns match), but
+  // only put surviving branches in metric drill-down lists.
+  for (const [id,original] of mcFullHierarchy) {
+    if (original.demo) {views.set(id,original); continue;}
+    const blank = days.map(({day})=>({day,salesC:null,orders:null,costC:0,adSalesC:0,adOrders:0,clicks:0,impressions:0,ctr:null}));
+    views.set(id,{...original,rows:blank,presentDays:[],sourceRows:0,hasMetrics:false});
+  }
+  for (const group of mcFullHierarchy.values()) {
+    if (group.demo || group.kind!=='adgroup' || !whitelist.has(String(group.campaignId))) continue;
+    const present = new Set(group.presentDays);
+    for (let n=views.get(group.id); n; n=views.get(n.parent)) {
+      populated.add(n.id);
+      n.hasMetrics=true;
+      n.sourceRows+=group.sourceRows;
+      for(const row of group.rows){
+        if(!present.has(row.day))continue;
+        const target=n.rows[row.day-16];
+        for(const key of mcPromotedFields)target[key]+=row[key];
+        if(!n.presentDays.includes(row.day))n.presentDays.push(row.day);
+      }
+    }
+  }
+  for (const node of views.values()) {
+    if(!node.demo){
+      node.presentDays.sort((a,b)=>a-b);
+      for (const r of node.rows) r.ctr=rate(r.clicks,r.impressions);
+      if (!node.hasMetrics) node.rows=[];
+    }
+    if (node.parent && (node.demo || populated.has(node.id))) {
+      if (!children.has(node.parent)) children.set(node.parent,[]);
+      children.get(node.parent).push(node);
+    }
+  }
+  hierarchyById=views;
+  hierarchyChildren=children;
+}
+function mcRefreshCampaignScope(view,dates) {
+  if (!mcFullHierarchy) {mcFullHierarchy=hierarchyById;mcFullChildren=hierarchyChildren;}
+  mcIndexPlacements(dates);
+  const active=!view.demo && Object.keys(mcFilterCriteria).length>0;
+  const key=active ? mcIndexPeriod+'|'+JSON.stringify(mcFilterCriteria) : 'off';
+  if (mcLastProjection===key) return;
+  if (active) {
+    mcProjectedIds=new Set([...mcPlacementSummaries].filter(([,item])=>mcMatchesCampaign(item)).map(([id])=>id));
+    mcProjectHierarchy(mcProjectedIds);
+  }else{
+    mcProjectedIds=null;
+    hierarchyById=mcFullHierarchy;
+    hierarchyChildren=mcFullChildren;
+  }
+  mcLastProjection=key;
+  realSearchSelection=null;
+  cachedAttributeAnalysis=null;
+  cachedPairTerms=null;
+  bandActivityIndex=null;
+  hierarchyDraftSelection.context='';
+}
+function mcApplyConditions(criteria) {
+  const normalized={};
+  if (typeof criteria?.strategy==='string' && criteria.strategy) normalized.strategy=criteria.strategy;
+  for (const key of mcFilterFields) {
+    const r=criteria?.[key];
+    if(!r)continue;
+    const min=r.min??null, max=r.max??null;
+    if (min===null && max===null) continue;
+    if ([min,max].some(x=>x!==null && (!Number.isFinite(x)||x<0)) ||
+        (min!==null && max!==null && min>max)) return false;
+    normalized[key]={min,max};
+  }
+  mcFilterCriteria=normalized;
+  render();
+  return true;
+}
+window.mcCampaignScope=Object.freeze({
+  getFilters:()=>JSON.parse(JSON.stringify(mcFilterCriteria)),
+  setFilters:mcApplyConditions,
+  getStrategies:mcCampaignStrategies,
+  available:()=>!currentView()?.demo,
+  info:mcCampaignInfo,
+  allowed:mcCampaignAllowed,
+  campaignMetrics(id){
+    const entry=mcPlacementSummaries.get(String(id));
+    return entry?{sum:entry.sum,strategies:[...entry.strategies]}:null;
+  }
+});
+
 function render(){
   const dates=selectedDays(days);
+  mcRefreshCampaignScope(currentView(),dates);
   const view=currentView();
   const rows=chosen();
   beginHierarchyDraftScope(view,dates);
@@ -5672,9 +6251,12 @@ function render(){
   bindPress('cal','day',state.selection);bindPress('ranges','range',state.selection);
   renderHierarchy(dates,totals);
   syncReviewWorkspace(view);
+  window.mcCampaignFilterUI?.refresh();
   updateSourceNotes(view);
   document.querySelectorAll('[data-performance]').forEach(el=>{el.hidden=!rows.length;});
   $('hier-empty').hidden=Boolean(rows.length);
+  $('hier-empty-title').textContent=mcProjectedIds!==null?'没有符合条件的推广商品记录':'该层级的投放数据待接入';
+  $('hier-empty').querySelector('p').textContent=mcProjectedIds!==null?'可调整活动条件或统计日期。':'接入对应广告报表后，这里可查看当前范围的花费、销售额、订单及每日趋势。';
   const page=currentReviewPage();
   if(page==='bands'){renderCampaignBands(view,dates);return;}
   if(page==='pair'){renderProductPair(view,dates);return;}
@@ -5698,7 +6280,7 @@ function render(){
   if(page==='method')return;
   renderBusinessOverview(view,dates);
   renderComparison(dates);
-  renderPlacements(view,dates);
+  if(!mcInlineAds.render(view,dates))renderPlacements(view,dates);
   if(view.kind==='adgroup'||view.kind==='keyword')syncHierarchyDraftControls();
   if(!rows.length)return;
   const t=totals(rows);
@@ -5738,6 +6320,237 @@ $('thead').addEventListener('click',e=>{
   $('thead').querySelector('[data-sort="'+key+'"]').focus({preventScroll:true});
 });
 $('print').addEventListener('click',()=>window.print());
+(function () {
+'use strict';
+
+const el = id => document.getElementById(id);
+const esc = text => String(text).replace(/[&<>"']/g, char =>
+  ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[char]));
+const columns = [
+  {key:'strategy',label:'竞价策略',unit:''},
+  {key:'cost',label:'花费',unit:'USD'},
+  {key:'sales',label:'销售额',unit:'USD'},
+  {key:'orders',label:'订单',unit:'单'},
+  {key:'acos',label:'ACOS',unit:'%'},
+  {key:'ctr',label:'点击率',unit:'%'},
+  {key:'cvr',label:'转化率',unit:'%'},
+  {key:'roas',label:'ROAS',unit:'×'}
+];
+
+function mountCampaignFilters() {
+  const bar = document.querySelector('.review-filters');
+  if (!bar) return false;
+  const date = (el('filter-week') || el('filter-time'))?.closest('label');
+  const button = document.createElement('button');
+  button.id = 'filter-open';
+  button.className = 'outline';
+  button.type = 'button';
+  button.hidden = true;
+  button.textContent = '活动筛选';
+  button.setAttribute('aria-expanded','false');
+  button.setAttribute('aria-controls','filter-panel');
+  if (date && date.parentElement === bar) date.after(button);
+  else bar.append(button);
+  const panel = document.createElement('section');
+  panel.id = 'filter-panel';
+  panel.hidden = true;
+  const chips = document.createElement('div');
+  chips.id = 'active-filters';
+  chips.hidden = true;
+  bar.after(panel, chips);
+  initializeCampaignFilters();
+  return true;
+}
+
+function syncFilterUI() {
+  const scope = window.mcCampaignScope;
+  if (!el('filter-open') && !mountCampaignFilters()) return;
+  const panel = el('filter-panel');
+  const supported = Boolean(scope?.available());
+  const open = el('filter-open');
+  open.hidden = !supported;
+  if (!supported) {
+    open.setAttribute('aria-expanded','false');
+    panel.hidden = true;
+    el('active-filters').hidden = true;
+    return;
+  }
+  const activeFilters = scope.getFilters();
+  const active = Object.keys(activeFilters).length;
+  open.setAttribute('aria-expanded', String(!panel.hidden));
+  open.setAttribute('aria-controls', 'filter-panel');
+  open.textContent = active ? '活动筛选（' + active + '）' : '活动筛选';
+
+  const chips = el('active-filters');
+  chips.hidden = active === 0;
+  const conditions = [];
+  for (const col of columns) {
+    const f = activeFilters[col.key];
+    if (f == null) continue;
+    let description;
+    if (col.key === 'strategy') {
+      description = String(f);
+    } else {
+      const unit = col.unit ? ' ' + col.unit : '';
+      if (f.min != null && f.max != null) description = f.min === f.max ? '= ' + f.min : f.min + ' – ' + f.max;
+      else description = f.min != null ? '≥ ' + f.min : '≤ ' + f.max;
+      description += unit;
+    }
+    const label = col.label + ' ' + description;
+    conditions.push('<button type="button" class="condition-chip" data-remove-filter="' + esc(col.key) +
+      '" aria-label="' + esc('移除条件：' + label) + '">' + esc(label) + '<span aria-hidden="true">×</span></button>');
+  }
+  const info = active ? scope.info?.() : null;
+  const count = info && Number.isInteger(info.matched) && Number.isInteger(info.total)
+    ? '命中 '+info.matched+' / '+info.total+' 个活动' : '已筛选';
+  chips.innerHTML = active ? '<span class="condition-prefix" aria-live="polite">'+esc(count)+'</span>' + conditions.join('') +
+    '<button type="button" class="condition-clear" data-clear-filters>清空条件</button>' : '';
+  if (!panel.hidden) updateStrategyOptions(el('filter-strategy').value || '');
+}
+
+function filterMetrics() {
+  return columns.filter(col => col.key !== 'strategy');
+}
+
+function updateStrategyOptions(selected) {
+  const values = [...new Set([...window.mcCampaignScope.getStrategies(), selected].filter(Boolean))];
+  const select = el('filter-strategy');
+  const signature = JSON.stringify(values);
+  if (select.dataset.choices !== signature) {
+    select.innerHTML = '<option value="">全部策略</option>' + values.map(value =>
+      '<option value="' + esc(value) + '">' + esc(value) + '</option>').join('');
+    select.dataset.choices = signature;
+  }
+  select.value = selected;
+}
+
+function clearFilterError() {
+  el('filter-error').textContent = '';
+  el('filter-error').hidden = true;
+  for (const node of el('filter-panel').querySelectorAll('[aria-invalid]')) {
+    node.removeAttribute('aria-invalid');
+    node.removeAttribute('aria-describedby');
+  }
+}
+
+function filterError(input, text) {
+  const message = el('filter-error');
+  message.textContent = text;
+  message.hidden = false;
+  input.setAttribute('aria-invalid', 'true');
+  input.setAttribute('aria-describedby', 'filter-error');
+  input.focus();
+}
+
+function openFilterPanel() {
+  const panel = el('filter-panel');
+  panel.hidden = false;
+  clearFilterError();
+  const activeFilters = window.mcCampaignScope.getFilters();
+  updateStrategyOptions(activeFilters.strategy || '');
+  for (const col of filterMetrics()) {
+    for (const bound of ['min', 'max']) {
+      panel.querySelector('[data-' + bound + '="' + col.key + '"]').value = activeFilters[col.key]?.[bound] ?? '';
+    }
+  }
+  el('filter-open').setAttribute('aria-expanded', 'true');
+  el('filter-strategy').focus({preventScroll:true});
+}
+
+function closeFilterPanel() {
+  el('filter-panel').hidden = true;
+  el('filter-open').setAttribute('aria-expanded', 'false');
+  el('filter-open').focus({preventScroll:true});
+}
+
+function submitCampaignFilters() {
+  const form = el('filter-panel');
+  clearFilterError();
+  const result = {};
+  const selected = el('filter-strategy').value;
+  if (selected) result.strategy = selected;
+
+  for (const col of filterMetrics()) {
+    const range = {min:null, max:null};
+    for (const bound of ['min','max']) {
+      const input = form.querySelector('[data-' + bound + '="' + col.key + '"]');
+      const raw = input.value.trim();
+      if (raw === '') continue;
+      const isOrderCount = col.key === 'orders';
+      const pattern = isOrderCount ? /^\d+$/ : /^(?:\d+(?:\.\d+)?|\.\d+)$/;
+      const value = Number(raw);
+      if (!pattern.test(raw) || !Number.isFinite(value) || value > Number.MAX_SAFE_INTEGER) {
+        filterError(input, col.label + '的' + (bound === 'min' ? '最低值' : '最高值') +
+          (isOrderCount ? '须为大于或等于 0 的整数。' : '须为大于或等于 0 的数值。'));
+        return;
+      }
+      range[bound] = value;
+    }
+    if (range.min != null && range.max != null && range.min > range.max) {
+      filterError(form.querySelector('[data-max="' + col.key + '"]'), col.label + '的最高值须大于或等于最低值。');
+      return;
+    }
+    if (range.min != null || range.max != null) result[col.key] = range;
+  }
+  closeFilterPanel();
+  window.mcCampaignScope.setFilters(result);
+}
+
+function initializeCampaignFilters() {
+  const panel = el('filter-panel');
+  panel.setAttribute('aria-labelledby', 'filter-heading');
+  const ranges = filterMetrics().map(col => {
+    const unit = col.unit ? '<span class="filter-unit">' + esc(col.unit) + '</span>' : '';
+    const inputs = ['min','max'].map((bound, i) => {
+      const label = i ? '最高值' : '最低值';
+      return '<input type="text" inputmode="' + (col.key === 'orders' ? 'numeric' : 'decimal') +
+        '" data-' + bound + '="' + esc(col.key) + '" aria-label="' + esc(col.label + label) +
+        '" placeholder="' + label + '" autocomplete="off" spellcheck="false">';
+    });
+    return '<div class="filter-control"><div class="filter-caption">' + esc(col.label) + unit +
+      '</div><div class="range-fields">' + inputs[0] + '<span aria-hidden="true">–</span>' + inputs[1] + '</div></div>';
+  });
+  panel.innerHTML = '<div class="filter-heading"><div><h2 id="filter-heading">筛选广告活动</h2>' +
+    '<p>按所选日期的整活动指标筛选，上下限均包含在内。同时满足各项条件的活动用于全页汇总、趋势和明细。</p></div></div>' +
+    '<div class="filter-grid"><label class="filter-control" for="filter-strategy"><span class="filter-caption">竞价策略</span>' +
+    '<select id="filter-strategy"><option value="">全部策略</option></select></label>' + ranges.join('') + '</div>' +
+    '<p id="filter-error" role="alert" hidden></p>' +
+    '<div class="filter-actions"><button type="button" class="condition-clear" id="filter-reset">清空筛选</button>' +
+    '<div><button type="button" id="filter-close" class="secondary">取消</button>' +
+    '<button type="button" id="filter-apply" class="primary">应用筛选</button></div></div>';
+  el('filter-open').addEventListener('click', () => {
+    if (panel.hidden) openFilterPanel(); else closeFilterPanel();
+  });
+  el('filter-close').addEventListener('click', closeFilterPanel);
+  el('filter-reset').addEventListener('click', () => {
+    closeFilterPanel();
+    window.mcCampaignScope.setFilters({});
+  });
+  panel.addEventListener('input', clearFilterError);
+  panel.addEventListener('keydown', event => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeFilterPanel();
+    } else if (event.key === 'Enter' && !event.isComposing && event.target.matches('input')) {
+      event.preventDefault();
+      submitCampaignFilters();
+    }
+  });
+  el('filter-apply').addEventListener('click', submitCampaignFilters);
+  el('active-filters').addEventListener('click', event => {
+    const button = event.target.closest('[data-remove-filter],[data-clear-filters]');
+    if (!button) return;
+    const next = {...window.mcCampaignScope.getFilters()};
+    delete next[button.dataset.removeFilter];
+    closeFilterPanel();
+    window.mcCampaignScope.setFilters(button.hasAttribute('data-clear-filters') ? {} : next);
+  });
+}
+
+window.mcCampaignFilterUI = {refresh: syncFilterUI};
+})();
+
+
 initializeHierarchy();
 restoreBusinessData();
 initReviewWorkspace();
