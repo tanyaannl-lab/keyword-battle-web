@@ -7,7 +7,7 @@
   <title>广告看板｜MC 美国站</title>
   <link rel="stylesheet" href="../assets/styles.css">
   <link rel="stylesheet" href="../assets/workspace-nav.css?v=20261126-ads">
-  <link rel="stylesheet" href="../assets/mc-ads-dashboard.css?v=20261126">
+  <link rel="stylesheet" href="../assets/mc-ads-dashboard.css?v=20261126-weekly1">
 </head>
 <body>
 <div class="shell workspace-shell ads-workspace" id="appShell" hidden>
@@ -36,6 +36,7 @@
     <header class="topbar">
       <h1>广告看板</h1>
       <div class="top-actions">
+        <label class="ads-week" id="weekControl" hidden>报表周 <select id="adWeek" aria-label="选择广告报表周"></select></label>
         <span class="desktop-only" id="userEmail"></span>
         <button class="btn btn-ghost btn-sm" id="logoutBtn" type="button">退出</button>
       </div>
@@ -53,7 +54,8 @@
 <noscript>请启用 JavaScript 后查看广告看板。</noscript>
 <script src="../assets/config.js"></script>
 <script src="../assets/auth-client.js"></script>
-<script src="../assets/mc-ads-dashboard-frame.js?v=20261126"></script>
-<script src="../assets/mc-ads-dashboard.js?v=20261126"></script>
+<script src="../assets/mc-ads-dashboard-frame.js?v=20261126-weekly1"></script>
+<script src="../assets/mc-ads-business.js?v=20261126-weekly1"></script>
+<script src="../assets/mc-ads-dashboard.js?v=20261126-weekly1"></script>
 </body>
 </html>

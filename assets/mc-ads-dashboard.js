@@ -3,40 +3,57 @@
   const id = name => document.getElementById(name);
   const shell = id('appShell'), frame = id('adsFrame'), panel = id('statusPanel');
   const loading = id('loading'), status = id('status'), retry = id('retry');
-  const config = window.KB_CONFIG;
-  const project = 'https://peykqsnlistkhrqsiulx.supabase.co';
+  const picker = id('adWeek'), config = window.KB_CONFIG;
   const login = '../index.html?next=ads-dashboard';
-  const release = {
-    week: '2026-11-16', bytes: 1920570,
-    sha256: '4f3caf182f2b0fa8ae5655d7c26eeb2a29de7e1d2b72f03596382941824c9253',
-  };
-  let request = null;
-  let activeUser = null;
+  const project = 'https://peykqsnlistkhrqsiulx.supabase.co';
+  const maxRaw = 64 * 1024 * 1024, maxPacked = 16 * 1024 * 1024;
+  let request, selection, auth, template, weeks = [];
+
+  function clearWeek() {
+    selection?.abort();
+    selection = null;
+    window.MCAdsFrame?.clear(frame);
+    frame.hidden = true;
+    panel.hidden = false;
+    retry.hidden = true;
+  }
 
   function reset() {
     request?.abort();
     request = null;
-    window.MCAdsFrame?.clear(frame);
-    frame.hidden = true;
-    shell.hidden = true;
-    panel.hidden = false;
-    retry.hidden = true;
+    clearWeek();
+    auth = null;
+    weeks = [];
+    picker.replaceChildren();
+    id('weekControl').hidden = true;
     id('userEmail').textContent = '';
-    activeUser = null;
+    shell.hidden = true;
+    loading.hidden = false;
+    loading.textContent = '正在验证登录状态…';
   }
 
-  async function readDashboard(value) {
-    if (!value || value.week !== release.week || value.encoding !== 'gzip+base64' ||
-        value.bytes !== release.bytes || value.sha256 !== release.sha256 ||
-        typeof value.content !== 'string' || value.content.length > 4 * 1024 * 1024) {
-      throw new Error('看板文件与当前页面版本不一致，请刷新页面后重试。');
-    }
-    if (!window.DecompressionStream || !window.crypto?.subtle) {
-      throw new Error('请用新版 Chrome、Edge、Safari 或 Firefox 打开广告看板。');
-    }
-    const zipped = Uint8Array.from(atob(value.content), c => c.charCodeAt(0));
+  async function rpc(name, args, signal) {
+    const res = await fetch(project + '/rest/v1/rpc/' + name, {
+      method: 'POST', cache: 'no-store', redirect: 'error', signal,
+      headers: {'Content-Type':'application/json', apikey:config.SUPABASE_PUBLISHABLE_KEY,
+        Authorization:'Bearer ' + auth.session.access_token}, body:JSON.stringify(args)
+    });
+    if (res.status === 401) throw new Error('登录已过期，请重新加载。');
+    if (res.status === 403) throw new Error('当前账号没有 MC 美国站广告看板的查看权限。');
+    if (res.status === 404) throw new Error('数据库的广告周报更新尚未安装，请先运行本次 SQL。');
+    if (!res.ok) throw new Error('后台暂时无法读取，请重试。');
+    return res.json();
+  }
+
+  async function readFeed(value, week) {
+    if (!value || value.week !== week || value.format !== 'json-v1' || value.encoding !== 'gzip+base64' ||
+        !Number.isSafeInteger(value.bytes) || value.bytes < 1 || value.bytes > maxRaw ||
+        !/^[a-f0-9]{64}$/.test(value.sha256) || typeof value.content !== 'string' ||
+        value.content.length > 4 * Math.ceil(maxPacked / 3)) throw new Error('后台返回的周报格式或大小异常。');
+    if (!window.DecompressionStream || !window.crypto?.subtle) throw new Error('请用新版浏览器打开广告看板。');
+    const zipped = Uint8Array.from(atob(value.content), x => x.charCodeAt(0));
     const reader = new Blob([zipped]).stream().pipeThrough(new DecompressionStream('gzip')).getReader();
-    const data = new Uint8Array(release.bytes);
+    const data = new Uint8Array(value.bytes);
     let offset = 0;
     try {
       while (true) {
@@ -44,80 +61,127 @@
         if (part.done) break;
         if (offset + part.value.length > data.length) {
           await reader.cancel();
-          throw new Error('看板文件大小异常。');
+          throw new Error('周报文件大小异常。');
         }
-        data.set(part.value, offset);
+        data.set(part.value,offset);
         offset += part.value.length;
       }
-    } finally {
-      reader.releaseLock();
+    } finally { reader.releaseLock(); }
+    const digest = new Uint8Array(await crypto.subtle.digest('SHA-256',data));
+    if (offset !== value.bytes || Array.from(digest,b=>b.toString(16).padStart(2,'0')).join('') !== value.sha256) {
+      throw new Error('周报数据校验失败，请重新加载。');
     }
-    const hash = new Uint8Array(await crypto.subtle.digest('SHA-256', data));
-    if (offset !== release.bytes || Array.from(hash, b => b.toString(16).padStart(2, '0')).join('') !== release.sha256) {
-      throw new Error('看板文件校验失败，请重新加载。');
-    }
-    return new TextDecoder('utf-8', {fatal: true}).decode(data);
+    const feed = JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(data));
+    if (feed.week !== week || !Array.isArray(feed.catalog) || !feed.actualPack) throw new Error('广告数据与所选报表周不一致。');
+    return feed;
   }
 
-  async function openDashboard() {
-    reset();
-    const current = new AbortController();
-    request = current;
-    loading.hidden = false;
-    loading.textContent = '正在验证登录状态…';
-    status.textContent = '正在读取广告看板…';
+  async function getTemplate(signal) {
+    if (template) return template;
+    const res = await fetch('../assets/mc-ads-view.html?v=20261126-weekly1', {signal,redirect:'error'});
+    if (!res.ok) throw new Error('看板页面文件未能加载，请检查网页包是否已完整发布。');
+    template = await res.text();
+    return template;
+  }
+
+  function validWeek(week) {
+    if (typeof week !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(week)) return false;
+    const day = new Date(week + 'T00:00:00Z');
+    return Number.isFinite(day.getTime()) && day.getUTCDay() === 1 && day.toISOString().slice(0,10) === week;
+  }
+
+  function weekLabel(week) {
+    const end = new Date(week + 'T00:00:00Z');
+    end.setUTCDate(end.getUTCDate()+6);
+    return week.replaceAll('-','/') + '–' + end.toISOString().slice(5,10).replace('-','/');
+  }
+
+  function showError(error) {
+    status.textContent = error instanceof TypeError ? '网络连接或数据加载失败，请重新加载。' : error.message;
+    panel.hidden = false;
+    retry.hidden = false;
+  }
+
+  async function chooseWeek(week) {
+    clearWeek();
+    const run = new AbortController();
+    selection = run;
+    status.textContent = '正在读取所选周的广告数据…';
+    let business = {status:'loading',week,rows:[],loadedDays:0,failedDates:[]};
+    function receive(value) {
+      if (selection !== run) return;
+      business = value;
+      MCAdsFrame.updateBusiness(frame,week,value);
+    }
+    void MCAdsBusiness.readWeek(week,rpc,run.signal,receive).then(receive).catch(() => {
+      receive({...business,status:business.loadedDays ? 'partial':'error'});
+    });
     try {
-      if (config?.SUPABASE_URL?.replace(/\/$/, '') !== project || !window.KBAuth || !window.MCAdsFrame) {
-        throw new Error('站点配置未就绪，请刷新页面。');
-      }
-      const auth = await KBAuth.requireAuth(login);
-      if (request !== current || !auth) return;
-      if (!auth.session?.access_token || !auth.user?.id) { location.replace(login); return; }
-      activeUser = auth.user.id;
-      id('userEmail').textContent = auth.user.email || '';
-      loading.hidden = true;
-      shell.hidden = false;
-      const res = await fetch(project + '/rest/v1/rpc/mc_ads_dashboard_review_read', {
-        method: 'POST', cache: 'no-store', redirect: 'error', signal: current.signal,
-        headers: { 'Content-Type': 'application/json', apikey: config.SUPABASE_PUBLISHABLE_KEY,
-          Authorization: 'Bearer ' + auth.session.access_token },
-        body: '{}',
-      });
-      if (request !== current) return;
-      if (res.status === 403) throw new Error('当前账号没有 MC 美国站广告看板的查看权限。');
-      if (res.status === 401) throw new Error('登录已过期，请重新加载后登录。');
-      if (res.status === 404) throw new Error('广告看板数据尚未发布。');
-      if (!res.ok) throw new Error('广告看板暂时无法读取，请重试。');
-      const html = await readDashboard(await res.json());
-      if (request !== current) return;
-      await MCAdsFrame.mount(frame, html, activeUser, release.week);
-      if (request !== current) return;
+      const [html,feed] = await Promise.all([getTemplate(run.signal),
+        rpc('mc_ads_dashboard_week_read',{p_week:week},run.signal).then(data=>readFeed(data,week))]);
+      if (selection !== run) return;
+      MCAdsFrame.mount(frame,html,auth.user.id,feed,business);
       panel.hidden = true;
       frame.hidden = false;
     } catch (error) {
-      if (request !== current || current.signal.aborted) return;
-      const message = error instanceof TypeError ? '网络连接或文件读取失败，请重新加载。' : error.message;
-      if (shell.hidden) {
-        loading.textContent = message;
-      } else {
-        status.textContent = message;
-        retry.hidden = false;
-      }
+      if (selection !== run) return;
+      run.abort();
+      showError(error);
     }
   }
 
-  retry.addEventListener('click', openDashboard);
+  async function openDashboard() {
+    const preferred = picker.value || new URL(location.href).searchParams.get('week');
+    reset();
+    const run = new AbortController();
+    request = run;
+    try {
+      if (config?.SUPABASE_URL?.replace(/\/$/,'') !== project || !window.KBAuth || !window.MCAdsFrame || !window.MCAdsBusiness) {
+        throw new Error('站点文件未就绪，请刷新页面。');
+      }
+      const result = await KBAuth.requireAuth(login);
+      if (request !== run || !result) return;
+      if (!result.session?.access_token || !result.user?.id) { location.replace(login); return; }
+      auth = result;
+      id('userEmail').textContent = auth.user.email || '';
+      loading.hidden = true;
+      shell.hidden = false;
+      status.textContent = '正在读取可查看的报表周…';
+      const available = await rpc('mc_ads_dashboard_weeks',{},run.signal);
+      if (request !== run) return;
+      if (!Array.isArray(available)) throw new Error('周报目录格式异常，请重新加载。');
+      weeks = [...new Set(available.filter(x=>x?.format === 'json-v1' && validWeek(x.week)).map(x=>x.week))].sort().reverse();
+      if (!weeks.length) throw new Error('还没有已发布的广告周报。');
+      picker.replaceChildren(...weeks.map(w=>new Option(weekLabel(w),w)));
+      id('weekControl').hidden = false;
+      picker.value = weeks.includes(preferred) ? preferred : weeks[0];
+      await chooseWeek(picker.value);
+    } catch (error) {
+      if (request !== run) return;
+      if (shell.hidden) loading.textContent = error.message;
+      else showError(error);
+    }
+  }
+
+  picker.addEventListener('change', () => {
+    if (!weeks.includes(picker.value)) return;
+    const address = new URL(location.href);
+    address.searchParams.set('week',picker.value);
+    history.replaceState(null,'',address);
+    void chooseWeek(picker.value);
+  });
+  retry.addEventListener('click',openDashboard);
   id('logoutBtn').addEventListener('click', async () => {
     reset();
     try { await KBAuth.logout(); } finally { location.replace('../index.html'); }
   });
-  window.addEventListener('pagehide', reset);
-  window.addEventListener('pageshow', event => { if (event.persisted) void openDashboard(); });
-  window.addEventListener('storage', event => {
-    if (event.key !== null && event.key !== config?.SESSION_KEY) return;
+  window.addEventListener('pagehide',reset);
+  window.addEventListener('pageshow',e=>{if(e.persisted) void openDashboard();});
+  window.addEventListener('storage',e=>{
+    if (e.key !== null && e.key !== config?.SESSION_KEY) return;
     const saved = window.KBAuth?.loadSession();
     if (!saved?.access_token) { reset(); location.replace(login); }
-    else if (saved.user?.id !== activeUser) void openDashboard();
+    else if (saved.user?.id !== auth?.user?.id) void openDashboard();
   });
   void openDashboard();
 })();

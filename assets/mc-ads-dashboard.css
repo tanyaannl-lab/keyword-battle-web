@@ -14,3 +14,12 @@
   .ads-workspace .ads-content { flex: 1; height: auto }
   .ads-workspace .topbar { flex-basis: 44px; height: 44px }
 }
+
+.ads-week { display: inline-flex; align-items: center; gap: .5rem; white-space: nowrap; color: var(--ws-muted); font-size: 13px }
+.ads-week select { border: 1px solid var(--ws-line); border-radius: 6px; padding: 5px 3px; background: #fff; color: var(--ws-ink); font: inherit }
+@media(max-width:460px) {
+  .ads-workspace .topbar { padding: 0 8px; gap: 4px }
+  .ads-workspace .topbar h1 { font-size: 16px; white-space: nowrap }
+  .ads-workspace .top-actions { gap: 5px }
+  .ads-week { gap: 3px; font-size: 12px }
+}
