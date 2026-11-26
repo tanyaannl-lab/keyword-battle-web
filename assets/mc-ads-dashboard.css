@@ -1,0 +1,16 @@
+.ads-workspace { --ws-pane: 0px }
+.ads-workspace .workspace-sidebar { grid-template-columns: minmax(0, 1fr) }
+.ads-workspace .workspace-rail { border-right: 0 }
+.ads-workspace .ads-content { display: flex; flex-direction: column; height: 100vh; height: 100dvh; min-height: 0 }
+.ads-workspace .topbar { flex: 0 0 52px; position: static; height: 52px }
+.ads-workspace .topbar h1 { color: var(--ws-ink); font-size: 18px; line-height: 1.3; margin: 0 }
+.ads-body { flex: 1; min-height: 0; background: #f4f7f5 }
+.ads-body iframe { display: block; height: 100%; width: 100%; border: 0 }
+.ads-state { margin: 32px; color: var(--ws-muted) }
+.ads-workspace [hidden] { display: none }
+@media(max-width:760px) {
+  .ads-workspace:not([hidden]) { display: flex; height: 100vh; height: 100dvh; flex-direction: column; align-items: stretch }
+  .ads-workspace .workspace-sidebar { position: static; flex: none }
+  .ads-workspace .ads-content { flex: 1; height: auto }
+  .ads-workspace .topbar { flex-basis: 44px; height: 44px }
+}

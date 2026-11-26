@@ -163,6 +163,10 @@
   .workspace-keywords [id].card{scroll-margin-top:112px}
 }
 
+@media(max-width:480px){
+  .workspace-module{flex:1 0 auto;flex-direction:column;gap:3px;min-height:44px;padding:3px 2px;font-size:12px}
+}
+
 @media(max-width:400px){
   .workspace-keywords .task-head,.workspace-sales .sales-detail-pager{flex-wrap:wrap}
 }

@@ -50,6 +50,8 @@
   const email=document.getElementById('email');
   const password=document.getElementById('password');
   const message=document.getElementById('authMessage');
+  const nextPage = new URLSearchParams(location.search).get('next') === 'ads-dashboard'
+    ? 'sales/ads-dashboard.html' : 'tool/index.html';
   let mode='login';
 
   function setMode(next){
@@ -70,7 +72,7 @@
 
   const current=await KBAuth.getValidSession();
   if(current){
-    location.replace('tool/index.html');
+    location.replace(nextPage);
     return;
   }
 
@@ -83,11 +85,11 @@
     try{
       if(mode==='login'){
         await KBAuth.login(eMail,pwd);
-        location.replace('tool/index.html');
+        location.replace(nextPage);
       }else{
         const data=await KBAuth.signup(eMail,pwd);
         if(data?.access_token){
-          location.replace('tool/index.html');
+          location.replace(nextPage);
         }else{
           showMessage('账号已创建。请按邮箱中的确认邮件完成验证后再登录。','success');
           setMode('login');
