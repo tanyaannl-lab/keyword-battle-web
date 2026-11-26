@@ -78,7 +78,7 @@
 
   async function getTemplate(signal) {
     if (template) return template;
-    const res = await fetch('../assets/mc-ads-view.html?v=20261126-inline-scope', {signal,redirect:'error'});
+    const res = await fetch('../assets/mc-ads-view.html?v=20261126-level-sort1', {signal,redirect:'error'});
     if (!res.ok) throw new Error('看板页面文件未能加载，请检查网页包是否已完整发布。');
     template = await res.text();
     return template;

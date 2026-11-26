@@ -291,6 +291,13 @@ html[data-hier-demo="true"] .hero{background:linear-gradient(106deg,#24374b,#345
 @media(max-width:700px){.review-console #filter-panel{margin:0 9px 10px}.review-console #active-filters{padding:0 12px}}
 
 </style>
+<style>
+button.mc-level-sort{appearance:none;border:0;padding:3px 0;min-height:26px;display:inline-flex;align-items:baseline;gap:4px;vertical-align:middle;font:inherit;font-weight:inherit;letter-spacing:inherit;color:inherit;background:transparent;cursor:pointer;white-space:nowrap}
+button.mc-level-sort span{display:inline-block;min-width:.8em;text-align:center;font-family:Arial,sans-serif;font-size:.93em;color:#657d76}
+button.mc-level-sort:hover,th[aria-sort=ascending]>button.mc-level-sort,th[aria-sort=descending]>button.mc-level-sort,th[aria-sort=ascending]>button.mc-level-sort span,th[aria-sort=descending]>button.mc-level-sort span{color:#07624e}
+button.mc-level-sort:focus-visible{outline:2px solid #15795d;outline-offset:2px;border-radius:3px}
+
+</style>
 </head>
 <body>
 <nav class="site-nav" aria-label="页面导航"><div class="shell nav-inner"><a class="logo" href="#top" data-section-anchor><span class="brandmark">MC</span><span>经营分析</span></a><span class="app-name">SP 广告看板</span><div class="nav-right"><span class="preview" hidden></span><button class="outline" id="print" type="button"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" aria-hidden="true"><path d="M7 8V3h10v5M6 17H3V9h18v8h-3M7 14h10v7H7z"/><path d="M16 11h2"/></svg>打印</button></div></div></nav>
@@ -960,6 +967,36 @@ function realSearchRows(view,period){
   return realSearchSelection;
 }
 
+const mcTermMetricKeys=['cost','sales','orders','clicks','ctr','cvr','acos','roas'];
+const mcTermSortLabels=['广告花费','归因销售额','广告订单','点击量','点击率','转化率','ACOS','ROAS'];
+const mcTermTextKeys=new Set(['query','group','target','matchType','root','subject','flags']);
+function mcTermSortHeaders(scope,leading,trailing=[]){
+  const attr=scope.startsWith('attr-');
+  mcLevelSort.onRender(scope,attr?drawAttributes:renderDiagnosis);
+  if(attr)mcLevelSort.onChange(scope,()=>{
+    if(scope==='attr-detail')attributeUI.detailPage=0;
+    else attributeUI.listPage=0;
+  });
+  else if(scope==='search-real')mcLevelSort.onChange(scope,()=>{diagnosisState.realPage=0;});
+  const metrics=mcTermMetricKeys.map((key,i)=>[key,mcTermSortLabels[i]]);
+  return [...leading,...metrics,...trailing].map(([key,label])=>key
+    ? mcLevelSort.th(scope,key,label,mcTermTextKeys.has(key)?'text':'number')
+    : '<th scope="col">'+hierarchyText(label)+'</th>').join('');
+}
+function mcSearchSortValue(row,key){
+  if(key==='query')return row.keyword?row.query:realSearchTerms[row.q];
+  if(key==='group')return [row.campaignLabel,row.groupLabel].filter(Boolean).join(' · ')||null;
+  if(key==='target')return row.keyword?row.keyword.label:realSearchTargets[row.t][0];
+  if(key==='matchType')return row.keyword?.matchType||null;
+  return hierarchySortMetric(row,key);
+}
+function mcAttributeSortValue(row,key){
+  if(key==='root'||key==='query'||key==='queryCount')return row[key];
+  if(key==='group')return row.groupLabel||row.groupId||null;
+  if(key==='target')return row.targetLabel||row.targetId||null;
+  return hierarchySortMetric(row,key);
+}
+
 function renderRealSearchTerms(view,period){
   const data=realSearchRows(view,period);
   if(diagnosisState.realScope!==data.key){
@@ -967,8 +1004,9 @@ function renderRealSearchTerms(view,period){
     diagnosisState.realPage=0;
   }
   const filter=diagnosisState.queryFilter,needle=(diagnosisState.searchText||'').toLowerCase();
-  const visible=data.rows.filter(row=>(filter==='all'||(filter==='zero'?row.costC>0&&row.adOrders===0:row.adOrders>0))&&
+  const matching=data.rows.filter(row=>(filter==='all'||(filter==='zero'?row.costC>0&&row.adOrders===0:row.adOrders>0))&&
     (!needle||realSearchTerms[row.q].toLowerCase().includes(needle)||realSearchTargets[row.t][0].includes(needle)));
+  const visible=mcLevelSort.rows('search-real',matching,mcSearchSortValue);
   const pages=Math.max(1,Math.ceil(visible.length/searchPageSize));
   const page=Math.max(0,Math.min(pages-1,diagnosisState.realPage||0));
   diagnosisState.realPage=page;
@@ -985,9 +1023,9 @@ function renderRealSearchTerms(view,period){
       '<option value="'+value+'"'+(value===filter?' selected':'')+'>'+label+'</option>').join('')+
     '</select></label><label class="hier-control">搜索词或投放 ID <input id="real-query-text" type="search" maxlength="250" value="'+
     hierarchyText(diagnosisState.searchText||'')+'"></label><button class="hier-action" type="submit">查询</button></form>';
-  const stats='<div class="diag-copy"><p>按买家搜索词、投放 ID 和广告组汇总，按广告花费降序排列。投放词原文待投放报告到齐后补入。</p>'+
+  const stats='<div class="diag-copy"><p>按买家搜索词、投放 ID 和广告组汇总。投放词原文待投放报告到齐后补入。</p>'+
     notes.map(note=>'<p>'+hierarchyText(note)+'</p>').join('')+'</div>';
-  const headers=['买家搜索词','广告活动 / 广告组','投放 ID / 类型','广告花费','归因销售额','广告订单','点击量',...performanceRatioHeaders,'操作'];
+  const headers=mcTermSortHeaders('search-real',[['query','买家搜索词'],['group','广告活动 / 广告组'],['target','投放 ID / 类型']],[[null,'操作']]);
   const lines=slice.map(row=>{
     const query=realSearchTerms[row.q], [targetId,targetType]=realSearchTargets[row.t], [campaignId,groupId]=realSearchGroups[row.g];
     const anchor=hierarchyById.get(row.common.at(-1))||view;
@@ -1009,7 +1047,7 @@ function renderRealSearchTerms(view,period){
       (queued?' disabled':'')+'>'+(queued?'已加入草稿':'加入调整草稿')+'</button></td></tr>';
   }).join('');
   const table=lines?'<div class="hier-table-wrap" tabindex="0" role="region" aria-label="买家搜索词表现"><table class="hier-table"><thead><tr>'+
-    headers.map(item=>'<th scope="col">'+item+'</th>').join('')+'</tr></thead><tbody>'+lines+'</tbody></table></div>':
+    headers+'</tr></thead><tbody>'+lines+'</tbody></table></div>':
     '<p class="diag-copy hier-empty">所选范围内没有符合条件的搜索词。</p>';
   const paging=pages>1?'<div class="diag-controls details-head"><button class="hier-action" type="button" data-query-page="-1"'+
     (!page?' disabled':'')+'>上一页</button><span>第 '+(page+1)+' / '+pages+' 页</span><button class="hier-action" type="button" data-query-page="1"'+
@@ -1019,6 +1057,75 @@ function renderRealSearchTerms(view,period){
 
 </script><script>
 'use strict';
+
+'use strict';
+
+const mcLevelSort = (() => {
+  const settings = new Map();
+  const onChanges = new Map();
+  const onRenders = new Map();
+  const collator = new Intl.Collator('zh-CN', {numeric:true, sensitivity:'base'});
+  const identity = scope => JSON.stringify([currentView().id, scope]);
+  const current = scope => settings.get(identity(scope)) || null;
+
+  function set(scope, key, direction, type='number') {
+    if(!['ascending','descending'].includes(direction))return;
+    settings.set(identity(scope), {key,direction,type});
+  }
+
+  function rows(scope, source, read) {
+    const state=current(scope);
+    if(!state)return source.slice();
+    const sign=state.direction==='ascending'?1:-1;
+    const text=state.type==='text';
+    const indexed=source.map(row=>{
+      const v=read(row,state.key);
+      const value=text?(v==null||String(v).trim()===''?null:String(v)):(Number.isFinite(v)?v:null);
+      return {row,value};
+    });
+    indexed.sort((a,b)=>{
+      if(a.value===null||b.value===null)return Number(a.value===null)-Number(b.value===null);
+      return sign*(text?collator.compare(a.value,b.value):a.value-b.value);
+    });
+    return indexed.map(r=>r.row);
+  }
+
+  function directionFor(scope,key) {
+    const s=current(scope);
+    return s?.key===key?s.direction:'none';
+  }
+  function head(scope,key,label,type='number') {
+    const dir=directionFor(scope,key);
+    const symbol=dir==='ascending'?'↑':dir==='descending'?'↓':'↕';
+    const next=dir==='ascending' || (dir==='none' && type!=='text')?'降序':'升序';
+    return '<button type="button" class="mc-level-sort" data-level-sort="'+hierarchyText(key)+'" data-sort-scope="'+hierarchyText(scope)+'" data-sort-type="'+hierarchyText(type)+'" title="按'+hierarchyText(label)+next+'排列">'+hierarchyText(label)+'<span aria-hidden="true">'+symbol+'</span></button>';
+  }
+  function th(scope,key,label,type='number',prefix='') {
+    return '<th scope="col" aria-sort="'+directionFor(scope,key)+'">'+prefix+head(scope,key,label,type)+'</th>';
+  }
+
+  document.addEventListener('click', event=>{
+    const button=event.target.closest?.('button[data-level-sort][data-sort-scope]');
+    if(!button)return;
+    event.preventDefault();
+    event.stopPropagation();
+    const {sortScope:scope,levelSort:key,sortType:type}=button.dataset;
+    const dir=directionFor(scope,key);
+    set(scope,key,dir==='ascending'||(dir==='none'&&type!=='text')?'descending':'ascending',type);
+    const id=identity(scope);
+    onChanges.get(scope)?.();
+    (onRenders.get(id) || render)();
+    const candidates=document.querySelectorAll('button[data-level-sort][data-sort-scope]');
+    for(const target of candidates){
+      if(target.dataset.sortScope===scope&&target.dataset.levelSort===key&&target.getClientRects().length){
+        target.focus({preventScroll:true});break;
+      }
+    }
+  },true);
+  return Object.freeze({head,th,rows,current,set,clear:scope=>settings.delete(identity(scope)),
+    onChange:(scope,fn)=>onChanges.set(scope,fn),
+    onRender:(scope,fn)=>onRenders.set(identity(scope),fn)});
+})();
 
 const hierarchyKinds={
   store:'店铺',operator:'运营人员',product:'产品',portfolio:'广告组合',campaign:'广告活动',adgroup:'广告组',keyword:'关键词'
@@ -1103,14 +1210,35 @@ function hierarchyPerformanceCells(metrics){
     : Array(4).fill('—');
   return values.map(value=>'<td>'+hierarchyText(value)+'</td>').join('')+performanceRatioCells(metrics);
 }
-function hierarchyPerformanceMarkup(rows,nameLabel,showBusiness,listId){
-  const headers=[...(showBusiness?operatingTableMetrics.map(metric=>metric.label):[]),
-    '广告花费','广告销售额','广告订单','点击量',...performanceRatioHeaders];
-  const selectAll=listId?hierarchyDraftMarkAll(listId)+' ':'';
-  return (listId?hierarchyDraftToolbar(listId):'')+'<div class="hier-table-wrap" role="region" aria-label="'+hierarchyText(nameLabel)+'数据" tabindex="0">'+
-    '<table class="hier-table"><thead><tr><th scope="col">'+selectAll+hierarchyText(nameLabel)+'</th>'+
-    headers.map(label=>'<th scope="col">'+hierarchyText(label)+'</th>').join('')+'</tr></thead><tbody>'+rows.join('')+'</tbody></table></div>';
+function hierarchySortMetric(metrics,key){
+  if(!metrics)return null;
+  switch(key){
+    case 'cost': return metrics.costC;
+    case 'sales': return metrics.adSalesC;
+    case 'orders': return metrics.adOrders;
+    case 'clicks': return metrics.clicks;
+    case 'ctr': return rate(metrics.clicks,metrics.impressions);
+    case 'cvr': return rate(metrics.adOrders,metrics.clicks);
+    case 'acos': return rate(metrics.costC,metrics.adSalesC);
+    case 'roas': return ratio(metrics.adSalesC,metrics.costC);
+    default: return null;
+  }
 }
+function hierarchyPerformanceMarkup(rows,nameLabel,showBusiness,listId,scope){
+  const columns=[['cost','广告花费'],['sales','广告销售额'],['orders','广告订单'],['clicks','点击量'],
+    ['ctr','点击率'],['cvr','转化率'],['acos','ACOS'],['roas','ROAS']];
+  if(showBusiness)columns.unshift(['totalOrders','总订单数'],['organicOrders','自然订单数'],['profitRate','利润率']);
+  const selectAll=listId?hierarchyDraftMarkAll(listId)+' ':'';
+  const nameHeader=mcLevelSort.th(scope,'name',nameLabel,'text',selectAll);
+  const headers=columns.map(([key,label])=>mcLevelSort.th(scope,key,label)).join('');
+  mcLevelSort.onRender(scope,()=>{
+    renderHierarchy(selectedDays(days),totals);
+    syncHierarchyDraftControls();
+  });
+  return (listId?hierarchyDraftToolbar(listId):'')+'<div class="hier-table-wrap" role="region" aria-label="'+hierarchyText(nameLabel)+'数据" tabindex="0">'+
+    '<table class="hier-table"><thead><tr>'+nameHeader+headers+'</tr></thead><tbody>'+rows.join('')+'</tbody></table></div>';
+}
+
 function hierarchyChildDraft(view,dates,row,campaign,group,metrics,listId){
   const kind=row.kind;
   const id=String(kind==='campaign'?campaign.campaignId??campaign.id:kind==='adgroup'?group.adGroupId??group.id:row.id);
@@ -1127,13 +1255,23 @@ function childPerformanceTable(list,dates,totalsFn,nameLabel,view=currentView())
   const listId=hierarchyDraftLists[view.kind];
   const selectedDates=Array.from(dates,day=>({day}));
   const path=listId?scopeAncestors(view):null;
-  const rows=list.map(node=>{
-    const selected=node.rows.filter(r=>dates.has(r.day)&&(!listId||!node.presentDays||node.presentDays.includes(r.day)));
+  const scope='hier-children';
+  if(!view.demo&&!mcLevelSort.current(scope))mcLevelSort.set(scope,'cost','descending');
+  const entries=list.map(node=>{
+    const selected=node.rows.filter(r=>dates.has(r.day)&&(!node.presentDays||node.presentDays.includes(r.day)));
     const t=node.hasMetrics&&selected.length?totalsFn(selected):null;
+    return {node,t,business:showBusiness?businessSummary(node,selectedDates):null};
+  });
+  const sorted=mcLevelSort.rows(scope,entries,({node,t,business},key)=>{
+    if(key==='name')return node.label;
+    if(key==='totalOrders')return business?.orders.value;
+    if(key==='organicOrders'||key==='profitRate')return business?.[key]?.value;
+    return hierarchySortMetric(t,key);
+  });
+  const rows=sorted.map(({node,t,business})=>{
     const description=nodeDescription(node);
     let caption=node.sampleOnly?'<span class="hier-tag">已载入小计</span>':'';
     if(!t)caption='<span class="hier-tag">'+(node.hasMetrics?'所选日期无记录':'待补')+'</span>';
-    const business=showBusiness?businessSummary(node,selectedDates):null;
     const operatingCells=business?operatingTableMetrics.map(({key,format})=>{
       const metric=business[key];
       return '<td title="'+hierarchyText(metric.note)+'">'+format(metric.value)+'</td>';
@@ -1144,16 +1282,17 @@ function childPerformanceTable(list,dates,totalsFn,nameLabel,view=currentView())
       (description?'<div class="hier-desc">'+hierarchyText(description)+'</div>':'')+'</td>'+operatingCells+
       hierarchyPerformanceCells(t)+'</tr>';
   });
-  return hierarchyPerformanceMarkup(rows,nameLabel,showBusiness,mcInlineAds.canUse(view)?null:listId);
+  return hierarchyPerformanceMarkup(rows,nameLabel,showBusiness,mcInlineAds.canUse(view)?null:listId,scope);
 }
 function hierarchyRealTargets(view,dates){
   const campaign=hierarchyById.get(view.parent);
   const {targets,note,omittedCount,omittedCents}=bandActivityTargets(view,dates,campaign.campaignId,view.adGroupId);
-  const listId=null;
-  const rows=targets.map(row=>'<tr><td>'+
+  const listId=null,scope='hier-targets';
+  const ordered=mcLevelSort.rows(scope,targets,(row,key)=>key==='name'?row.label:hierarchySortMetric(row,key));
+  const rows=ordered.map(row=>'<tr><td>'+
     hierarchyText(row.label)+'<div class="hier-desc">'+hierarchyText(row.matchType)+'</div></td>'+hierarchyPerformanceCells(row)+'</tr>');
   const omitted=omittedCount?' 有 '+countText(omittedCount)+' 条记录跨产品归属，花费 '+money(omittedCents)+'，未计入本层。':'';
-  const table=rows.length?hierarchyPerformanceMarkup(rows,'投放对象',false,listId):
+  const table=rows.length?hierarchyPerformanceMarkup(rows,'投放对象',false,listId,scope):
     '<p class="hier-empty">所选日期没有可归属到本广告组和产品的投放 ID。</p>';
   return '<p class="hier-empty">'+hierarchyText(note+omitted)+'</p>'+table+
     '<p class="hier-empty"><button type="button" class="hier-action" data-show-search>查看买家搜索词</button></p>';
@@ -1360,8 +1499,14 @@ function diagnosisSection(title,detail,body){
 }
 function diagnosticIssueTable(items,firstLabel,message){
   if(!items.length)return '<p class="hier-empty diag-copy">'+hierarchyText(message)+'</p>';
-  const headers=[firstLabel,'线索','广告花费','归因销售额','广告订单','点击量',...performanceRatioHeaders,'操作'];
-  const body=items.map(issue=>{
+  const scope=items[0].grain==='day'?'diagnosis-day':'diagnosis-child';
+  const headers=mcTermSortHeaders(scope,[['subject',firstLabel],['flags','线索']],[[null,'操作']]);
+  const sorted=mcLevelSort.rows(scope,items,(issue,key)=>{
+    if(key==='subject')return issue.grain==='day'?issue.from:issue.node.label;
+    if(key==='flags')return issue.flags.map(flag=>flag[1]).join(' · ');
+    return hierarchySortMetric(issue.metrics,key);
+  });
+  const body=sorted.map(issue=>{
     const id=diagnosisState.items.push(issue.payload)-1,m=issue.metrics;
     const subject=issue.grain==='day'?hierarchyText(issue.from.slice(5).replace('-','/')):hierarchyLink(issue.node.id,issue.node.label,'hier-name');
     const queued=window.hasQueuedReviewItem?.(issue.payload);
@@ -1372,7 +1517,7 @@ function diagnosticIssueTable(items,firstLabel,message){
       (queued?'已加入草稿':'加入调整草稿')+'</button></td></tr>';
   }).join('');
   return '<div class="hier-table-wrap" tabindex="0" role="region" aria-label="'+firstLabel+'复核线索"><table class="hier-table"><thead><tr>'+
-    headers.map(h=>'<th scope="col">'+h+'</th>').join('')+'</tr></thead><tbody>'+body+'</tbody></table></div>';
+    headers+'</tr></thead><tbody>'+body+'</tbody></table></div>';
 }
 // The second query illustrates a close variant for exact targets and a longer
 // search for phrase targets. Only demo keyword rows are broken down here.
@@ -1422,14 +1567,15 @@ function sampleQueryRows(view,selected){
 function diagnosticSearchTerms(view,period){
   if(!view.demo)return renderRealSearchTerms(view,period);
   const all=sampleQueryRows(view,period);
-  const visible=all.filter(row=>diagnosisState.queryFilter==='all'||(diagnosisState.queryFilter==='zero'?row.costC>0&&row.adOrders===0:row.adOrders>0));
+  const matching=all.filter(row=>diagnosisState.queryFilter==='all'||(diagnosisState.queryFilter==='zero'?row.costC>0&&row.adOrders===0:row.adOrders>0));
   const from=diagnosticDate(period[0].day),to=diagnosticDate(period.at(-1).day);
   const dateLabel=from===to?from:from+' 至 '+to;
   const select='<label class="hier-control">搜索词筛选 <select id="diag-query-filter">'+
     [['all','全部'],['zero','有花费零订单'],['orders','有归因订单']].map(([value,label])=>'<option value="'+value+'"'+(diagnosisState.queryFilter===value?' selected':'')+'>'+label+'</option>').join('')+
     '</select></label>';
   const caption='<div class="diag-controls details-head">'+select+'<span class="section-info">每行按买家查询及关联投放词汇总</span></div>';
-  const headers=['买家搜索词','关联投放词','匹配方式','广告花费','归因销售额','广告订单','点击量',...performanceRatioHeaders,'操作'];
+  const visible=mcLevelSort.rows('search-demo',matching,mcSearchSortValue);
+  const headers=mcTermSortHeaders('search-demo',[['query','买家搜索词'],['target','关联投放词'],['matchType','匹配方式']],[[null,'操作']]);
   const body=visible.map(row=>{
     const key='query:'+row.keyword.id+':'+row.query+':'+from+':'+to;
     const reason=row.adOrders?'查询产生归因订单，复核与投放词的匹配情况。':'查询已有花费、零归因订单，复核搜索意图。';
@@ -1443,7 +1589,7 @@ function diagnosticSearchTerms(view,period){
       '<td><button class="hier-action" type="button" data-diagnosis-add="'+id+'"'+(queued?' disabled':'')+'>'+(queued?'已加入草稿':'加入调整草稿')+'</button></td></tr>';
   }).join('');
   const table=body?'<div class="hier-table-wrap" tabindex="0" role="region" aria-label="买家搜索词表现"><table class="hier-table"><thead><tr>'+
-    headers.map(label=>'<th scope="col">'+label+'</th>').join('')+'</tr></thead><tbody>'+body+'</tbody></table></div>':'<p class="diag-copy hier-empty">当前范围没有符合此筛选的演示查询。</p>';
+    headers+'</tr></thead><tbody>'+body+'</tbody></table></div>':'<p class="diag-copy hier-empty">当前范围没有符合此筛选的演示查询。</p>';
   return diagnosisSection('买家搜索词','演示数据 · '+visible.length+' / '+all.length+' 条',caption+table);
 }
 function renderDiagnosis(rows=chosen()){
@@ -1687,11 +1833,10 @@ function attributeMetrics(row){
     '<td>'+countText(row.adOrders)+'</td><td>'+countText(row.clicks)+'</td>'+
     performanceRatioCells(row);
 }
-function attributeTable(columns,body,label){
-  const metrics=['广告花费','归因销售额','广告订单','点击量',...performanceRatioHeaders];
+function attributeTable(scope,columns,body,label){
   return '<div class="hier-table-wrap" role="region" aria-label="'+hierarchyText(label)+'" tabindex="0">'+
     '<table class="hier-table attr-table"><thead><tr>'+
-    [...columns,...metrics.map(title=>[title])].map(([title,css])=>'<th scope="col"'+(css?' class="'+css+'"':'')+'>'+hierarchyText(title)+'</th>').join('')+
+    mcTermSortHeaders(scope,columns)+
     '</tr></thead><tbody>'+body+'</tbody></table></div>';
 }
 function attributePager(page,length){
@@ -1730,14 +1875,16 @@ function attributeList(){
   const ui=attributeUI,m=ui.model;
   const label=ui.category==='asins'?'ASIN':'词根';
   const needle=ui.filter.toLowerCase();
-  const groups=m[ui.category].filter(item=>item.root.toLowerCase().includes(needle));
+  const scope=ui.category==='asins'?'attr-asins':'attr-roots';
+  const matching=m[ui.category].filter(item=>item.root.toLowerCase().includes(needle));
+  const groups=mcLevelSort.rows(scope,matching,mcAttributeSortValue);
   ui.listPage=Math.max(0,Math.min(ui.listPage,Math.ceil(groups.length/attributePageSize)-1));
   ui.resultPage=attributePageItems(groups,ui.listPage);
   const offset=ui.listPage*attributePageSize;
   const rows=ui.resultPage.map((item,index)=>'<tr><td>'+(offset+index+1)+'</td>'+
     '<td class="attr-text"><button type="button" class="hier-name attr-root-link" data-attr-root="'+index+'">'+
     hierarchyText(item.root)+'</button></td><td>'+countText(item.queryCount)+'</td>'+attributeMetrics(item)+'</tr>').join('');
-  const list=rows?attributeTable([['序号'],[label,'attr-text'],['买家搜索词数']],rows,label+'属性列表'):
+  const list=rows?attributeTable(scope,[[null,'序号'],['root',label],['queryCount','买家搜索词数']],rows,label+'属性列表'):
     '<p class="hier-empty">'+(needle?'没有匹配的'+label+'。':'所选范围没有'+label+'属性。')+'</p>';
   return attributeListToolbar()+list+attributePager(ui.listPage,groups.length);
 }
@@ -1758,14 +1905,15 @@ function attributeDetailRow(detail,index){
     (match?'<div class="hier-desc">'+hierarchyText(match)+'</div>':'')+'</td>'+attributeMetrics(detail)+'</tr>';
 }
 function attributeDetail(item){
-  const ui=attributeUI,detail=item.details,offset=ui.detailPage*attributePageSize;
+  const ui=attributeUI,offset=ui.detailPage*attributePageSize;
+  const detail=mcLevelSort.rows('attr-detail',item.details,mcAttributeSortValue);
   const rows=attributePageItems(detail,ui.detailPage).map((d,i)=>attributeDetailRow(d,offset+i+1)).join('');
   return '<div class="diag-controls details-head attr-tools">'+
     '<button type="button" class="hier-action" data-attr-back>‹ 返回属性列表</button>'+
     '<strong id="attr-detail-title" tabindex="-1">'+hierarchyText(item.root)+'</strong>'+
     '<span class="diag-meta">'+countText(item.queryCount)+' 个买家搜索词 · '+countText(detail.length)+' 条投放明细 · 花费 '+
     money(item.costC)+' · 归因销售额 '+money(item.adSalesC)+'</span></div>'+
-    attributeTable([['序号'],['买家搜索词','attr-text'],['广告组 / 活动','attr-text'],['投放词 / ID','attr-text']],rows,'属性对应的买家搜索词')+
+    attributeTable('attr-detail',[[null,'序号'],['query','买家搜索词'],['group','广告组 / 活动'],['target','投放词 / ID']],rows,'属性对应的买家搜索词')+
     attributePager(ui.detailPage,detail.length);
 }
 function attributeNotes(view,model){
@@ -1790,7 +1938,7 @@ function drawAttributes(){
   document.getElementById('review-attributes').innerHTML=diagnosisSection('属性分析',scope,body);
 }
 function renderAttributes(view,dates){
-  const ui=attributeUI,context=JSON.stringify([view.id,dates.map(d=>d.day)]);
+  const ui=attributeUI,context=JSON.stringify([view.id,dates.map(d=>d.day),window.mcCampaignScope?.getFilters()]);
   if(context!==ui.context){
     Object.assign(ui,{context,view,dates,target:'',selectedRoot:null,filter:'',listPage:0,detailPage:0,category:'roots'});
     const full=attributeAnalysis(view,dates);
@@ -2521,14 +2669,30 @@ function placementDetailCells(sum){
   return '<td>'+countText(sum.impressions)+'</td><td>'+countText(sum.clicks)+'</td><td>'+pct(sum.clicks,sum.impressions)+'</td>'+
     placementAmountCells(sum)+'<td>'+pct(sum.adOrders,sum.clicks)+'</td><td>'+placementAcos(sum)+'</td><td>'+roas(sum)+'</td>';
 }
-function placementDateTable(records,slotName){
-  const dated=[...records].sort((left,right)=>left.from.localeCompare(right.from));
+const placementSortKeys=['name','impressions','clicks','ctr','cost','sales','orders','cvr','acos','roas'];
+function placementSortHead(scope,labels,keys,selection=''){
+  const headers=labels.map((label,i)=>{
+    const key=keys[i];
+    if(!key)return '<th scope="col">'+hierarchyText(label)+'</th>';
+    const type=['name','strategy','date'].includes(key)?'text':'number';
+    return mcLevelSort.th(scope,key,label,type,i===0&&selection?selection+' ':'');
+  });
+  return '<thead><tr>'+headers.join('')+'</tr></thead>';
+}
+function placementSortValue(metrics,key){
+  return key==='impressions'?metrics?.impressions??null:hierarchySortMetric(metrics,key);
+}
+function placementDateTable(records,slotName,repaint){
+  const scope='placement-dates:'+records[0].campaignId+':'+records[0].slot;
+  if(repaint)mcLevelSort.onRender(scope,repaint);
+  const byDate=[...records].sort((left,right)=>left.from.localeCompare(right.from));
+  const dated=mcLevelSort.rows(scope,byDate,(row,key)=>key==='date'?row.from:placementSortValue(row,key));
   const body=dated.map(row=>{
     const label=row.from===row.to?row.from:row.from+' – '+row.to;
     return '<tr><th scope="row">'+hierarchyText(label)+'</th>'+placementDetailCells(row)+'</tr>';
   }).join('');
   return '<table class="pl-dates" aria-label="'+hierarchyText(slotName+'逐日报表')+'">'+
-    placementHead(['报告日期',...placementSlotHeaders.slice(1)])+'<tbody>'+body+'</tbody></table>';
+    placementSortHead(scope,['报告日期',...placementSlotHeaders.slice(1)],['date',...placementSortKeys.slice(1)])+'<tbody>'+body+'</tbody></table>';
 }
 function campaignPlacementDetails(view,period,campaign,records,detailId){
   const bySlot=new Map(Object.keys(placementLabels).map(slot=>[slot,[]]));
@@ -2537,8 +2701,9 @@ function campaignPlacementDetails(view,period,campaign,records,detailId){
     bySlot.get(row.slot).push(row);
   }
   const selectedSlot=placementExpansion.slots.get(campaign.campaignId);
-  const body=Array.from(bySlot,([slot,rows],index)=>{
-    const name=placementBadgeNames[slot]||placementLabel(slot);
+  const scope='placement-slots:'+campaign.campaignId;
+  const slots=Array.from(bySlot,([slot,rows])=>({slot,rows,sum:placementSummary(rows),name:placementBadgeNames[slot]||placementLabel(slot)}));
+  const body=mcLevelSort.rows(scope,slots,(row,key)=>key==='name'?row.name:placementSortValue(row.sum,key)).map(({slot,rows,sum,name},index)=>{
     const tone=Object.hasOwn(placementLabels,slot)?slot:'other';
     const id=detailId+'-slot-'+index;
     const isOpen=selectedSlot===slot&&rows.length>0;
@@ -2546,7 +2711,6 @@ function campaignPlacementDetails(view,period,campaign,records,detailId){
     const control=rows.length?'<button type="button" class="pl-slot-toggle" data-placement-slot="'+hierarchyText(slot)+
       '" data-placement-owner="'+hierarchyText(campaign.campaignId)+'" aria-expanded="'+isOpen+'" aria-controls="'+id+
       '" aria-label="'+hierarchyText((isOpen?'收起':'展开')+name+'的日期明细')+'" title="'+hierarchyText(placementLabel(slot))+'">'+badge+'</button>':badge;
-    const sum=placementSummary(rows);
     const mark=sum?placementDraftMark(view,period,campaign,rows,sum,slot):'';
     const slotRow='<tr data-slot="'+hierarchyText(slot)+'"><th scope="row">'+mark+control+'</th>'+placementDetailCells(sum)+'</tr>';
     if(!rows.length)return slotRow;
@@ -2555,7 +2719,7 @@ function campaignPlacementDetails(view,period,campaign,records,detailId){
     return slotRow+dateRow;
   }).join('');
   return '<div class="pl-inset"><table class="pl-slots" aria-label="'+hierarchyText(campaign.label+'广告位')+'">'+
-    placementHead(placementSlotHeaders,records.length?hierarchyDraftMarkAll('placement-slots:'+campaign.campaignId,'全选该活动有记录的广告位'):'')+'<tbody>'+body+'</tbody></table></div>';
+    placementSortHead(scope,placementSlotHeaders,placementSortKeys,records.length?hierarchyDraftMarkAll('placement-slots:'+campaign.campaignId,'全选该活动有记录的广告位'):'')+'<tbody>'+body+'</tbody></table></div>';
 }
 function placementCampaignRow(view,period,entry,index){
   const {campaign,records,sum}=entry;
@@ -2588,10 +2752,16 @@ function renderPlacements(view,period){
     byCampaign.get(row.campaignId).push(row);
     for(let day=reportWeek.slot(row.from);day<=reportWeek.slot(row.to);day++)reportedDates.add(day);
   }
-  const ranked=scope.campaigns.map(campaign=>{
+  const baseOrder=scope.campaigns.map(campaign=>{
     const records=byCampaign.get(campaign.campaignId)||[];
     return {campaign,records,sum:placementSummary(records)};
   }).sort((a,b)=>(b.sum?.costC??-1)-(a.sum?.costC??-1)||a.campaign.label.localeCompare(b.campaign.label,'zh-CN'));
+  const sortScope='placement-campaigns';
+  const ranked=mcLevelSort.rows(sortScope,baseOrder,(entry,key)=>{
+    if(key==='name')return entry.campaign.label;
+    if(key==='strategy')return [...new Set(entry.records.map(r=>r.strategy).filter(Boolean))].join(' / ')||null;
+    return placementSortValue(entry.sum,key);
+  });
   const scopeKey=JSON.stringify([view.id,period.map(row=>row.day)]);
   if(placementExpansion.scopeKey!==scopeKey){
     placementExpansion.scopeKey=scopeKey;
@@ -2608,7 +2778,7 @@ function renderPlacements(view,period){
   const scopeNote='广告位按整场活动统计，包含该活动下的全部产品。所选日期没有对应报表记录时显示「—」。';
   const notice=placementState.notice?'<p class="diag-meta" role="status">'+hierarchyText(placementState.notice)+'</p>':'';
   const table='<div class="hier-table-wrap pl-campaign-wrap" role="region" aria-label="广告活动与广告位明细" tabindex="0"><table class="pl-campaign-table">'+
-    placementHead(placementParentHeaders,ranked.length?hierarchyDraftMarkAll('placement-campaigns','全选本表广告活动'):'')+'<tbody>'+ranked.map((entry,index)=>placementCampaignRow(view,period,entry,index)).join('')+'</tbody></table></div>';
+    placementSortHead(sortScope,placementParentHeaders,['name','strategy','cost','sales','orders','acos','ctr','cvr','roas'],ranked.length?hierarchyDraftMarkAll('placement-campaigns','全选本表广告活动'):'')+'<tbody>'+ranked.map((entry,index)=>placementCampaignRow(view,period,entry,index)).join('')+'</tbody></table></div>';
   const content='<p class="table-note">'+caption+' '+scopeNote+'</p>'+(status?'<p class="table-note">'+status+'</p>':'')+hierarchyDraftToolbar()+table;
   host.innerHTML=diagnosisSection('广告活动与广告位',stats+' · '+dateRange(period),content);
   syncHierarchyDraftControls();
@@ -5060,14 +5230,33 @@ function bandActivityDraftButton(row,kind,group,evidenceScope){
   return '<button type="button" class="hier-action" data-ba-draft="'+index+'"'+(added?' data-ba-saved':'')+' aria-label="'+hierarchyText((added?'查看已加入的草稿 · ':'加入调整草稿 · ')+row.label)+'">'+(added?'查看草稿':'加入草稿')+'</button>';
 }
 
+const bandSortableFields = [
+  ['label','广告活动','text'],['impressions','展示量'],['clicks','点击量'],['ctr','点击率'],
+  ['adOrders','广告订单'],['cvr','转化率'],['costC','广告花费'],['adSalesC','广告销售额'],['roas','ROAS']
+];
+function bandColumnHeaders(scope,label){
+  return bandSortableFields.map(([key,title,type='number'])=>mcLevelSort.th(scope,key,key==='label'?label:title,type)).join('');
+}
+function bandColumnValue(row,key){
+  return key==='roas'?ratio(row.adSalesC,row.costC):row[key];
+}
+function bandSortChoices(){
+  return bandSortableFields.map(([key,label,type])=>{
+    const desc=type==='text'?'降序':'从高到低';
+    const asc=type==='text'?'升序':'从低到高';
+    return '<option value="'+key+'">'+label+desc+'</option><option value="asc:'+key+'">'+label+asc+'</option>';
+  }).join('');
+}
 function bandActivityTable(rows,key,label,identify,action){
   if(!rows.length)return '<p class="ba-note">所选范围和日期暂无'+label+'记录。</p>';
   const state=bandActivityState,size=12;
-  const last=Math.ceil(rows.length/size),page=Math.min(last,state.pages[key]||1);
+  const scope='band-'+key+':'+JSON.stringify([state.campaignId,state.groupId,state.targetId]);
+  mcLevelSort.onChange(scope,()=>{state.pages[key]=1;});
+  const ordered=mcLevelSort.rows(scope,rows,bandColumnValue);
+  const last=Math.ceil(ordered.length/size),page=Math.min(last,state.pages[key]||1);
   state.pages[key]=page;
-  const show=rows.slice((page-1)*size,page*size);
-  const headers=[label,'展示量','点击量','点击率','广告订单','转化率','广告花费','广告销售额','ROAS'];
-  if(action)headers.push('调整草稿');
+  const show=ordered.slice((page-1)*size,page*size);
+  const headers=bandColumnHeaders(scope,label)+(action?'<th scope="col">调整草稿</th>':'');
   const markup=show.map(row=>{
     const values=[countText(row.impressions),countText(row.clicks),pct(row.clicks,row.impressions),
       countText(row.adOrders),pct(row.adOrders,row.clicks),money(row.costC),money(row.adSalesC),roas(row)];
@@ -5079,7 +5268,7 @@ function bandActivityTable(rows,key,label,identify,action){
     pagination='<nav aria-label="'+label+'分页" class="ba-pager">'+nav(-1,'上一页')+'<span>第 '+page+' / '+last+' 页 · '+countText(rows.length)+' 项</span>'+nav(1,'下一页')+'</nav>';
   }
   return '<div class="cb-scroll" tabindex="0" role="region" aria-label="'+label+'数据"><table class="cb-details"><thead><tr>'+
-    headers.map(v=>'<th scope="col">'+v+'</th>').join('')+'</tr></thead><tbody>'+markup+'</tbody></table></div>'+pagination;
+    headers+'</tr></thead><tbody>'+markup+'</tbody></table></div>'+pagination;
 }
 
 function bandActivityLink(row,key,secondary){
@@ -5287,8 +5476,7 @@ function initCampaignBandsPage(host){
      <div class="cb-title"><h3 id="cb-list-title">活动明细</h3><span class="cb-meta" data-band-count role="status"></span></div>
      <div class="cb-toolbar"><div class="cb-selection"><span data-band-selection></span><button type="button" class="cb-clear" data-band-clear hidden>清除分档</button></div>
       <div class="cb-controls"><label>搜索活动<input type="search" placeholder="活动名称或 ID" data-band-search></label><label>排序<select data-band-sort>
-      <option value="costC">花费从高到低</option><option value="adSalesC">广告销售额从高到低</option><option value="adOrders">广告订单从高到低</option>
-      <option value="ctr">点击率从高到低</option><option value="cvr">转化率从高到低</option><option value="clicks">点击量从高到低</option></select></label></div>
+      ${bandSortChoices()}</select></label></div>
      </div>
      <div data-band-list></div><nav class="cb-pager" aria-label="广告活动明细分页" hidden><button type="button" class="hier-action" data-band-shift="-1">上一页</button><span data-band-page></span><button type="button" class="hier-action" data-band-shift="1">下一页</button></nav>
     </section>`;
@@ -5320,7 +5508,12 @@ function initCampaignBandsPage(host){
     host.querySelector('[data-band-matrix]').focus({preventScroll:true});
   });
   host.querySelector('[data-band-search]').addEventListener('input',event=>{s.search=event.target.value.trim().toLocaleLowerCase();s.page=1;renderBandList(host);});
-  host.querySelector('[data-band-sort]').addEventListener('change',event=>{s.sort=event.target.value;s.page=1;renderBandList(host);});
+  host.querySelector('[data-band-sort]').addEventListener('change',event=>{
+    const value=event.target.value,asc=value.startsWith('asc:'),key=asc?value.slice(4):value;
+    mcLevelSort.set('band-campaigns',key,asc?'ascending':'descending',key==='label'?'text':'number');
+    s.page=1;
+    renderBandList(host);
+  });
   host.querySelector('[data-band-list]').addEventListener('click',event=>{
     const button=event.target.closest('button[data-open-band-campaign]');
     if(button)openBandCampaign(button.dataset.openBandCampaign,button);
@@ -5420,7 +5613,12 @@ function renderBandList(host){
   host.querySelector('[data-band-clear]').hidden=!filters.length;
   const selected=rows.filter(r=>(!s.ctr||r.ctrBand===s.ctr)&&(!s.cvr||r.cvrBand===s.cvr)&&
     (!s.search||r.label.toLocaleLowerCase().includes(s.search)||String(r.id).includes(s.search)));
-  selected.sort((a,b)=>(b[s.sort]??-Infinity)-(a[s.sort]??-Infinity)||(b.costC??0)-(a.costC??0)||a.label.localeCompare(b.label,'zh-CN')||String(a.id).localeCompare(String(b.id)));
+  const scope='band-campaigns';
+  if(!mcLevelSort.current(scope))mcLevelSort.set(scope,'costC','descending','number');
+  mcLevelSort.onChange(scope,()=>{s.page=1;});
+  const sort=mcLevelSort.current(scope);
+  host.querySelector('[data-band-sort]').value=(sort.direction==='ascending'?'asc:':'')+sort.key;
+  const ordered=mcLevelSort.rows(scope,selected,bandColumnValue);
   host.querySelector('[data-band-count]').textContent=selected.length+' 个广告活动';
   const pages=Math.max(1,Math.ceil(selected.length/s.pageSize));
   s.page=Math.max(1,Math.min(s.page,pages));
@@ -5435,12 +5633,12 @@ function renderBandList(host){
   const t=totals(selected);
   const cols=r=>[countText(r.impressions),countText(r.clicks),campaignBandRateText(r.ctr,ctrBands.find(b=>b.id===r.ctrBand)),countText(r.adOrders),campaignBandRateText(r.cvr,cvrBands.find(b=>b.id===r.cvrBand)),money(r.costC),money(r.adSalesC),roas(r)];
   const cells=r=>cols(r).map(v=>'<td>'+hierarchyText(v)+'</td>').join('');
-  const body=selected.slice((s.page-1)*s.pageSize,s.page*s.pageSize).map(r=>{
+  const body=ordered.slice((s.page-1)*s.pageSize,s.page*s.pageSize).map(r=>{
     const context=[r.portfolioLabel,'ID '+r.id].filter(Boolean).join(' · ');
     return '<tr><th scope="row"><button type="button" class="cb-activity-link" data-open-band-campaign="'+hierarchyText(r.id)+'">'+hierarchyText(r.label)+'</button><small>'+hierarchyText(context)+'</small></th>'+cells(r)+'</tr>';
   }).join('');
   list.innerHTML=campaignBandTriage(selected,t)+'<div class="cb-scroll" tabindex="0" role="region" aria-label="匹配的广告活动明细"><table class="cb-details"><thead><tr>'+
-    ['广告活动','展示量','点击量','点击率','广告订单','转化率','广告花费','广告销售额','ROAS'].map(v=>'<th scope="col">'+v+'</th>').join('')+
+    bandColumnHeaders(scope,'广告活动')+
     '</tr></thead><tbody><tr class="cb-summary"><th scope="row">筛选合计 · '+countText(selected.length)+' 个活动</th>'+
     cells({...t,cvr:rate(t.adOrders,t.clicks)})+'</tr>'+body+'</tbody></table></div>';
 }
@@ -5608,7 +5806,7 @@ const mcInlineAds = (()=>{
   const h=hierarchyText;
   let mode='placement', order={key:'cost',up:false}, context=null;
   let selected=new Set(), inputs=new Map(), expanded=new Set(), pending=[], notice='', bulk='';
-  const saved=new Map();
+  const saved=new Map(), campaignOrders=new Map();
   const storeName=key=>'mc-ads:review:inline-v1:'+feed.week+':'+key;
   const root=()=>document.getElementById('review-placements');
   const canUse=view=>!view.demo && ['portfolio','campaign','adgroup'].includes(view.kind);
@@ -5731,7 +5929,7 @@ const mcInlineAds = (()=>{
     }
     let evidence='';
     if(r.terms.length){
-      evidence='<details class="mci-terms"><summary>买家搜索词（'+r.terms.length+'）</summary><ul>'+
+      evidence='<details class="mci-terms" data-inline-disclosure="'+h(r.id)+'"><summary>买家搜索词（'+r.terms.length+'）</summary><ul>'+
         r.terms.slice().sort((a,b)=>b.clicks-a.clicks||b.costC-a.costC).map(q=>'<li>'+h(q.term)+' · '+countText(q.clicks)+' 次点击</li>').join('')+'</ul></details>';
     }
     return '<b>'+h(r.label)+'</b>'+evidence;
@@ -5742,8 +5940,8 @@ const mcInlineAds = (()=>{
       '" data-edit="'+h(r.id)+'" aria-label="'+h(label+' '+(isPlacement?'新加价比例':'新竞价美元'))+'" placeholder="'+(isPlacement?'比例':'金额')+
       '" value="'+h(inputs.get(r.id)||'')+'"><span>'+(isPlacement?'%':'USD')+'</span></label>'+
       (savedValue==null?'':'<small>本地 '+displayValue(savedValue)+'</small>'):'仅展示';
-    const dateLink=isPlacement&&r.dates.length?'<details class="mci-dates"><summary>按日期查看</summary>'+
-      '<div>'+placementDateTable(r.dates,r.label)+'</div></details>':'';
+    const dateLink=isPlacement&&r.dates.length?'<details class="mci-dates" data-inline-disclosure="'+h(r.id)+'"><summary>按日期查看</summary>'+
+      '<div>'+placementDateTable(r.dates,r.label,paint)+'</div></details>':'';
     return '<tr class="mci-record"><th scope="row">'+(r.editable?mark('data-mark',r.id,'选择'+label)+' ':'')+rowName(r)+'</th>'+
       placementDetailCells(r.sum)+'<td>'+(r.editable?'未读取':'—')+'</td><td class="mci-inputcell">'+field+'</td></tr>'+
       (dateLink?'<tr class="mci-date-row"><td colspan="12">'+dateLink+'</td></tr>':'');
@@ -5760,9 +5958,21 @@ const mcInlineAds = (()=>{
       const groupNode=gid&&(hierarchyChildren.get(c.campaign.id)||[]).find(n=>String(n.adGroupId)===gid);
       const groupLabel=groupNode?hierarchyLink(groupNode.id,items[0].groupLabel,'hier-name'):h(items[0].groupLabel);
       const groupTitle=gid?'<div class="mci-group">广告组 · '+groupLabel+' <small>ID '+h(gid)+'</small></div>':'';
-      return groupTitle+'<table class="mci-child-table" aria-label="'+h(c.campaign.label+' '+labels[mode])+'">'+placementHead([
+      const scope='inline-detail:'+mode+':'+c.id+':'+gid;
+      mcLevelSort.onRender(scope,paint);
+      const original=items.slice();
+      if(!isPlacement)original.sort((a,b)=>b.sum.costC-a.sum.costC);
+      const ranked=mcLevelSort.rows(scope,original,(r,key)=>{
+        if(key==='name')return r.label;
+        if(key==='edited'){
+          const next=valid(inputs.get(r.id),r.kind);
+          return next==null?null:Number(next);
+        }
+        return placementSortValue(r.sum,key);
+      });
+      return groupTitle+'<table class="mci-child-table" aria-label="'+h(c.campaign.label+' '+labels[mode])+'">'+placementSortHead(scope,[
         isPlacement?'广告位':(mode==='keyword'?'关键词':'商品定投'),'曝光','点击','CTR','花费','销售额','订单','转化率','ACOS','ROAS',isPlacement?'当前加价':'当前竞价',isPlacement?'新加价比例':'新竞价'
-      ])+'<tbody>'+items.slice().sort((a,b)=>isPlacement?0:b.sum.costC-a.sum.costC).map(r=>childRow(r,c)).join('')+'</tbody></table>';
+      ],[...placementSortKeys,null,'edited'])+'<tbody>'+ranked.map(r=>childRow(r,c)).join('')+'</tbody></table>';
     }).join('');
   }
   function campaignBlock(c){
@@ -5798,9 +6008,16 @@ const mcInlineAds = (()=>{
     const title=mode==='placement'?'广告活动与广告位':mode==='keyword'?'广告活动与关键词':'广告活动与商品定投';
     host.hidden=false;
     const coverage=context.reported+' / '+ranked.length+' 个活动有广告位记录 · 报告覆盖 '+context.daysCovered+' / '+context.period.length+' 天';
+    const openDisclosures=new Set([...host.querySelectorAll('details[data-inline-disclosure][open]')].map(d=>d.dataset.inlineDisclosure));
+    const scrollLeft=host.querySelector('.mci-wrap')?.scrollLeft??0;
     host.innerHTML=diagnosisSection(title,coverage+' · '+dateRange(context.period),modesHtml+
       '<p class="table-note">'+note+suffix+' 当前设置未读取，确认的调整保存在当前浏览器。</p>'+batchControls()+
       '<p id="inline-message" role="status" '+(notice?'':'hidden')+'>'+h(notice)+'</p>'+preview()+(rows?table:noRows));
+    for(const detail of host.querySelectorAll('details[data-inline-disclosure]')){
+      if(openDisclosures.has(detail.dataset.inlineDisclosure))detail.open=true;
+    }
+    const wrap=host.querySelector('.mci-wrap');
+    if(wrap)wrap.scrollLeft=scrollLeft;
     syncChecks();
   }
   function syncChecks(){
@@ -5854,6 +6071,7 @@ const mcInlineAds = (()=>{
     if(button.matches('[data-sort]')){
       const key=button.dataset.sort;
       order={key,up:order.key===key?!order.up:['strategy','name'].includes(key)};
+      campaignOrders.set(JSON.stringify([context.view.id,mode]),order);
       paint();root().querySelector('[data-sort="'+key+'"]').focus({preventScroll:true});return;
     }
     if(button.matches('[data-expand]')){
@@ -5891,6 +6109,7 @@ const mcInlineAds = (()=>{
     if(!canUse(view)){lastScope='';context=null;return false;}
     if(view.kind==='adgroup'&&mode==='placement')mode='keyword';
     const scope=JSON.stringify([view.id,period.map(d=>d.day),mode]);
+    order=campaignOrders.get(JSON.stringify([view.id,mode]))||{key:'cost',up:false};
     context=getModel(view,period);
     if(scope!==lastScope){
       selected.clear();inputs.clear();expanded.clear();bulk='';
