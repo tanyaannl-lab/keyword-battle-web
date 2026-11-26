@@ -32,6 +32,59 @@
       location.hash = link.getAttribute('href');
     });
 
+
+    const published = new Set(weekOptions.map(option => option.value));
+    let sequence = 0;
+    let queue = Promise.resolve();
+    function fetchPeriodWeek(requestedWeek, signal) {
+      if (signal?.aborted) throw new DOMException('已取消读取。', 'AbortError');
+      if (requestedWeek === week && typeof feed !== 'undefined' && feed.week === week) return feed;
+      const id = ++sequence;
+      const pipe = new MessageChannel();
+      return new Promise((resolve, reject) => {
+        function clean() {
+          signal?.removeEventListener('abort', abort);
+          pipe.port1.close();
+        }
+        function abort() {
+          clean();
+          parent.postMessage({channel, periodCancel:id}, parentOrigin);
+          reject(new DOMException('已取消读取。', 'AbortError'));
+        }
+        pipe.port1.onmessage = event => {
+          clean();
+          const result = event.data;
+          if (result?.id === id && result.week === requestedWeek && result.feed?.week === requestedWeek) {
+            resolve(result.feed);
+          } else {
+            reject(new Error('周报读取失败，可重新加载该周期。'));
+          }
+        };
+        pipe.port1.onmessageerror = () => {
+          clean();
+          reject(new Error('周报传输失败，可重新加载该周期。'));
+        };
+        signal?.addEventListener('abort', abort, {once:true});
+        try {
+          parent.postMessage({channel, periodRead:{id, week:requestedWeek}}, parentOrigin, [pipe.port2]);
+        } catch (error) {
+          clean();
+          pipe.port2.close();
+          reject(error);
+        }
+      });
+    }
+    Object.defineProperty(window, 'MCAdsPeriodSource', {value:Object.freeze({
+      listWeeks() { return Array.from(published); },
+      readWeek(requestedWeek, signal) {
+        if (!published.has(requestedWeek)) return Promise.reject(new Error('所选周尚未发布。'));
+        // Back-pressure the historical RPC and release each large payload as soon as consumed.
+        const read = queue.then(() => fetchPeriodWeek(requestedWeek, signal));
+        queue = read.then(() => undefined, () => undefined);
+        return read;
+      }
+    })});
+
     let denied = !available;
     const storage = {
       get length() { return values.size; },
@@ -84,6 +137,7 @@
   function clear(iframe) {
     const previous = mounts.get(iframe);
     if (previous) {
+      previous.cancelPeriodRead();
       window.removeEventListener('message', previous.onMessage);
       mounts.delete(iframe);
     }
@@ -91,7 +145,7 @@
     iframe.removeAttribute('src');
   }
 
-  function mount(iframe, template, userId, feed, business, weekOptions = [], onSelectWeek) {
+  function mount(iframe, template, userId, feed, business, weekOptions = [], onSelectWeek, onReadPeriodWeek) {
     const week = feed.week;
     if (!userId || !/^\d{4}-\d{2}-\d{2}$/.test(week) || typeof template !== 'string' || !/<head\s*>/i.test(template))
       throw new Error('看板文件格式或周次无效。');
@@ -116,11 +170,49 @@
     const slot = '<script id="mc-ads-runtime" type="application/json"></script>';
     if (!template.includes(slot)) throw new Error('看板页面版本不匹配，请刷新后重试。');
     const doc = template.replace(slot, () => runtime).replace(/<head\s*>/i, head => head + policy + init);
-    const state = {onMessage, ready:false, week, channel, business};
+    const state = {onMessage, ready:false, week, channel, business, periodRead:null, cancelPeriodRead};
+
+    function cancelPeriodRead() {
+      const active = state.periodRead;
+      if (!active) return;
+      state.periodRead = null;
+      active.controller.abort();
+      active.port.close();
+    }
+    async function sendPeriodWeek(query, port) {
+      if (!port) return;
+      const {id, week:requestedWeek} = query;
+      if (!Number.isSafeInteger(id) || id <= 0 || !weekOptions.some(option => option.value === requestedWeek) ||
+          typeof onReadPeriodWeek !== 'function' || state.periodRead) {
+        try { port.postMessage({id, week:requestedWeek, error:true}); } finally { port.close(); }
+        return;
+      }
+      const active = {id, port, controller:new AbortController()};
+      state.periodRead = active;
+      const ownsRequest = () => mounts.get(iframe) === state && state.periodRead === active;
+      try {
+        const historicalFeed = await onReadPeriodWeek(requestedWeek, active.controller.signal);
+        if (ownsRequest()) port.postMessage({id, week:requestedWeek, feed:historicalFeed});
+      } catch {
+        if (ownsRequest()) port.postMessage({id, week:requestedWeek, error:true});
+      } finally {
+        if (state.periodRead === active) state.periodRead = null;
+        port.close();
+      }
+    }
+
     function onMessage(event) {
       const data = event.data;
       if (event.source !== iframe.contentWindow || event.origin !== 'null' ||
           !data || data.channel !== channel) return;
+      if (data.periodRead && typeof data.periodRead === 'object') {
+        void sendPeriodWeek(data.periodRead, event.ports[0]);
+        return;
+      }
+      if (Number.isSafeInteger(data.periodCancel)) {
+        if (state.periodRead?.id === data.periodCancel) cancelPeriodRead();
+        return;
+      }
       if (data.ready === true) {
         state.ready = true;
         updateBusiness(iframe, week, state.business);

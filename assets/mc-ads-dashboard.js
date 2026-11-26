@@ -78,7 +78,7 @@
 
   async function getTemplate(signal) {
     if (template) return template;
-    const res = await fetch('../assets/mc-ads-view.html?v=20261126-level-sort1', {signal,redirect:'error'});
+    const res = await fetch('../assets/mc-ads-view.html?v=20261126-period-compare1', {signal,redirect:'error'});
     if (!res.ok) throw new Error('看板页面文件未能加载，请检查网页包是否已完整发布。');
     template = await res.text();
     return template;
@@ -121,7 +121,24 @@
         rpc('mc_ads_dashboard_week_read',{p_week:week},run.signal).then(data=>readFeed(data,week))]);
       if (selection !== run) return;
       const options = Array.from(picker.options, option => ({value:option.value, label:option.text}));
-      MCAdsFrame.mount(frame,html,auth.user.id,feed,business,options,selectWeek);
+      const account = auth.user.id;
+      async function readPeriodWeek(requestedWeek, signal) {
+        function checkAccess() {
+          if (selection !== run || run.signal.aborted || signal.aborted || auth?.user?.id !== account) {
+            throw new DOMException('看板已切换。', 'AbortError');
+          }
+          if (!validWeek(requestedWeek) || !weeks.includes(requestedWeek)) {
+            throw new Error('所选周尚未发布。');
+          }
+        }
+        checkAccess();
+        const data = await rpc('mc_ads_dashboard_week_read', {p_week:requestedWeek}, signal);
+        checkAccess();
+        const historicalFeed = await readFeed(data, requestedWeek);
+        checkAccess();
+        return historicalFeed;
+      }
+      MCAdsFrame.mount(frame,html,account,feed,business,options,selectWeek,readPeriodWeek);
       panel.hidden = true;
       frame.hidden = false;
     } catch (error) {

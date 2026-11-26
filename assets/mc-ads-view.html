@@ -297,6 +297,71 @@ button.mc-level-sort span{display:inline-block;min-width:.8em;text-align:center;
 button.mc-level-sort:hover,th[aria-sort=ascending]>button.mc-level-sort,th[aria-sort=descending]>button.mc-level-sort,th[aria-sort=ascending]>button.mc-level-sort span,th[aria-sort=descending]>button.mc-level-sort span{color:#07624e}
 button.mc-level-sort:focus-visible{outline:2px solid #15795d;outline-offset:2px;border-radius:3px}
 
+#page-periodcompare{margin-top:18px}
+#page-periodcompare>.analysis-heading{margin-bottom:5px}
+.mcp-page{color:var(--ink,#173730);font-variant-numeric:tabular-nums}
+.mcp-page .panel{margin:0;padding:0;background:white;border:1px solid var(--line,#d9e3df);border-radius:12px;overflow:hidden;min-width:0}
+.mcp-page .mcp-scope{font-size:14px;color:var(--muted,#546968);margin:0 0 12px}
+.mcp-page .mcp-scope:empty{display:none}
+.mcp-page .mcp-toolbar,.mcp-page .mcp-detail-controls{display:flex;align-items:flex-end;flex-wrap:wrap;gap:14px}
+.mcp-page .mcp-toolbar{padding:16px 20px}
+.mcp-page label{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600;color:#456459}
+.mcp-page select,.mcp-page button{font:inherit}
+.mcp-page select{padding:6px 24px 6px 9px;background:white;border:1px solid #b8cec2;border-radius:6px;color:#173d35;min-height:35px;font-size:14px;max-width:100%}
+.mcp-page button{background:white;border:1px solid #bdd2c8;border-radius:6px;color:#116952;cursor:pointer;padding:6px 12px;font-size:14px;font-weight:600;min-height:32px}
+.mcp-page button:hover:not(:disabled){background:#e8f3ed}
+.mcp-page button:disabled,.mcp-page select:disabled{opacity:.55;cursor:default}
+.mcp-page :is(button,select):focus-visible{outline:2px solid #168064;outline-offset:2px}
+.mcp-page .mcp-mode{display:inline-flex;align-self:flex-end;padding:3px;background:#eaf2ed;border-radius:7px;gap:2px}
+.mcp-page .mcp-mode button{border:0;padding:4px 13px;background:transparent;border-radius:5px;min-height:29px;color:#48655a}
+.mcp-page .mcp-mode [aria-pressed=true]{color:#07583e;background:white;box-shadow:0 1px 3px #0b3f2324}
+.mcp-page .mcp-previous{min-height:35px}
+.mcp-page .mcp-context{display:flex;align-items:center;flex-wrap:wrap;gap:14px 38px;margin:17px 2px}
+.mcp-page .mcp-cover{display:flex;gap:9px;align-items:flex-start;font-size:14px}
+.mcp-page .mcp-cover strong{margin-right:4px}
+.mcp-page .mcp-cover small{display:block;color:var(--muted,#546968);font-size:13px}
+.mcp-page .mcp-swatch{display:inline-block;width:18px;border-top:3px solid #13745d;flex:none}
+.mcp-page .mcp-swatch.mcp-baseline{border-top:3px dashed #7b64a5}
+.mcp-page .mcp-cover .mcp-swatch{margin-top:10px}
+.mcp-page .mcp-state,.mcp-page .mcp-notice{padding:12px 16px;margin:16px 0;font-size:14px;border-radius:8px}
+.mcp-page .mcp-state{background:white;border:1px solid var(--line,#d9e3df)}
+.mcp-page .mcp-notice{color:#73511b;background:#fff8e9;border:1px solid #eadbb6;overflow-wrap:anywhere}
+.mcp-page .mcp-state button,.mcp-page .mcp-notice button{margin-left:8px}
+.mcp-page .mcp-columns{display:grid;grid-template-columns:minmax(0,1.08fr) minmax(0,1fr);gap:15px;align-items:start}
+.mcp-page .mcp-head{padding:15px 18px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.mcp-page .mcp-head h3{margin:0;font-weight:700;font-size:19px}
+.mcp-page .mcp-head label{flex-direction:row;align-items:center}
+.mcp-page .mcp-scroll{overflow-x:auto}
+.mcp-page table{border-collapse:collapse;width:100%;font-size:14px;line-height:1.45}
+.mcp-page th,.mcp-page td{padding:8px 12px;border:0;border-bottom:1px solid #e4ebe7;text-align:right;white-space:nowrap}
+.mcp-page th:first-child,.mcp-page td:first-child{text-align:left}
+.mcp-page thead th{border-top:1px solid #dce5df;background:#f2f6f3;color:#486356;font-size:13px}
+.mcp-page tbody th{background:white;font-weight:500;color:#243d35}
+.mcp-page .mcp-na{color:#6b7973}
+.mcp-page .mcp-foot{margin:0;font-size:12px;color:#566a5f;padding:10px 15px}
+.mcp-page .mcp-legend{display:flex;gap:18px;align-items:center;margin:0 20px 6px;color:#52675e;font-size:13px}
+.mcp-page .mcp-legend span{display:flex;align-items:center;gap:6px}
+.mcp-page .mcp-svgwrap{margin:0 8px 9px;overflow-x:auto}
+.mcp-page .mcp-svgwrap svg{display:block;width:100%;height:auto;min-width:320px}
+.mcp-page .mcp-gridline{stroke:#dce5df;stroke-width:1}
+.mcp-page .mcp-axis{fill:#566a61;font-size:13px}
+.mcp-page .mcp-series{color:#13745d}
+.mcp-page .mcp-series.mcp-baseline{color:#7b64a5}
+.mcp-page .mcp-series path{fill:none;stroke:currentColor;stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}
+.mcp-page .mcp-series.mcp-baseline path{stroke-dasharray:6 5}
+.mcp-page .mcp-series circle{fill:white;stroke:currentColor;stroke-width:2}
+.mcp-page .mcp-empty{padding:22px 14px;text-align:center!important;font-size:14px;color:#65786c}
+.mcp-page .mcp-detail{margin:16px 0}
+.mcp-page .mcp-detail table{min-width:540px}
+.mcp-page .mcp-detail tbody th{white-space:normal;overflow-wrap:anywhere;text-align:left;max-width:30em}
+.mcp-page .mcp-detail thead button{font:inherit;padding:0;background:transparent;min-height:24px;border:none;font-weight:700;color:#416257}
+.mcp-page .mcp-detail thead th[aria-sort=ascending] button,.mcp-page .mcp-detail thead th[aria-sort=descending] button{color:#087155}
+.mcp-page .mcp-only{white-space:nowrap;display:inline-block;margin-left:7px;padding:1px 6px;background:#edf3ef;color:#4d6758;font-size:11px;border-radius:4px}
+.mcp-page .mcp-pager{display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:10px 16px;font-size:13px;color:#53695c}
+@media(max-width:1100px){.mcp-page .mcp-columns{grid-template-columns:1fr}.mcp-page .mcp-svgwrap svg{max-height:255px}}
+@media(max-width:600px){.mcp-page .mcp-toolbar,.mcp-page .mcp-head{padding:12px}.mcp-page .mcp-toolbar{gap:8px}.mcp-page th,.mcp-page td{padding:7px 9px}.mcp-page table[data-mcp-summary]{min-width:480px}.mcp-page .mcp-context{gap:8px 18px}.mcp-page .mcp-mode{align-self:center}.mcp-page .mcp-detail-controls{gap:6px}.mcp-page .mcp-head label{font-size:12px}.mcp-page .mcp-pager{padding:8px}}
+@media print{.mcp-page .mcp-toolbar,.mcp-page .mcp-pager button{display:none}.mcp-page .mcp-scroll{overflow:visible}.mcp-page .mcp-columns{grid-template-columns:1fr}.mcp-page .mcp-head{break-after:avoid}}
+
 </style>
 </head>
 <body>
@@ -324,6 +389,7 @@ button.mc-level-sort:focus-visible{outline:2px solid #15795d;outline-offset:2px;
     <button type="button" data-page="analysis" aria-controls="page-analysis" aria-pressed="false">数据分析</button>
     <button type="button" data-page="bands" aria-controls="page-bands" aria-pressed="false">广告归类</button>
     <button type="button" data-page="pair" aria-controls="page-pair" aria-pressed="false">产品对比</button>
+    <button type="button" data-page="periodcompare" aria-controls="page-periodcompare" aria-pressed="false">周期对比</button>
     <button type="button" data-page="diagnosis" aria-controls="page-diagnosis" aria-pressed="false">查问题</button>
     <button type="button" data-page="attributes" aria-controls="page-attributes" aria-pressed="false">属性分析</button>
     <button type="button" data-page="drafts" aria-controls="page-drafts" aria-pressed="false">调整草稿</button>
@@ -374,6 +440,7 @@ button.mc-level-sort:focus-visible{outline:2px solid #15795d;outline-offset:2px;
     <div><div id="performance-analysis"></div><div id="analysis-search"></div><div id="analysis-placements" hidden></div></div>
   </details>
 </section>
+<section id="page-periodcompare" aria-labelledby="period-compare-heading" hidden><header class="analysis-heading"><h2 id="period-compare-heading">周期对比</h2></header><div id="period-compare-body"></div></section>
 <section id="page-pair" aria-label="产品对比" hidden>
   <header class="analysis-heading"><h2>选择对比产品</h2><span id="pair-context" class="section-info"></span></header>
   <div class="panel pair-pickers">
@@ -2404,7 +2471,688 @@ function initializeAttributes(){
 </script><script>
 'use strict';
 
-const reviewPages=['effects','analysis','bands','pair','diagnosis','attributes','drafts','method','daily'];
+(function (root) {
+  'use strict';
+
+  // The published product report stores Monday in slot 16, including weeks
+  // which cross calendar months or years. All date arithmetic uses date-only UTC.
+  const dayMs = 86400000;
+  const fields = ['costC', 'adSalesC', 'adOrders', 'clicks', 'impressions', 'sourceRows'];
+  const children = {store:'operator', operator:'product', product:'portfolio', portfolio:'campaign', campaign:'adgroup', adgroup:null};
+
+  function millis(iso) {
+    if (typeof iso !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) throw Error('报表日期格式无效。');
+    const n = Date.parse(iso + 'T00:00:00Z');
+    if (!Number.isFinite(n) || dateText(n) !== iso) throw Error('报表日期无效。');
+    return n;
+  }
+  function dateText(n) { return new Date(n).toISOString().slice(0, 10); }
+  function monday(n) { return dateText(n - ((new Date(n).getUTCDay() + 6) % 7) * dayMs); }
+
+  function describeScope(view, parentById) {
+    if (!view || view.demo || !Object.hasOwn(children, view.kind)) return null;
+    const parent = parentById || (id => typeof resolveHierarchyNode === 'function' ? resolveHierarchyNode(id) : null);
+    const scope = {kind:view.kind, unmapped:!!view.unmapped};
+    const visited = new Set();
+    for (let node = view; node; node = parent(node.parent)) {
+      if (node.demo || visited.has(node.id)) return null;
+      visited.add(node.id);
+      if (node.kind === 'operator') scope.operator = node.label;
+      if (node.kind === 'product') scope.product = node.label;
+      if (node.kind === 'portfolio') scope.portfolioId = node.portfolioId;
+      if (node.kind === 'campaign') scope.campaignId = node.campaignId;
+      if (node.kind === 'adgroup') scope.adGroupId = node.adGroupId;
+      if (node.kind === 'store') return scope;
+      if (!node.parent) return null;
+    }
+    return null;
+  }
+  function start(range, scope, filters = {}) {
+    if (!scope || !Object.hasOwn(children, scope.kind)) throw Error('请选择有效的广告层级。');
+    const levels = Object.keys(children);
+    const depth = levels.indexOf(scope.kind);
+    if (!scope.unmapped && ((depth >= 1 && !scope.operator) || (depth >= 2 && !scope.product)) ||
+        (depth >= 3 && scope.portfolioId == null) || (depth >= 4 && !scope.campaignId) || (depth >= 5 && !scope.adGroupId)) {
+      throw Error('当前层级缺少可用于跨期核对的标识。');
+    }
+    const first = millis(range.start), last = millis(range.end);
+    if (last < first) throw Error('周期结束日期早于开始日期。');
+    const selected = range.weekdays ? new Set(range.weekdays) : null;
+    if (selected && (!selected.size || [...selected].some(d => !Number.isInteger(d) || d < 0 || d > 6))) {
+      throw Error('所选星期无效。');
+    }
+    const dates = new Set(), requestedWeeks = new Set();
+    for (let n = first; n <= last; n += dayMs) {
+      if (selected && !selected.has(new Date(n).getUTCDay())) continue;
+      dates.add(dateText(n));
+      requestedWeeks.add(monday(n));
+    }
+    return {start:range.start, end:range.end, scope:{...scope}, filters, dates, requestedWeeks, parts:new Map()};
+  }
+  function blank() {
+    return {costC:0, adSalesC:0, adOrders:0, clicks:0, impressions:0, sourceRows:0};
+  }
+  function plus(a, b) {
+    for (const k of fields) {
+      const sum = a[k] + b[k];
+      if (!Number.isSafeInteger(b[k]) || b[k] < 0 || !Number.isSafeInteger(sum)) throw Error('广告指标超出可汇总范围。');
+      a[k] = sum;
+    }
+  }
+  function accumulate(map, key, metrics) {
+    if (!map.has(key)) map.set(key, blank());
+    plus(map.get(key), metrics);
+  }
+
+  function placementValue(m, key) {
+    const div = (n, d, scale = 1) => d ? n / d * scale : null;
+    const value = {
+      cost:m.costC / 100, sales:m.adSalesC / 100, orders:m.adOrders,
+      acos:div(m.costC, m.adSalesC, 100), ctr:div(m.clicks, m.impressions, 100),
+      cvr:div(m.adOrders, m.clicks, 100), roas:div(m.adSalesC, m.costC)
+    }[key];
+    // Existing campaign thresholds use the displayed precision.
+    return Number.isFinite(value) ? Number(value.toFixed(2)) : null;
+  }
+  function qualifies(entry, filters) {
+    if (!entry || (filters.strategy && !entry.strategies.has(filters.strategy))) return false;
+    for (const [key, range] of Object.entries(filters)) {
+      if (key === 'strategy' || !range) continue;
+      const v = placementValue(entry.sum, key);
+      if (v === null || (range.min != null && v < range.min) || (range.max != null && v > range.max)) return false;
+    }
+    return true;
+  }
+  function placementEntry(map, id) {
+    if (!map.has(id)) map.set(id, {sum:blank(), strategies:new Set()});
+    return map.get(id);
+  }
+  function collectPlacements(rows, dates, weekStart) {
+    const sums = new Map(), clipped = new Set();
+    for (const [id, from, to, , impressions, clicks, costC, adSalesC, adOrders, strategy] of rows) {
+      const lo = millis(from), hi = millis(to);
+      if (lo < weekStart || hi > weekStart + 6 * dayMs || hi < lo) throw Error('广告位日期超出归档周。');
+      let count = 0;
+      for (let n = lo; n <= hi; n += dayMs) if (dates.has(dateText(n))) count++;
+      if (count === 0) continue;
+      if (count !== (hi - lo) / dayMs + 1) {
+        clipped.add(String(id));
+        continue;
+      }
+      const entry = placementEntry(sums, String(id));
+      plus(entry.sum, {impressions, clicks, costC, adSalesC, adOrders, sourceRows:1});
+      if (strategy) entry.strategies.add(strategy);
+    }
+    return {sums, clipped};
+  }
+
+  function branchFor(scope, owner, pid, cid, gid, labels) {
+    if (scope.kind !== 'store') {
+      if (scope.unmapped ? owner !== null : !owner || owner[0] !== scope.operator) return false;
+      if (scope.kind !== 'operator' && !scope.unmapped && owner[1] !== scope.product) return false;
+    }
+    if (scope.portfolioId != null && String(scope.portfolioId) !== pid) return false;
+    if (scope.campaignId != null && String(scope.campaignId) !== cid) return false;
+    if (scope.adGroupId != null && String(scope.adGroupId) !== gid) return false;
+    const child = children[scope.kind];
+    switch (child) {
+      case 'operator': return {id:JSON.stringify([child, owner ? owner[0] : null]), label:owner ? owner[0] : '未匹配目录'};
+      case 'product': return {id:JSON.stringify([child, owner]), label:owner ? owner[1] : '未匹配目录的 SKU'};
+      case 'portfolio': return {id:JSON.stringify([child,pid]), label:labels.portfolio};
+      case 'campaign': return {id:JSON.stringify([child,cid]), label:labels.campaign};
+      case 'adgroup': return {id:JSON.stringify([child,gid]), label:labels.group};
+      default: return null;
+    }
+  }
+  function add(state, feed) {
+    if (!feed || !state.requestedWeeks.has(feed.week) || state.parts.has(feed.week)) return;
+    const epoch = millis(feed.week);
+    const pack = feed.actualPack;
+    if (!pack || !Array.isArray(pack.facts) || !Array.isArray(pack.owners) || !pack.groups || !pack.campaigns || !pack.portfolios) {
+      throw Error('广告周包缺少推广商品报表。');
+    }
+    const weeksDates = Array.from({length:7}, (_, i) => dateText(epoch + i * dayMs));
+    const campaigns = new Map(), labels = new Map();
+    for (const [oi, rawGroup, rows, datedPortfolio] of pack.facts) {
+      const owner = oi === -1 ? null : pack.owners[oi];
+      const gid = String(rawGroup), group = pack.groups[gid], campaign = group && pack.campaigns[group[0]];
+      if ((oi !== -1 && !Array.isArray(owner)) || !group || !campaign) throw Error('周包中的广告层级引用无效。');
+      const cid = String(group[0]), pid = String(datedPortfolio ?? campaign[0] ?? '');
+      const child = branchFor(state.scope, owner, pid, cid, gid, {
+        portfolio:pid ? pack.portfolios[pid] || pid : '未分配广告组合', campaign:campaign[1], group:group[1]
+      });
+      if (child === false) continue;
+      for (const [slot, costC, adSalesC, adOrders, clicks, impressions, sourceRows] of rows) {
+        const date = weeksDates[slot - 16];
+        if (!date || !Number.isSafeInteger(sourceRows) || sourceRows <= 0) throw Error('周包中的广告日期或行数无效。');
+        if (!state.dates.has(date)) continue;
+        if (!campaigns.has(cid)) campaigns.set(cid, {daily:new Map(), children:new Map()});
+        const entry = campaigns.get(cid);
+        const metrics = {costC, adSalesC, adOrders, clicks, impressions, sourceRows};
+        accumulate(entry.daily, date, metrics);
+        if (child) {
+          accumulate(entry.children, child.id, metrics);
+          labels.set(child.id, child.label);
+        }
+      }
+    }
+    const filtered = Object.keys(state.filters).length > 0;
+    if (filtered && !Array.isArray(feed.placements)) throw Error('广告周包缺少活动筛选使用的广告位报表。');
+    const placements = filtered ? collectPlacements(feed.placements, state.dates, epoch) : null;
+    // Store only aggregates. A failure above leaves this week eligible for retry.
+    state.parts.set(feed.week, {campaigns, labels, placements});
+  }
+  function finish(state) {
+    const filtered = Object.keys(state.filters).length > 0;
+    const places = new Map(), clipped = new Set(), scoped = new Set();
+    const weeks = [...state.parts.keys()].sort();
+    for (const week of weeks) {
+      const part = state.parts.get(week);
+      for (const id of part.campaigns.keys()) scoped.add(id);
+      if (!filtered) continue;
+      for (const id of part.placements.clipped) clipped.add(id);
+      for (const [id, value] of part.placements.sums) {
+        const target = placementEntry(places, id);
+        plus(target.sum, value.sum);
+        for (const strategy of value.strategies) target.strategies.add(strategy);
+      }
+    }
+    const daily = new Map(), breakdown = new Map(), labels = new Map();
+    for (const week of weeks) {
+      const part = state.parts.get(week);
+      for (const [id, entry] of part.campaigns) {
+        if (filtered && !qualifies(places.get(id), state.filters)) continue;
+        for (const [date, value] of entry.daily) accumulate(daily, date, value);
+        for (const [key, value] of entry.children) {
+          accumulate(breakdown, key, value);
+          labels.set(key, part.labels.get(key));
+        }
+      }
+    }
+    const total = daily.size ? blank() : null;
+    for (const value of daily.values()) plus(total, value);
+    const days = [...state.dates].map(date => ({date, metrics:daily.get(date) || null, covered:state.parts.has(monday(millis(date)))}));
+    const missingWeeks = [...state.requestedWeeks].filter(week => !state.parts.has(week));
+    const clippedCampaigns = [...scoped].filter(id => clipped.has(id)).length;
+    return {
+      start:state.start, end:state.end, total,
+      children:[...breakdown].map(([id,metrics]) => ({id,label:labels.get(id),metrics})),
+      daily:days, expectedDays:days.length, coveredDays:days.filter(day => day.covered).length,
+      missingWeeks, complete:days.length > 0 && !missingWeeks.length, childKind:children[state.scope.kind],
+      clippedCampaigns
+    };
+  }
+  function aggregate(feeds, range, scope, filters) {
+    const state = start(range, scope, filters);
+    for (const feed of feeds) add(state, feed);
+    return finish(state);
+  }
+  function compareRows(current, baseline) {
+    const byId = new Map();
+    for (const row of baseline.children) byId.set(row.id, {id:row.id, label:row.label, current:null, baseline:row.metrics});
+    for (const row of current.children) {
+      const item = byId.get(row.id) || {id:row.id, baseline:null};
+      byId.set(row.id, {...item, label:row.label, current:row.metrics});
+    }
+    return [...byId.values()];
+  }
+  root.MCPeriodEngine = Object.freeze({start, add, finish, aggregate, compareRows, describeScope});
+})(typeof window !== 'undefined' ? window : globalThis);
+
+(() => {
+  'use strict';
+
+  const views = new WeakMap();
+  const dayMs = 86400000;
+  const metricList = [
+    {key:'costC', label:'广告花费', unit:'money'},
+    {key:'adSalesC', label:'归因广告销售额', unit:'money'},
+    {key:'adOrders', label:'广告订单', unit:'count'},
+    {key:'impressions', label:'曝光量', unit:'count'},
+    {key:'clicks', label:'点击量', unit:'count'},
+    {key:'ctr', label:'点击率', unit:'percent', numerator:'clicks', denominator:'impressions'},
+    {key:'cvr', label:'转化率', unit:'percent', numerator:'adOrders', denominator:'clicks'},
+    {key:'acos', label:'ACOS', unit:'percent', numerator:'costC', denominator:'adSalesC'},
+    {key:'roas', label:'ROAS', unit:'multiple', numerator:'adSalesC', denominator:'costC'},
+    {key:'cpc', label:'平均点击花费', unit:'money', numerator:'costC', denominator:'clicks'}
+  ];
+  const metricByKey = new Map(metricList.map(m => [m.key,m]));
+  const childLabels = {operator:'运营人员', product:'产品', portfolio:'广告组合', campaign:'广告活动', adgroup:'广告组', keyword:'关键词', target:'投放'};
+  const integer = new Intl.NumberFormat('en-US', {maximumFractionDigits:0});
+  const decimal = new Intl.NumberFormat('en-US', {minimumFractionDigits:2,maximumFractionDigits:2});
+  const names = new Intl.Collator('zh-CN', {numeric:true});
+  const esc = value => String(value??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const iso = date => date.toISOString().slice(0,10);
+  const asDate = day => new Date(day+'T00:00:00Z');
+  const plusDays = (day,n) => iso(new Date(asDate(day).getTime()+n*dayMs));
+  const monthOf = day => day.slice(0,7)+'-01';
+
+  function monthStep(day,n) {
+    const d=asDate(monthOf(day));
+    d.setUTCMonth(d.getUTCMonth()+n);
+    return iso(d);
+  }
+  function preceding(mode,start) {return mode==='week'?plusDays(start,-7):monthStep(start,-1);}
+  function endOf(mode,start) {return mode==='week'?plusDays(start,6):plusDays(monthStep(start,1),-1);}
+  function labelPeriod(mode,start) {
+    if(mode==='week') {
+      const end=endOf(mode,start);
+      return start.replaceAll('-','/')+' – '+(start.slice(0,4)===end.slice(0,4)?end.slice(5):end).replaceAll('-','/');
+    }
+    return start.slice(0,4)+' 年 '+Number(start.slice(5,7))+' 月';
+  }
+  function periodOptions(state) {
+    const {mode,current,baseline}=state;
+    const published=new Set();
+    for(const week of state.opts.weeks) {
+      if(mode==='week') published.add(week);
+      else {published.add(monthOf(week));published.add(monthOf(plusDays(week,6)));}
+    }
+    const pool=new Set([...published,current,baseline]);
+    for(const start of published) pool.add(preceding(mode,start));
+    return {periods:[...pool].sort().reverse(),published};
+  }
+
+  function readMetric(row,m) {
+    if(!row) return null;
+    const value=m.numerator ? (Number.isFinite(row[m.numerator]) && row[m.denominator]>0 ? row[m.numerator]/row[m.denominator] : null) : row[m.key];
+    if(!Number.isFinite(value)) return null;
+    return m.unit==='money'?value/100:m.unit==='percent'?100*value:value;
+  }
+  function showValue(value,unit,isDelta=false) {
+    if(!Number.isFinite(value)) return '—';
+    const magnitude=Math.abs(value);
+    const body=unit==='money'?'$'+decimal.format(magnitude):
+      unit==='count'?integer.format(magnitude):
+      unit==='percent'?decimal.format(magnitude)+(isDelta?' 个百分点':'%'):
+      decimal.format(magnitude)+'×';
+    return (value<0?'−':isDelta&&value>0?'+':'')+body;
+  }
+  function showRate(value) {
+    if(!Number.isFinite(value))return '—';
+    return (value<0?'−':value>0?'+':'')+decimal.format(Math.abs(value))+'%';
+  }
+  function compareValues(current,baseline,metric,complete) {
+    const a=readMetric(current,metric), b=readMetric(baseline,metric);
+    const diff=complete&&a!==null&&b!==null?a-b:null;
+    const rate=diff!==null&&b>0?100*diff/b:null;
+    return {current:a,baseline:b,diff,rate};
+  }
+  function valueCells(values,m) {
+    return ['current','baseline','diff','rate'].map(key=>{
+      const v=values[key];
+      return '<td data-mcp-side="'+key+'" class="'+(v===null?'mcp-na':'')+'">'+(key==='rate'?showRate(v):showValue(v,m.unit,key==='diff'))+'</td>';
+    }).join('');
+  }
+  function coverage(side,name,result) {
+    const n=result.coveredDays, max=result.expectedDays;
+    const status=result.complete?'完整':n?'部分':'缺失';
+    return '<div class="mcp-cover" data-mcp-coverage="'+side+'"><span class="mcp-swatch mcp-'+side+'"></span><div><strong>'+name+'</strong> '+
+      esc(result.start)+' 至 '+esc(result.end)+'<small>'+status+' · 已覆盖 '+n+' / '+max+' 天</small></div></div>';
+  }
+  function controlsMarkup() {
+    return '<p class="mcp-scope" data-mcp-scope></p><section class="panel mcp-toolbar" aria-label="周期选择"><div class="mcp-mode" role="group" aria-label="对比方式">'+
+      '<button type="button" data-mcp-mode="week">周与周</button><button type="button" data-mcp-mode="month">月与月</button></div>'+
+      '<label>本期<select data-mcp-period="current"></select></label><label>对照期<select data-mcp-period="baseline"></select></label>'+
+      '<button type="button" class="mcp-previous" data-mcp-previous>对比上一期</button></section><div class="mcp-result" data-mcp-result aria-live="polite"></div>';
+  }
+  function refreshControls(el,state) {
+    el.querySelector('[data-mcp-scope]').textContent=state.opts.scopeLabel||'';
+    for(const b of el.querySelectorAll('[data-mcp-mode]')) b.setAttribute('aria-pressed',String(b.dataset.mcpMode===state.mode));
+    const {periods,published}=periodOptions(state);
+    for(const sel of el.querySelectorAll('[data-mcp-period]')) {
+      const side=sel.dataset.mcpPeriod;
+      sel.innerHTML=periods.map(id=>'<option value="'+id+'"'+(side==='baseline'&&id===state.current?' disabled':'')+'>'+
+        labelPeriod(state.mode,id)+(published.has(id)?'':' · 无归档')+'</option>').join('');
+      sel.value=state[side];
+    }
+    el.querySelector('[data-mcp-previous]').disabled=state.baseline===preceding(state.mode,state.current);
+  }
+
+  function comparable(a,b) {return a.complete&&b.complete&&!a.clippedCampaigns&&!b.clippedCampaigns;}
+  function missingNote(a,b) {
+    const parts=[];
+    for(const [name,period] of [['本期',a],['对照期',b]]) {
+      const errors=Array.isArray(period.readErrors)?period.readErrors:[];
+      const weeks=(period.missingWeeks||[]).filter(week=>!errors.includes(week));
+      if(weeks.length)parts.push(name+'缺少周报（周一日期 '+weeks.map(esc).join('、')+'）');
+      if(errors.length)parts.push(name+'周报读取失败（'+errors.map(esc).join('、')+'）');
+      if(!period.complete&&!weeks.length&&!errors.length)parts.push(name+'所选日期缺少报表');
+      if(period.clippedCampaigns)parts.push(name+'有 '+integer.format(period.clippedCampaigns)+' 个活动的广告位记录跨越所选日期，活动筛选只采用完整落入周期的记录');
+    }
+    if(!parts.length)return '';
+    const retry=(a.readErrors?.length||b.readErrors?.length)?' <button type="button" data-mcp-retry>重新读取</button>':'';
+    return '<div class="mcp-notice">'+parts.join('。')+'。数值按可用记录汇总，当前增减和变化率显示为「—」。'+retry+'</div>';
+  }
+  function summaryMarkup(a,b) {
+    const complete=comparable(a,b);
+    return '<section class="panel mcp-summary"><div class="mcp-head"><h3>指标对比</h3></div>'+
+      '<div class="mcp-scroll"><table data-mcp-summary><thead><tr><th scope="col">指标</th><th scope="col">本期</th><th scope="col">对照期</th><th scope="col">增减</th><th scope="col">变化率</th></tr></thead><tbody>'+
+      metricList.map(m=>'<tr data-mcp-metric="'+m.key+'"><th scope="row">'+m.label+'</th>'+valueCells(compareValues(a.total,b.total,m,complete),m)+'</tr>').join('')+
+      '</tbody></table></div><p class="mcp-foot">点击率、转化率、ACOS 按周期合计数计算，增减用百分点表示。对照值为 0 时，变化率显示为「—」。</p></section>';
+  }
+  function metricSelect(attr,label,value) {
+    return '<label>'+label+'<select '+attr+'>'+metricList.map(m=>'<option value="'+m.key+'"'+(m.key===value?' selected':'')+'>'+m.label+'</option>').join('')+'</select></label>';
+  }
+  function trendMarkup(state,a,b) {
+    return '<section class="panel mcp-trend"><div class="mcp-head"><h3>逐日走势</h3>'+metricSelect('data-mcp-trend-metric','指标',state.trendMetric)+'</div>'+
+      '<div data-mcp-plot>'+plotMarkup(state,a,b)+'</div></section>';
+  }
+  function plotMarkup(state,a,b) {
+    const m=metricByKey.get(state.trendMetric);
+    const calendarDays=p=>Math.round((asDate(p.end)-asDate(p.start))/dayMs)+1;
+    const sets=[a,b].map(p=>{
+      const points=new Map();
+      for(const day of p.daily||[]) {
+        if(!day.covered||!day.metrics)continue;
+        const val=readMetric(day.metrics,m),i=Math.round((asDate(day.date)-asDate(p.start))/dayMs);
+        if(Number.isFinite(val)&&i>=0&&i<calendarDays(p))points.set(i,{val,date:day.date});
+      }
+      return points;
+    });
+    const values=sets.flatMap(s=>[...s.values()].map(p=>p.val));
+    if(!values.length)return '<p class="mcp-empty">所选指标在这两个周期内没有可绘制的日数据。</p>';
+    const n=Math.max(calendarDays(a),calendarDays(b)), max=Math.max(...values,0);
+    const W=720,H=238,L=82,R=22,T=20,B=36;
+    const x=i=>L+i*(W-L-R)/Math.max(1,n-1), y=v=>H-B-(max?v/max:0)*(H-B-T);
+    const grid=(max?[0,max/2,max]:[0]).map(v=>'<line class="mcp-gridline" x1="'+L+'" x2="'+(W-R)+'" y1="'+y(v)+'" y2="'+y(v)+'"/><text class="mcp-axis" x="'+(L-9)+'" y="'+(y(v)+4)+'" text-anchor="end">'+
+      esc(m.unit==='count'&&!Number.isInteger(v)?decimal.format(v):showValue(v,m.unit))+'</text>').join('');
+    const ticks=state.mode==='week'?[0,1,2,3,4,5,6]:[0,4,9,14,19,24,n-1];
+    const axis=[...new Set(ticks)].map(i=>'<text class="mcp-axis" x="'+x(i)+'" y="'+(H-10)+'" text-anchor="middle">'+(state.mode==='week'?['周一','周二','周三','周四','周五','周六','周日'][i]:(i+1)+' 日')+'</text>').join('');
+    function series(set,side,title) {
+      let path='',dots='';
+      for(let i=0;i<n;i++) {
+        const item=set.get(i);
+        if(!item)continue;
+        path+=(set.has(i-1)?' L':' M')+x(i)+' '+y(item.val);
+        dots+='<circle cx="'+x(i)+'" cy="'+y(item.val)+'" r="'+(n<=7?'3.8':'2.8')+'"><title>'+title+' · '+esc(item.date)+' · '+esc(showValue(item.val,m.unit))+'</title></circle>';
+      }
+      return '<g class="mcp-series mcp-'+side+'"><path d="'+path+'"/>'+dots+'</g>';
+    }
+    return '<div class="mcp-legend"><span><i class="mcp-swatch mcp-current"></i>本期</span><span><i class="mcp-swatch mcp-baseline"></i>对照期</span></div>'+
+      '<div class="mcp-svgwrap"><svg viewBox="0 0 '+W+' '+H+'" role="img" aria-label="'+esc(m.label)+'逐日对比，按'+(state.mode==='week'?'星期':'月内日序')+'对齐">'+grid+axis+
+      series(sets[1],'baseline','对照期')+series(sets[0],'current','本期')+'</svg></div>';
+  }
+  const presenceOf = row => row.current && row.baseline?'both':row.current?'current':'baseline';
+  function childMarkup(state,a,b) {
+    const kind=a.childKind||b.childKind;
+    if(!kind)return '';
+    const complete=comparable(a,b);
+    if(!complete)state.presence='all';
+    const name=childLabels[kind]||'下一级';
+    return '<section class="panel mcp-detail"><div class="mcp-head"><h3>'+esc(name)+'明细</h3><div class="mcp-detail-controls">'+
+      metricSelect('data-mcp-child-metric','对比指标',state.childMetric)+
+      '<label>出现范围<select data-mcp-presence'+(complete?'':' disabled')+'>'+[['all','全部'],['both','两期都有'],['current','仅本期'],['baseline','仅对照期']].map(([v,l])=>
+        '<option value="'+v+'"'+(v===state.presence?' selected':'')+'>'+l+'</option>').join('')+'</select></label></div></div>'+
+      '<div data-mcp-child-body>'+childTable(state,name)+'</div></section>';
+  }
+  function sortedChildRows(state) {
+    const m=metricByKey.get(state.childMetric),data=state.data,complete=comparable(data.current,data.baseline);
+    const rows=data.rows.filter(r=>state.presence==='all'||presenceOf(r)===state.presence)
+      .map(r=>({...r,values:compareValues(r.current,r.baseline,m,complete)}));
+    const {key,dir}=state.sort;
+    const byName=(a,b)=>names.compare(a.label,b.label)||names.compare(String(a.id),String(b.id));
+    rows.sort((a,b)=>{
+      if(key==='label')return dir*byName(a,b);
+      const x=a.values[key],y=b.values[key];
+      if(x===null||y===null)return x===y?byName(a,b):x===null?1:-1;
+      return (x-y)*dir||byName(a,b);
+    });
+    return rows;
+  }
+  function childTable(state,name) {
+    const {key,dir}=state.sort;
+    const rows=sortedChildRows(state),size=25;
+    const pages=Math.max(1,Math.ceil(rows.length/size));
+    state.page=Math.max(0,Math.min(pages-1,state.page));
+    const head=[['label',name],['current','本期'],['baseline','对照期'],['diff','增减'],['rate','变化率']].map(([k,v])=>
+      '<th scope="col" aria-sort="'+(key===k?(dir>0?'ascending':'descending'):'none')+'"><button type="button" data-mcp-sort="'+k+'" aria-label="按'+v+'排序">'+v+' <span aria-hidden="true">'+(key===k?(dir>0?'↑':'↓'):'↕')+'</span></button></th>').join('');
+    const m=metricByKey.get(state.childMetric),complete=comparable(state.data.current,state.data.baseline);
+    const result=rows.slice(state.page*size,(state.page+1)*size).map(r=>{
+      const side=presenceOf(r);
+      const badge=complete&&side!=='both'?'<small class="mcp-only">'+(side==='current'?'仅本期':'仅对照期')+'</small>':'';
+      return '<tr data-mcp-child="'+esc(r.id)+'"><th scope="row">'+esc(r.label)+badge+'</th>'+valueCells(r.values,m)+'</tr>';
+    }).join('');
+    return '<div class="mcp-scroll"><table data-mcp-children><thead><tr>'+head+'</tr></thead><tbody>'+
+      (result||'<tr><td colspan="5" class="mcp-empty">当前范围没有可显示的明细。</td></tr>')+'</tbody></table></div><div class="mcp-pager"><span>共 '+integer.format(rows.length)+' 项</span>'+
+      (pages>1?'<button type="button" data-mcp-page="-1"'+(state.page===0?' disabled':'')+'>上一页</button><span>'+(state.page+1)+' / '+pages+'</span><button type="button" data-mcp-page="1"'+(state.page===pages-1?' disabled':'')+'>下一页</button>':'')+'</div>';
+  }
+  function draw(el,state) {
+    const {current:a,baseline:b}=state.data;
+    const result=el.querySelector('[data-mcp-result]');
+    result.innerHTML='<section class="mcp-context" aria-label="周期和报表覆盖">'+coverage('current','本期',a)+coverage('baseline','对照期',b)+'</section>'+
+      missingNote(a,b)+(!a.total&&a.complete||!b.total&&b.complete?'<p class="mcp-notice">'+
+      [!a.total&&a.complete?'本期':'',!b.total&&b.complete?'对照期':''].filter(Boolean).join('、')+'在当前筛选范围内没有广告报表行。</p>':'')+
+      '<div class="mcp-columns">'+summaryMarkup(a,b)+trendMarkup(state,a,b)+'</div>'+childMarkup(state,a,b);
+  }
+  async function reload(el,state) {
+    if(state.request)state.request.abort();
+    const controller=new AbortController();
+    state.request=controller;
+    state.data=null;
+    const result=el.querySelector('[data-mcp-result]');
+    result.setAttribute('aria-busy','true');
+    result.innerHTML='<p class="mcp-state">正在读取两个周期的广告报表…</p>';
+    try {
+      const data=await state.opts.load({mode:state.mode,current:state.current,baseline:state.baseline,signal:controller.signal});
+      if(controller.signal.aborted)return;
+      const rows=data.rows||window.MCPeriodEngine.compareRows(data.current,data.baseline);
+      state.data={...data,rows};
+      draw(el,state);
+    } catch(error) {
+      if(controller.signal.aborted)return;
+      result.innerHTML='<div class="mcp-state">周期报表读取失败。<button type="button" data-mcp-retry>重新读取</button></div>';
+    } finally {
+      if(!controller.signal.aborted)result.removeAttribute('aria-busy');
+    }
+  }
+
+  function changePeriods(el,state) {
+    state.page=0;
+    refreshControls(el,state);
+    reload(el,state);
+  }
+  function switchMode(el,state,mode) {
+    if(mode===state.mode)return;
+    state.savedPeriods[state.mode]={current:state.current,baseline:state.baseline,autoPrevious:state.autoPrevious};
+    state.mode=mode;
+    const saved=state.savedPeriods[mode];
+    const start=mode==='week'?state.opts.selectedWeek:monthOf(state.current);
+    Object.assign(state,saved||{current:start,baseline:preceding(mode,start),autoPrevious:true});
+    changePeriods(el,state);
+  }
+  function refreshChildren(el,state) {
+    const region=el.querySelector('[data-mcp-child-body]');
+    if(!region||!state.data)return;
+    const kind=state.data.current.childKind||state.data.baseline.childKind;
+    region.innerHTML=childTable(state,childLabels[kind]||'下一级');
+  }
+  function onChange(el,state,e) {
+    const field=e.target;
+    if(field.matches('select[data-mcp-period]')) {
+      if(field.dataset.mcpPeriod==='current') {
+        state.current=field.value;
+        if(state.autoPrevious||state.baseline===state.current) {
+          state.baseline=preceding(state.mode,state.current);
+          state.autoPrevious=true;
+        }
+      } else {
+        state.baseline=field.value;
+        state.autoPrevious=state.baseline===preceding(state.mode,state.current);
+      }
+      changePeriods(el,state);
+    } else if(field.matches('[data-mcp-child-metric]')) {
+      state.childMetric=field.value;state.page=0;refreshChildren(el,state);
+    } else if(field.matches('[data-mcp-presence]')) {
+      state.presence=field.value;state.page=0;refreshChildren(el,state);
+    } else if(field.matches('[data-mcp-trend-metric]')&&state.data) {
+      state.trendMetric=field.value;
+      el.querySelector('[data-mcp-plot]').innerHTML=plotMarkup(state,state.data.current,state.data.baseline);
+    }
+  }
+  function onClick(el,state,e) {
+    const button=e.target.closest('button');
+    if(!button||!el.contains(button))return;
+    if(button.hasAttribute('data-mcp-mode'))switchMode(el,state,button.dataset.mcpMode);
+    else if(button.hasAttribute('data-mcp-previous')) {
+      state.autoPrevious=true;
+      state.baseline=preceding(state.mode,state.current);
+      changePeriods(el,state);
+    } else if(button.hasAttribute('data-mcp-retry'))reload(el,state);
+    else if(button.hasAttribute('data-mcp-page')) {
+      state.page+=Number(button.dataset.mcpPage);refreshChildren(el,state);
+      el.querySelector('[data-mcp-children] th button')?.focus();
+    } else if(button.hasAttribute('data-mcp-sort')) {
+      const k=button.dataset.mcpSort;
+      state.sort={key:k,dir:state.sort.key===k?-state.sort.dir:k==='label'?1:-1};
+      state.page=0;refreshChildren(el,state);
+      el.querySelector('[data-mcp-sort="'+k+'"]')?.focus();
+    }
+  }
+  function validDate(s) {
+    if(typeof s!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(s))return false;
+    const d=asDate(s);return Number.isFinite(d.getTime())&&iso(d)===s;
+  }
+  function mount(el,opts) {
+    if(!el)return;
+    const weeks=Array.isArray(opts.weeks)?[...new Set(opts.weeks.filter(validDate))].sort().reverse():[];
+    const selectedWeek=validDate(opts.selectedWeek)?opts.selectedWeek:weeks[0];
+    let state=views.get(el);
+    if(!selectedWeek) {
+      if(state?.request)state.request.abort();
+      if(state)state.mountKey=null;
+      el.innerHTML='<p class="mcp-state">当前还没有可选的广告周报。</p>';return;
+    }
+    const key=JSON.stringify([opts.scopeKey,selectedWeek,weeks]);
+    if(!state) {
+      state={mode:'week',current:selectedWeek,baseline:preceding('week',selectedWeek),autoPrevious:true,savedPeriods:{},
+        page:0,sort:{key:'current',dir:-1},childMetric:'costC',trendMetric:'costC',presence:'all'};
+      views.set(el,state);
+      el.addEventListener('change',e=>onChange(el,state,e));
+      el.addEventListener('click',e=>onClick(el,state,e));
+    }
+    if(state.opts?.selectedWeek&&state.opts.selectedWeek!==selectedWeek) {
+      state.current=state.mode==='week'?selectedWeek:monthOf(selectedWeek);
+      state.baseline=preceding(state.mode,state.current);
+      state.savedPeriods={};state.autoPrevious=true;
+    }
+    state.opts={...opts,weeks,selectedWeek};
+    if(state.mountKey===key&&el.querySelector('[data-mcp-result]'))return;
+    state.mountKey=key;
+    if(!el.querySelector('[data-mcp-result]')) {
+      el.classList.add('mcp-page');
+      el.innerHTML=controlsMarkup();
+    }
+    changePeriods(el,state);
+  }
+  function unmount(el) {
+    const state=views.get(el);
+    if(!state)return;
+    state.request?.abort();state.mountKey=null;state.data=null;
+  }
+  function refresh(el) {
+    const state=views.get(el);if(state?.opts&&el.querySelector('[data-mcp-result]'))reload(el,state);
+  }
+  window.MCAdsPeriodUI=Object.freeze({mount,unmount,refresh});
+})();
+
+'use strict';
+
+const mcPeriodPane = (() => {
+  const id = 'period-compare-body';
+
+  function range(start, mode, weekdays) {
+    const end = new Date(start + 'T00:00:00Z');
+    if (mode === 'month') {
+      end.setUTCMonth(end.getUTCMonth() + 1, 0);
+    } else {
+      end.setUTCDate(end.getUTCDate() + 6);
+    }
+    return {start, end:end.toISOString().slice(0,10), weekdays};
+  }
+
+  function dateFilter(selection) {
+    if (selection === 'work') return {weekdays:[1,2,3,4,5], label:'仅工作日'};
+    if (selection === 'end') return {weekdays:[6,0], label:'仅周末'};
+    if (Number.isInteger(selection)) {
+      const weekday = (selection - 15) % 7;
+      return {weekdays:[weekday], label:'仅星期' + '日一二三四五六'[weekday]};
+    }
+    return {weekdays:null, label:'全部日期'};
+  }
+
+  async function compare(source, published, scope, filters, weekdays, options) {
+    const {mode, current, baseline, signal} = options;
+    const engine = window.MCPeriodEngine;
+    const sides = [current, baseline].map(start => ({
+      state:engine.start(range(start, mode, weekdays), scope, filters),
+      readErrors:[]
+    }));
+    const needed = new Set(sides.flatMap(side => [...side.state.requestedWeeks]));
+    function check() {
+      if (signal?.aborted) throw new DOMException('已取消读取。','AbortError');
+    }
+    // Share a boundary week across months and discard each full report after adding it.
+    for (const week of [...needed].sort().reverse()) {
+      check();
+      if (!published.has(week)) continue;
+      const relevant = sides.filter(side => side.state.requestedWeeks.has(week));
+      let report;
+      try {
+        report = await source.readWeek(week, signal);
+      } catch (error) {
+        if (error?.name === 'AbortError') throw error;
+        for (const side of relevant) side.readErrors.push(week);
+        continue;
+      }
+      check();
+      for (const side of relevant) {
+        try { engine.add(side.state, report); }
+        catch { side.readErrors.push(week); }
+      }
+    }
+    check();
+    const [a,b] = sides.map(side => ({...engine.finish(side.state), readErrors:side.readErrors.sort()}));
+    return {current:a, baseline:b};
+  }
+
+  function hide() {
+    const el = document.getElementById(id);
+    if (el?.dataset.mcPeriodOpen === 'true') {
+      window.MCAdsPeriodUI.unmount(el);
+      delete el.dataset.mcPeriodOpen;
+    }
+  }
+
+  function show(view) {
+    const el = document.getElementById(id);
+    const source = window.MCAdsPeriodSource;
+    const scope = window.MCPeriodEngine.describeScope(view);
+    if (!scope || !source) {
+      hide();
+      el.textContent = view.demo ? '周期对比需要真实广告周报。请切换到真实数据后查看。' :
+        !scope ? '该层级缺少可用于跨期核对的广告标识。请返回上一级查看。' :
+        '周报读取组件未就绪，请刷新广告看板并重试。';
+      return;
+    }
+    const weeks = source.listWeeks();
+    const published = new Set(weeks);
+    const filters = window.mcCampaignScope.getFilters();
+    const day = dateFilter(state.selection);
+    const scopeLabel = [hierarchyKinds[view.kind] + ' · ' + view.label, day.label];
+    if (Object.keys(filters).length) scopeLabel.push('两期分别按所选条件筛选活动');
+    el.dataset.mcPeriodOpen = 'true';
+    window.MCAdsPeriodUI.mount(el, {
+      weeks, selectedWeek:feed.week,
+      scopeKey:JSON.stringify([scope, filters, day.weekdays]),
+      scopeLabel:scopeLabel.join('　·　'),
+      load:options=>compare(source, published, scope, filters, day.weekdays, options)
+    });
+  }
+  return {show, hide};
+})();
+
+const reviewPages=['effects','analysis','bands','pair','periodcompare','diagnosis','attributes','drafts','method','daily'];
 let reviewPage='effects';
 
 function currentReviewPage(){return reviewPage;}
@@ -2456,6 +3204,7 @@ function syncReviewWorkspace(view){
     draftStart.hidden=reviewPage==='pair';
     draftStart.textContent='就地调整投放';
   }else if(!draftStart.hidden)draftStart.textContent=draftLabels[view.kind];
+  if(reviewPage==='periodcompare')draftStart.hidden=true;
   const switcher=document.getElementById('review-dataset');
   if(switcher)switcher.textContent=view.demo?'返回真实数据':'演示完整层级';
   if(reviewPage==='attributes'){
@@ -6477,6 +7226,8 @@ function render(){
   $('hier-empty-title').textContent=mcProjectedIds!==null?'没有符合条件的推广商品记录':'该层级的投放数据待接入';
   $('hier-empty').querySelector('p').textContent=mcProjectedIds!==null?'可调整活动条件或统计日期。':'接入对应广告报表后，这里可查看当前范围的花费、销售额、订单及每日趋势。';
   const page=currentReviewPage();
+  if(page==='periodcompare'){mcPeriodPane.show(view);return;}
+  mcPeriodPane.hide();
   if(page==='bands'){renderCampaignBands(view,dates);return;}
   if(page==='pair'){renderProductPair(view,dates);return;}
   if(page==='daily'){
