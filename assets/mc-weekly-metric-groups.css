@@ -1,0 +1,62 @@
+/* The weekly and daily results share these column keys, including after a filter change. */
+#summaryResults .results-table {
+  --profit-sales-bg: #eaf3ff;
+  --orders-bg: #edf6e6;
+  --ad-cost-bg: #fff3d8;
+  --refunds-app-bg: #f2ebfa;
+  --traffic-bg: #e3f5f3;
+  --conversion-bg: #fcebec;
+}
+
+#summaryResults .results-table tbody tr:not([data-summary]):hover {
+  --profit-sales-bg: #deebfc;
+  --orders-bg: #dfefd4;
+  --ad-cost-bg: #ffebc1;
+  --refunds-app-bg: #e9ddf5;
+  --traffic-bg: #d4edeb;
+  --conversion-bg: #f9ddde;
+}
+
+#summaryResults .results-table thead,
+#summaryResults .results-table tr[data-summary="true"] {
+  --profit-sales-bg: #cdddf6;
+  --orders-bg: #d1e6c4;
+  --ad-cost-bg: #f9dfa5;
+  --refunds-app-bg: #dfcfee;
+  --traffic-bg: #bfe4df;
+  --conversion-bg: #f4ced1;
+}
+
+#summaryResults :is(
+  [data-column="order_profit_net"], [data-column="order_gross_margin"],
+  [data-column="sales"], [data-column="organic_sales"], [data-column="ad_sales"]
+) { background-color: var(--profit-sales-bg); }
+
+#summaryResults :is(
+  [data-column="orders"], [data-column="organic_orders"], [data-column="ad_orders"],
+  [data-column="organic_order_share"], [data-column="ad_order_share"]
+) { background-color: var(--orders-bg); }
+
+#summaryResults :is(
+  [data-column="ad_cost"], [data-column="ad_cost_of_sales"]
+) { background-color: var(--ad-cost-bg); }
+
+#summaryResults :is(
+  [data-column="txn_refund"], [data-column="refund_amount_share"],
+  [data-column="returns_rate"], [data-column="app_session_share"]
+) { background-color: var(--refunds-app-bg); }
+
+#summaryResults :is(
+  [data-column="sessions"], [data-column="ad_clicks"],
+  [data-column="organic_clicks"], [data-column="ad_ctr"]
+) { background-color: var(--traffic-bg); }
+
+#summaryResults :is(
+  [data-column="order_session_rate"], [data-column="organic_conversion_rate"],
+  [data-column="ad_conversion_rate"]
+) { background-color: var(--conversion-bg); }
+
+#summaryResults :is(
+  [data-column="order_profit_net"], [data-column="orders"], [data-column="ad_cost"],
+  [data-column="txn_refund"], [data-column="sessions"], [data-column="order_session_rate"]
+) { border-inline-start: 1px solid #c3cfd6; }
