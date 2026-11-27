@@ -59,6 +59,7 @@
 
   function coveredDate(snapshot, date) {
     const data = snapshot?.payload || {};
+    if (data.range_coverage && !data.range_coverage.recorded_dates?.includes(date)) return false;
     const publishedDay = snapshot?.generated_at ? pacificDate(snapshot.generated_at) : null;
     return reportTimezoneMatches(snapshot) && Array.isArray(data.daily_rows) && DATE_PATTERN.test(String(date)) &&
       DATE_PATTERN.test(String(data.period?.start_date)) && DATE_PATTERN.test(String(data.period?.end_date)) &&
@@ -344,7 +345,7 @@
     let amountAvailable = result.currency !== 'MIXED';
     for (const row of rows) {
       const match = typeof row.sales_amount === 'string' || typeof row.sales_amount === 'number'
-        ? String(row.sales_amount).match(/^(-?)(\d+)(?:\.(\d{1,2}))?$/) : null;
+        ? String(row.sales_amount).match(/^(-?)(\d+)(?:\.(\d{1,2})0*)?$/) : null;
       if (!match) { amountAvailable = false; continue; }
       const value = BigInt(match[2]) * 100n + BigInt((match[3] || '').padEnd(2, '0'));
       cents += match[1] ? -value : value;
@@ -355,6 +356,89 @@
     // Product counts cannot be added across dates. Derive them from published rows
     // for the selected scope in the page, while preserving the summary order total.
     return result;
+  }
+
+  // The 15-day publisher includes a store-level, distinct-order summary for each
+  // day, including synthetic zero summaries on dates without source order lines.
+  function recentHistoryRange(snapshot, start, end) {
+    const data = snapshot?.payload;
+    if (!coveredDate(snapshot, start) || !coveredDate(snapshot, end) || start > end ||
+        !Array.isArray(data.sales_daily_summaries)) return null;
+    const startTime = Date.parse(start + 'T00:00:00Z'), endTime = Date.parse(end + 'T00:00:00Z');
+    const length = (endTime - startTime) / 86400000 + 1;
+    if (!Number.isInteger(length) || length < 1 || length > 15 ||
+        new Date(startTime).toISOString().slice(0, 10) !== start || new Date(endTime).toISOString().slice(0, 10) !== end) return null;
+    const inRange = row => row?.date >= start && row.date <= end;
+    const summaries = data.sales_daily_summaries.filter(inRange).sort((a, b) => a.date.localeCompare(b.date));
+    if (summaries.length !== length) return null;
+    const childRows = data.daily_rows.filter(inRange);
+    const parentAvailable = data.parent_asin_available === true;
+    if (parentAvailable && !dimensionRows(snapshot, 'parent').available) return null;
+    const parentRows = parentAvailable ? data.parent_daily_rows.filter(inRange) : [];
+
+    // The historical store summary and the daily ASIN view originate in separate
+    // publisher queries. Only use them together when the dates and totals reconcile.
+    const isCount = n => (typeof n === 'number' || (typeof n === 'string' && /^\d+$/.test(n))) && count(n) !== null;
+    const groupKey = row => (row.group_type === 'parent' ? 'parent:' : 'child:') + row.asin;
+    const rowsMatchDay = (rows, summary, dayTotals, countKey) => {
+      if (!isCount(summary[countKey]) || rows.length !== Number(summary[countKey])) return false;
+      if (!rows.length) return true;
+      const groups = new Set();
+      let lineOrders = 0;
+      for (const row of rows) {
+        const key = groupKey(row);
+        if (groups.has(key) || !ASIN_PATTERN.test(row.asin || '') || !isCount(row.orders_count) ||
+            !isCount(row.units) || Number(row.orders_count) > Number(summary.orders_count) ||
+            (row.group_type === 'parent' && row.asin !== row.parent_asin)) return false;
+        groups.add(key);
+        lineOrders += Number(row.orders_count);
+      }
+      const totals = sumSummaries(rows);
+      return lineOrders >= Number(summary.orders_count) && totals.units === Number(summary.units) &&
+        totals.currency === dayTotals.currency && totals.sales_amount === dayTotals.sales_amount;
+    };
+    const selected = [];
+    for (let i = 0; i < summaries.length; i++) {
+      const day = summaries[i];
+      const iso = new Date(startTime + i * 86400000).toISOString().slice(0, 10);
+      if (day.date !== iso || !isCount(day.units) || !isCount(day.orders_count) || !day.currency) return null;
+      const dayTotals = sumSummaries([day]);
+      if (dayTotals.sales_amount === null && day.currency !== 'MIXED') return null;
+      const children = childRows.filter(row => row.date === iso);
+      if (!rowsMatchDay(children, day, dayTotals, 'child_asins_count') ||
+          (parentAvailable && !rowsMatchDay(parentRows.filter(row => row.date === iso), day, dayTotals, 'parent_asins_count'))) return null;
+      if (children.length) selected.push(day);
+      else if (Number(day.units) || Number(day.orders_count) || dayTotals.sales_amount !== '0.00') return null;
+    }
+
+    const parentGroups = new Set(parentRows.map(groupKey));
+    const children = new Set(childRows.map(row => row.asin));
+    const knownParents = new Set(parentRows.filter(row => row.group_type === 'parent').map(row => row.asin));
+    const recorded = selected.map(day => day.date);
+    const summary = sumSummaries(selected);
+    if (summary) Object.assign(summary, {
+      child_asins_count: children.size, parent_asins_count: parentAvailable ? parentGroups.size : null,
+      mapped_parent_asins_count: parentAvailable ? knownParents.size : null,
+      unknown_child_asins_count: parentAvailable ? parentGroups.size - knownParents.size : null
+    });
+    const within = date => date >= start && date <= end;
+    const ads = data.sp_ads_spend;
+    const mappings = {};
+    for (const [parent, members] of Object.entries(data.parent_child_asins || {})) {
+      if (!Array.isArray(members)) continue;
+      const scoped = members.filter(asin => children.has(asin));
+      if (scoped.length) mappings[parent] = scoped;
+    }
+    return { generated_at: snapshot.generated_at, payload: {
+      schema_version: 1, report_timezone: REPORT_TIMEZONE, period: {start_date: start, end_date: end},
+      daily_rows: childRows, parent_daily_rows: parentRows, parent_ranking: [], ranking: [],
+      parent_asin_available: parentAvailable, parent_children_available: data.parent_children_available === true,
+      parent_child_asins: mappings, product_images: data.product_images,
+      sp_ads_spend: ads && {...ads, days: Object.fromEntries(Object.entries(ads.days || {}).filter(([day]) => within(day)))},
+      sales_daily_summaries: selected, range_summary: summary,
+      range_coverage: { recorded_start_date: recorded[0] || null, recorded_end_date: recorded.at(-1) || null,
+        days_with_records: recorded.length, recorded_dates: recorded }
+    }};
   }
 
   function dailyScopeSummary(snapshot, selectedDate = '') {
@@ -412,7 +496,7 @@
     spAdsDay, spAdsCents, spAdsAmount, dailyRowsWithSpend,
     parentChildren, childRowsForDate, childrenTodayComparison, childrenPeriodRows,
     HISTORY_DAYS, historyWindow, historyParentChildren, historyChildrenRows, dailySummary,
-    sumSummaries, dailyScopeSummary, csvCell, csvDocument, historyCsv, todayCsv };
+    sumSummaries, recentHistoryRange, dailyScopeSummary, csvCell, csvDocument, historyCsv, todayCsv };
   if (typeof module !== 'undefined' && module.exports) module.exports = model;
   else root.KBSalesModel = model;
 })(typeof window === 'undefined' ? globalThis : window);

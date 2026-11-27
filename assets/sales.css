@@ -141,3 +141,30 @@
 .sales-detail-table{min-width:760px}
 .sales-child-table.sales-today-table{min-width:790px}
 @media(max-width:600px){.sales-ads-status{padding:8px 14px}}
+
+.sales-date-range { margin: 0; }
+.sales-date-fields { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; }
+.sales-date-fields label, .sales-detail-date { display: grid; gap: 5px; color: var(--muted); font-size: 12px; }
+.sales-date-fields input {
+  box-sizing: border-box;
+  min-width: 0;
+  height: 36px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  padding: 0 9px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+.sales-date-fields button, .sales-detail-date button { height: 36px; }
+.sales-date-fields input:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+.sales-summary-head .sales-range-feedback:not(:empty) { margin-top: 5px; color: var(--text); }
+.sales-detail-date { align-self: end; }
+@media (max-width: 600px) {
+  .sales-date-range { width: 100%; }
+  .sales-date-fields { gap: 8px; }
+  .sales-date-fields label { flex: 1 1 120px; }
+  .sales-date-fields input { width: 100%; }
+}

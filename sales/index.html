@@ -5,7 +5,8 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>销量观察｜首页｜关键词作战工具</title>
   <link rel="stylesheet" href="../assets/styles.css">
-  <link rel="stylesheet" href="../assets/sales.css?v=20261109-sp-spend1">
+  <link rel="stylesheet" href="../assets/sales.css?v=20261127-date-range">
+  <link rel="stylesheet" href="../assets/sales-history-chart.css?v=20261127-date-range">
   <link rel="stylesheet" href="../assets/workspace-nav.css?v=20261126-ads">
 </head>
 <body>
@@ -148,11 +149,14 @@
 
     <div id="viewHistory" class="sales-view" aria-label="历史数据" hidden>
       <div class="sales-summary-head"><div><h2>历史数据看板</h2><p id="historyScopeText">查看所选期间的全店已识别商品汇总</p></div>
-        <div class="sales-history-controls">
-          <div id="historyRangeGroup" class="sales-range-controls" role="group" aria-label="历史看板汇总天数（仅改变上方看板）">
-            <button type="button" data-history-days="7" aria-pressed="true">7 天</button><button type="button" data-history-days="30" aria-pressed="false">30 天</button><button type="button" data-history-days="90" aria-pressed="false">90 天</button><button type="button" data-history-days="150" aria-pressed="false">150 天</button><button type="button" data-history-days="240" aria-pressed="false">240 天</button><button type="button" data-history-days="360" aria-pressed="false">360 天</button>
+        <form class="sales-date-range" id="historyRangeForm" aria-label="历史统计日期" novalidate>
+          <div class="sales-date-fields">
+            <label for="historyStart">开始日期<input type="date" id="historyStart" required aria-describedby="historyRangeFeedback"></label>
+            <label for="historyEnd">结束日期<input type="date" id="historyEnd" required aria-describedby="historyRangeFeedback"></label>
+            <button class="btn btn-primary btn-sm" id="historyApplyRange" type="submit">查询</button>
           </div>
-        </div>
+          <p id="historyRangeFeedback" class="sales-range-feedback" role="status" aria-live="polite"></p>
+        </form>
       </div>
       <section class="sales-kpis sales-summary-kpis" aria-label="历史销售汇总">
         <article class="card sales-kpi"><div class="sales-kpi-label">销量（件）</div><div id="historyUnits" class="sales-kpi-value">—</div><div class="sales-kpi-note">所选期间的订购件数</div></article>
@@ -161,13 +165,13 @@
         <article class="card sales-kpi"><div class="sales-kpi-label" id="historyProductLabel">有记录的子 ASIN 数</div><div id="historyProducts" class="sales-kpi-value">—</div><div class="sales-kpi-note" id="historyProductNote">按当前统计维度</div></article>
       </section>
       <p class="sales-summary-status" id="historyCoverage" role="status"></p>
-      <p class="sales-summary-status sales-history-table-scope">上方天数仅调整汇总看板；下方始终展示近 15 天每日明细，日期筛选与导出只作用于下方列表。</p>
+      <section class="card sales-trend" id="historyTrend" aria-label="每日销售趋势"></section>
       <section class="card table-card" aria-labelledby="dailyHeading">
         <div class="card-head sales-detail-head">
-          <div><h2 id="dailyHeading">每日子 ASIN 销售明细</h2><p id="dailyDescription">近 15 天，按日期和子 ASIN 汇总；同一子 ASIN 的多个 SKU 合并显示。</p></div>
+          <div><h2 id="dailyHeading">每日子 ASIN 销售明细</h2><p id="dailyDescription">按所选日期和子 ASIN 汇总，同一子 ASIN 的多个 SKU 合并显示。</p></div>
           <div class="sales-detail-filters">
             <button class="btn btn-secondary btn-sm sales-export-btn" id="historyExportBtn" disabled>导出 CSV</button>
-            <label id="dailyDateControl" for="dailyDateFilter">日期<select id="dailyDateFilter"><option value="">全部日期</option></select></label>
+            <div class="sales-detail-date"><span id="dailyRangeLabel">所选日期</span><button type="button" class="btn btn-secondary btn-sm" id="historyEditRange">更改日期</button></div>
             <label for="dailyAsinFilter"><span id="dailyFilterLabel">子 ASIN</span><input id="dailyAsinFilter" type="search" placeholder="搜索子 ASIN" autocomplete="off"></label>
           </div>
         </div>
@@ -189,8 +193,9 @@
 <script src="../assets/config.js"></script>
 <script src="../assets/auth-client.js"></script>
 <script src="../assets/app.js"></script>
-<script src="../assets/sales-client.js"></script>
-<script src="../assets/sales-model.js?v=20261109-sp-spend1"></script>
-<script src="../assets/sales-page.js?v=20261109-sp-spend1"></script>
+<script src="../assets/sales-client.js?v=20261127-date-range"></script>
+<script src="../assets/sales-model.js?v=20261127-date-range"></script>
+<script src="../assets/sales-history-chart.js?v=20261127-date-range"></script>
+<script src="../assets/sales-page.js?v=20261127-date-range"></script>
 </body>
 </html>
