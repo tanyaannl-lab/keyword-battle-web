@@ -241,8 +241,14 @@ html[data-hier-demo="true"] .hero{background:linear-gradient(106deg,#24374b,#345
 #review-placements .mci-group{padding:7px 3px;text-align:left;font-weight:600}
 #review-placements .mci-group small{display:inline;font-weight:400;margin-left:5px}
 #review-placements .mci-dates summary,#review-placements .mci-terms summary{cursor:pointer;font-size:12px;font-weight:400;color:#346d57;width:fit-content}
-#review-placements .mci-terms ul{font-weight:400;white-space:normal;overflow-wrap:anywhere;max-width:320px;max-height:180px;overflow:auto}
-#review-placements .mci-terms li{text-align:left}
+#review-placements .mci-child-table .mci-terms-row>td{border:0;padding:0 8px 4px;text-align:left}
+#review-placements .mci-terms summary{font-size:13px;padding:3px 2px}
+#review-placements .mci-terms summary:focus-visible,#review-placements .mci-term-scroll:focus-visible{outline:2px solid #15795d;outline-offset:1px}
+#review-placements .mci-term-scroll{overflow:auto;max-height:24rem;border:1px solid #d5e2da;border-radius:6px;background:white;margin:4px 0 10px}
+#review-placements .mci-terms-table{width:100%;min-width:850px;border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-nums}
+#review-placements .mci-terms-table thead th{position:sticky;top:0;z-index:1;background:#edf3ef}
+#review-placements .mci-terms-table tbody th{font-weight:500;white-space:normal;overflow-wrap:anywhere;min-width:18ch;max-width:48ch}
+#review-placements .mci-terms-table tr:last-child>*{border-bottom:0}
 #review-placements .mci-dates>div{max-height:170px;overflow:auto;background:white}
 #review-placements [data-sort]{padding:2px;font-weight:650}
 #review-placements [aria-sort=ascending] [data-sort],#review-placements [aria-sort=descending] [data-sort]{color:#126b53}
@@ -6849,11 +6855,19 @@ const mcInlineAds = (()=>{
       let rec=rows.get(id);
       if(!rec){
         rec={id,kind,label:(kind==='product'?'商品定投':(targetTypeNames[type]||type)+'匹配')+' · '+objectId,campaign:String(campaign),
-          group:String(group),groupLabel:q.groupLabel||group,objectId,editable:true,terms:[],sum:Object.fromEntries(placementValues.map(k=>[k,0]))};
+          group:String(group),groupLabel:q.groupLabel||group,objectId,editable:true,terms:new Map(),sum:Object.fromEntries(placementValues.map(k=>[k,0]))};
         rows.set(id,rec);
       }
-      rec.terms.push({term:realSearchTerms[q.q],costC:q.costC,clicks:q.clicks});
-      for(const k of placementValues)rec.sum[k]+=q[k];
+      const term=realSearchTerms[q.q];
+      let termRow=rec.terms.get(term);
+      if(!termRow) {
+        termRow={term,...Object.fromEntries(placementValues.map(k=>[k,0]))};
+        rec.terms.set(term,termRow);
+      }
+      for(const k of placementValues) {
+        termRow[k]+=q[k];
+        rec.sum[k]+=q[k];
+      }
     }
     const byCampaign=new Map();
     for(const r of rows.values()){
@@ -6926,17 +6940,40 @@ const mcInlineAds = (()=>{
       (key==='name'?mark('data-mci-all','','选择当前活动列表全部可调行')+' ':'')+'<button type="button" data-sort="'+key+'">'+label+
       ' <span aria-hidden="true">'+(active?(order.up?'↑':'↓'):'↕')+'</span></button></th>';
   }
+  const termHeadings=['买家搜索词','曝光','点击','点击率','广告花费','归因销售额','广告订单','转化率','ACOS','ROAS'];
+
+  function termDisclosure(r) {
+    return '<details class="mci-terms" data-inline-disclosure="'+h(r.id)+'"><summary>买家搜索词（'+
+      countText(r.terms.size)+'）</summary><div class="mci-term-scroll" tabindex="0" role="region" aria-label="买家搜索词明细">'+
+      '<table class="mci-terms-table" aria-label="'+h(r.label)+'的买家搜索词"></table></div></details>';
+  }
+
+  function renderTermTable(detail) {
+    const target=context?.rows.get(detail.dataset.inlineDisclosure);
+    if(!target?.terms || !detail.open)return;
+    const scope='inline-terms:'+target.id;
+    if(!mcLevelSort.current(scope))mcLevelSort.set(scope,'clicks','descending');
+    mcLevelSort.onRender(scope,refreshOpenTermTables);
+    const rows=mcLevelSort.rows(scope,[...target.terms.values()],(row,key)=>
+      key==='name'?row.term:placementSortValue(row,key));
+    const table=detail.querySelector('.mci-terms-table');
+    table.innerHTML=placementSortHead(scope,termHeadings,placementSortKeys)+'<tbody>'+rows.map(row=>
+      '<tr><th scope="row">'+h(row.term)+'</th>'+placementDetailCells(row)+'</tr>').join('')+'</tbody>';
+  }
+
+  function refreshOpenTermTables() {
+    for(const detail of root().querySelectorAll('.mci-terms[open]'))renderTermTable(detail);
+  }
+
+  function openTermTable(event) {
+    const detail=event.target;
+    if(detail.matches?.('.mci-terms[open]') && !detail.querySelector('thead'))renderTermTable(detail);
+  }
+
   function rowName(r){
-    if(r.kind==='placement'){
-      const css=Object.hasOwn(placementLabels,r.slot)?r.slot:'other';
-      return '<span class="pl-badge" data-tone="'+css+'">'+h(r.label)+'</span>';
-    }
-    let evidence='';
-    if(r.terms.length){
-      evidence='<details class="mci-terms" data-inline-disclosure="'+h(r.id)+'"><summary>买家搜索词（'+r.terms.length+'）</summary><ul>'+
-        r.terms.slice().sort((a,b)=>b.clicks-a.clicks||b.costC-a.costC).map(q=>'<li>'+h(q.term)+' · '+countText(q.clicks)+' 次点击</li>').join('')+'</ul></details>';
-    }
-    return '<b>'+h(r.label)+'</b>'+evidence;
+    if(r.kind!=='placement')return '<b>'+h(r.label)+'</b>';
+    const css=Object.hasOwn(placementLabels,r.slot)?r.slot:'other';
+    return '<span class="pl-badge" data-tone="'+css+'">'+h(r.label)+'</span>';
   }
   function childRow(r,c){
     const label=r.label+' · '+c.campaign.label, savedValue=r.editable?localValue(r):null, isPlacement=r.kind==='placement';
@@ -6948,7 +6985,8 @@ const mcInlineAds = (()=>{
       '<div>'+placementDateTable(r.dates,r.label,paint)+'</div></details>':'';
     return '<tr class="mci-record"><th scope="row">'+(r.editable?mark('data-mark',r.id,'选择'+label)+' ':'')+rowName(r)+'</th>'+
       placementDetailCells(r.sum)+'<td>'+(r.editable?'未读取':'—')+'</td><td class="mci-inputcell">'+field+'</td></tr>'+
-      (dateLink?'<tr class="mci-date-row"><td colspan="12">'+dateLink+'</td></tr>':'');
+      (dateLink?'<tr class="mci-date-row"><td colspan="12">'+dateLink+'</td></tr>':'')+
+      (r.terms?.size?'<tr class="mci-terms-row"><td colspan="12">'+termDisclosure(r)+'</td></tr>':'');
   }
   function detail(c){
     const isPlacement=mode==='placement';
@@ -7024,6 +7062,7 @@ const mcInlineAds = (()=>{
     }
     const wrap=host.querySelector('.mci-wrap');
     if(wrap)wrap.scrollLeft=scrollLeft;
+    refreshOpenTermTables();
     syncChecks();
   }
   function syncChecks(){
@@ -7124,7 +7163,7 @@ const mcInlineAds = (()=>{
     }
     for(const key of selected)if(!context.rows.has(key))selected.delete(key);
     pending=[];notice='';
-    if(!bound){const host=root();host.addEventListener('click',onClick);host.addEventListener('change',changeMark);host.addEventListener('input',edit);bound=true;}
+    if(!bound){const host=root();host.addEventListener('toggle',openTermTable,true);host.addEventListener('click',onClick);host.addEventListener('change',changeMark);host.addEventListener('input',edit);bound=true;}
     paint();return true;
   }
   return {render,canUse};
