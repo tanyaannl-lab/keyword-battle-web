@@ -82,15 +82,27 @@
         state.groups.add(row.group_type + ':' + row.asin);
       }
       if (sale.parent_available) state.parentAvailable = true;
+      const dayParents = {};
       for (const [parent,children] of Object.entries(sale.parent_child_asins || {})) {
         if (!ASIN.test(parent) || !Array.isArray(children)) continue;
         if (!state.parents.has(parent)) state.parents.set(parent,new Set());
-        for (const child of children) if (ASIN.test(child)) state.parents.get(parent).add(child);
+        for (const child of children) {
+          if (!ASIN.test(child) || child === parent) continue;
+          if (dayParents[child] && dayParents[child] !== parent) throw new Error('同日销售记录的父 ASIN 关系冲突，请重新同步。');
+          dayParents[child] = parent;
+          state.parents.get(parent).add(child);
+        }
       }
+      state.saleParentsByDate[date] = dayParents;
     }
     if (sp) {
       state.adDays[date] = sp.day;
-      Object.assign(state.adParents,sp.parent_asins);
+      const dayParents = {};
+      for (const [child,parent] of Object.entries(sp.parent_asins || {})) {
+        if (ASIN.test(child) && ASIN.test(parent) && child !== parent) dayParents[child] = parent;
+      }
+      state.adParentsByDate[date] = dayParents;
+      Object.assign(state.adParents,dayParents);
     }
   }
 
@@ -108,7 +120,7 @@
       throw new Error('历史日期索引不完整，请重新同步。');
 
     const state = {summaries:[],rows:[],parentRows:[],childAsins:new Set(),groups:new Set(),parentAvailable:false,
-      parents:new Map(),adDays:{},adParents:{}};
+      parents:new Map(),saleParentsByDate:{},adDays:{},adParents:{},adParentsByDate:{}};
     const expected = new Map(Object.entries(manifest.dates));
     const recordDates = [...expected.keys()].sort();
     for (let index=0; index<recordDates.length;) {
@@ -158,8 +170,10 @@
       ranking:[],parent_ranking:[],parent_asin_available:parentAvailable,parent_children_available:parentAvailable,
       daily_rows:state.rows,parent_daily_rows:state.parentRows,
       parent_child_asins:Object.fromEntries([...state.parents].map(([parent,children])=>[parent,[...children].sort()])),
+      sale_parent_by_date:state.saleParentsByDate,
       sales_daily_summaries:daily,sp_ads_spend:{schema_version:1,store:'MC',marketplace:'US',currency:'USD',
-        timezone:'America/Los_Angeles',days:state.adDays,parent_asins:state.adParents}}};
+        timezone:'America/Los_Angeles',days:state.adDays,parent_asins:state.adParents,
+        parent_asins_by_date:state.adParentsByDate}}};
   }
 
   window.KBSales = {getSnapshot,getHistoryRange};

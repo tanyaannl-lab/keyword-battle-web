@@ -168,7 +168,7 @@
       <section class="card sales-trend" id="historyTrend" aria-label="每日销售趋势"></section>
       <section class="card table-card" aria-labelledby="dailyHeading">
         <div class="card-head sales-detail-head">
-          <div><h2 id="dailyHeading">每日子 ASIN 销售明细</h2><p id="dailyDescription">按所选日期和子 ASIN 汇总，同一子 ASIN 的多个 SKU 合并显示。</p></div>
+          <div><h2 id="dailyHeading">子 ASIN 销售汇总</h2><p id="dailyDescription">所选期间每个子 ASIN 显示一行，按销量从高到低排列。</p></div>
           <div class="sales-detail-filters">
             <button class="btn btn-secondary btn-sm sales-export-btn" id="historyExportBtn" disabled>导出 CSV</button>
             <div class="sales-detail-date"><span id="dailyRangeLabel">所选日期</span><button type="button" class="btn btn-secondary btn-sm" id="historyEditRange">更改日期</button></div>
@@ -178,12 +178,12 @@
         <div class="sales-detail-summary" id="dailyCount">正在加载明细…</div>
         <div class="table-scroll">
           <table class="sales-detail-table">
-            <thead><tr><th scope="col" id="historyDateHeading">日期</th><th scope="col" id="dailyAsinHeading">商品 / 子 ASIN</th><th scope="col" class="sales-number">销量（件）</th><th scope="col" class="sales-number">销售额</th><th scope="col" class="sales-number">订单量</th><th scope="col" class="sales-number sales-sp-ad-cost">SP 广告花费（USD）</th></tr></thead>
-            <tbody id="dailyRows"><tr><td class="empty" colspan="6">正在加载…</td></tr></tbody>
+            <thead><tr><th scope="col" id="dailyAsinHeading">商品 / 子 ASIN</th><th scope="col" class="sales-number">销量（件）</th><th scope="col" class="sales-number">销售额</th><th scope="col" class="sales-number">订单量</th><th scope="col" class="sales-number sales-sp-ad-cost">SP 广告花费（USD）</th></tr></thead>
+            <tbody id="dailyRows"><tr><td class="empty" colspan="5">正在加载…</td></tr></tbody>
           </table>
         </div>
         <div class="sales-detail-pager"><span id="dailyPageInfo">—</span><div><button class="btn btn-secondary btn-sm" id="dailyPrevBtn" disabled>上一页</button><button class="btn btn-secondary btn-sm" id="dailyNextBtn" disabled>下一页</button></div></div>
-        <div class="sales-note">销售额优先采用订单商品实际金额；缺价时按自家售价 × 订购数量估算。取消订单不计入销量、销售额和订单量。“有缺价”的金额尚未补齐。SP 广告花费按报表更新，待同步显示“—”。</div>
+        <div class="sales-note">销售额优先采用订单商品实际金额；缺价时按自家售价 × 订购数量估算。取消订单不计入销量、销售额和订单量。“有缺价”的金额尚未补齐。SP 广告报表只覆盖部分日期时，显示已知花费小计和覆盖天数。</div>
       </section>
     </div>
   </main>
@@ -193,9 +193,9 @@
 <script src="../assets/config.js"></script>
 <script src="../assets/auth-client.js"></script>
 <script src="../assets/app.js"></script>
-<script src="../assets/sales-client.js?v=20261127-date-range"></script>
-<script src="../assets/sales-model.js?v=20261127-date-range"></script>
+<script src="../assets/sales-client.js?v=20261127-asin-period"></script>
+<script src="../assets/sales-model.js?v=20261127-asin-period"></script>
 <script src="../assets/sales-history-chart.js?v=20261127-date-range"></script>
-<script src="../assets/sales-page.js?v=20261127-date-range"></script>
+<script src="../assets/sales-page.js?v=20261127-asin-period"></script>
 </body>
 </html>

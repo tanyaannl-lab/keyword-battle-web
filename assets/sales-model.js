@@ -358,6 +358,144 @@
     return result;
   }
 
+  // A purchase has one Pacific order date. Add the source's independently
+  // deduplicated daily product/parent counts without adding siblings' orders.
+  const productRangeCache = new WeakMap();
+
+  function buildProductRange(snapshot, today) {
+    const data = snapshot?.payload;
+    const period = data?.period;
+    if (!reportTimezoneMatches(snapshot) || !period || !DATE_PATTERN.test(period.start_date) ||
+        !DATE_PATTERN.test(period.end_date)) return null;
+    const days = (Date.parse(period.end_date) - Date.parse(period.start_date)) / 86400000 + 1;
+    if (!Number.isInteger(days) || days < 1 || days > 360) return null;
+    const within = date => date >= period.start_date && date <= period.end_date;
+    const source = dimensionRows(snapshot);
+    if (!source.available) return null;
+    const groups = {child: new Map(), parent: new Map()};
+    const members = new Map();
+    const parents = new Map();
+    for (const [parent, children] of Object.entries(data.parent_child_asins || {})) {
+      if (!ASIN_PATTERN.test(parent) || !Array.isArray(children)) continue;
+      for (const child of children) {
+        if (!ASIN_PATTERN.test(child) || child === parent) continue;
+        parents.set(child, parents.has(child) && parents.get(child) !== parent ? null : parent);
+      }
+    }
+    function getGroup(map, type, asin) {
+      const key = type + ':' + asin;
+      if (!map.has(key)) map.set(key, {asin, type, rows: [], spendByDay: new Map(), positiveSpend: false});
+      return map.get(key);
+    }
+    function member(parent, child) {
+      if (!members.has(parent)) members.set(parent, new Map());
+      return getGroup(members.get(parent), 'child', child);
+    }
+    const salesDays = new Set();
+    const selling = new Map();
+    const parentSource = dimensionRows(snapshot, 'parent');
+    const sp = data.sp_ads_spend;
+    const saleParents = data.sale_parent_by_date;
+    const adParents = sp?.parent_asins_by_date;
+    function saleParent(date, child, row) {
+      if (saleParents && Object.hasOwn(saleParents, date)) return saleParents[date][child] || null;
+      return row?.parent_asin || parents.get(child) || null;
+    }
+    for (const row of source.daily) {
+      if (!row || !within(row.date) || !ASIN_PATTERN.test(row.asin)) continue;
+      salesDays.add(row.date);
+      getGroup(groups.child, 'child', row.asin).rows.push(row);
+      if (!parentSource.available) continue;
+      const parent = saleParent(row.date, row.asin, row);
+      if (!selling.has(row.date)) selling.set(row.date, new Map());
+      selling.get(row.date).set(row.asin, parent);
+      if (parent) member(parent, row.asin).rows.push(row);
+    }
+    for (const row of parentSource.daily) {
+      if (!row || !within(row.date) || !ASIN_PATTERN.test(row.asin)) continue;
+      getGroup(groups.parent, row.group_type === 'parent' ? 'parent' : 'child', row.asin).rows.push(row);
+    }
+    const ads = spAdsContext(snapshot);
+    const finalDays = new Set();
+    function addSpend(group, date, cents, imageAsin) {
+      group.spendByDay.set(date, (group.spendByDay.get(date) || 0) + cents);
+      if (cents > 0) {
+        group.positiveSpend = true;
+        if (!group.imageAsin) group.imageAsin = imageAsin;
+      }
+    }
+    for (const [date, day] of ads?.days || []) {
+      if (!within(date) || date > today) continue;
+      if (day.provisional === false && date < today) finalDays.add(date);
+      for (const [child, cents] of Object.entries(day.asin_cents)) {
+        addSpend(getGroup(groups.child, 'child', child), date, cents, child);
+        if (!parentSource.available) continue;
+        // Keep the SP source's dated attribution. When it omits a relationship,
+        // use the corresponding sale day's mapping before a static snapshot mapping.
+        const sold = selling.get(date);
+        const hasDatedAds = adParents && Object.hasOwn(adParents, date);
+        const adParent = hasDatedAds ? adParents[date][child] : sp.parent_asins?.[child];
+        const parent = adParent || (sold?.has(child) ? sold.get(child) : hasDatedAds ? null : parents.get(child));
+        addSpend(getGroup(groups.parent, parent ? 'parent' : 'child', parent || child), date, cents, child);
+        if (parent) addSpend(member(parent, child), date, cents, child);
+      }
+    }
+
+    function summarize(group, childCount = null) {
+      const raw = group.rows;
+      const metrics = raw.length ? sumSummaries(raw) : salesDays.size === days
+        ? zeroRow(null, group.asin) : unknownRow(null, group.asin);
+      const sample = raw.find(row => row.title) || raw[0];
+      let cents = 0;
+      let known = group.type !== 'parent' || childCount ? finalDays.size : 0;
+      let provisional = false;
+      for (const [date, value] of group.spendByDay) {
+        cents += value;
+        if (!finalDays.has(date)) { known++; provisional = true; }
+      }
+      const amount = Number.isSafeInteger(cents) && known > 0 ? cents : null;
+      return {
+        units: metrics.units, sales_amount: metrics.sales_amount, currency: metrics.currency,
+        orders_count: metrics.orders_count, estimated_rows: metrics.estimated_rows,
+        missing_price_rows: metrics.missing_price_rows, legacy_unknown_price_rows: metrics.legacy_unknown_price_rows,
+        asin: group.asin, title: sample?.title || null, group_type: group.type,
+        parent_asin: group.type === 'parent' ? group.asin : null,
+        image_asin: sample?.image_asin || group.imageAsin || group.asin, child_asins_count: childCount,
+        sp_ads_spend_cents: known === days ? amount : null, sp_ads_known_cents: amount,
+        sp_ads_known_days: known, range_days: days, sp_ads_provisional: provisional
+      };
+    }
+    const active = group => group.rows.length || group.positiveSpend;
+    const compare = (a, b) => (b.units ?? -1) - (a.units ?? -1) || a.asin.localeCompare(b.asin) ||
+      a.group_type.localeCompare(b.group_type);
+    const children = new Map();
+    for (const [parent, entries] of members) {
+      const rows = Array.from(entries.values()).filter(active).map(group => summarize(group)).sort(compare);
+      if (rows.length) children.set(parent, rows);
+    }
+    const rowsFor = map => Array.from(map.values()).filter(active).map(group =>
+      summarize(group, group.type === 'parent' ? children.get(group.asin)?.length || null : null)).sort(compare);
+    return {child: rowsFor(groups.child), parent: rowsFor(groups.parent), children};
+  }
+
+  function productRange(snapshot, today) {
+    if (!record(snapshot)) return null;
+    const cached = productRangeCache.get(snapshot);
+    if (cached?.today === today) return cached.data;
+    const data = buildProductRange(snapshot, today);
+    productRangeCache.set(snapshot, {today, data});
+    return data;
+  }
+
+  function historyProductRows(snapshot, dimension = 'child', today = pacificDate()) {
+    const data = productRange(snapshot, today);
+    return (dimension === 'parent' ? data?.parent : data?.child) || [];
+  }
+
+  function historyProductChildren(snapshot, parentAsin, today = pacificDate()) {
+    return productRange(snapshot, today)?.children.get(parentAsin) || [];
+  }
+
   // The 15-day publisher includes a store-level, distinct-order summary for each
   // day, including synthetic zero summaries on dates without source order lines.
   function recentHistoryRange(snapshot, start, end) {
@@ -467,15 +605,21 @@
   }
   const priceBasis = row => !row ? '' : priceFlags(row).map(flag => flag.label).join('；') || '实际金额';
   function historyCsv(rows, period, dimension, mode = 'daily') {
-    return csvDocument(['开始日期', '结束日期', '统计时区', '统计方式', '统计维度', '分组类型', 'ASIN', '父ASIN', '商品标题',
+    const periodTable = mode === 'range';
+    const dates = periodTable ? [] : ['开始日期', '结束日期'];
+    const spendFields = ['SP广告花费（USD）'];
+    if (periodTable) spendFields.push('SP已知小计（USD）', 'SP花费有值天数', '所选天数', 'SP花费含暂定日报');
+    return csvDocument([...dates, '统计时区', '统计方式', '统计维度', '分组类型', 'ASIN', '父ASIN', '商品标题',
       '销量', '销售额', '币种', '订单量', '子ASIN数', '估算明细数', '缺价明细数', '待核价明细数', '金额口径',
-      ...(mode === 'daily' ? ['SP广告花费（USD）'] : [])], rows.map(row => [
-      mode === 'daily' ? row.date : period?.start_date, mode === 'daily' ? row.date : period?.end_date, REPORT_TIMEZONE,
+      ...(mode === 'daily' || periodTable ? spendFields : [])], rows.map(row => [
+      ...(periodTable ? [] : mode === 'daily' ? [row.date, row.date] : [period?.start_date, period?.end_date]), REPORT_TIMEZONE,
       mode === 'daily' ? '每日明细' : '期间汇总', dimension === 'parent' ? '父ASIN' : '子ASIN',
       row.group_type === 'parent' ? '父ASIN' : dimension === 'parent' ? '未匹配子ASIN' : '子ASIN',
       row.asin, row.parent_asin, row.title, row.units, row.sales_amount, row.currency, row.orders_count,
       row.child_asins_count, row.estimated_rows, row.missing_price_rows, row.legacy_unknown_price_rows, priceBasis(row),
-      ...(mode === 'daily' ? [spAdsAmount(row.sp_ads_spend_cents)] : [])
+      ...(mode === 'daily' || periodTable ? [spAdsAmount(row.sp_ads_spend_cents)] : []),
+      ...(periodTable ? [spAdsAmount(row.sp_ads_known_cents), row.sp_ads_known_days, row.range_days,
+        row.sp_ads_known_days ? (row.sp_ads_provisional ? '是' : '否') : null] : [])
     ]));
   }
   function todayCsv(rows, dates, dimension) {
@@ -496,7 +640,7 @@
     spAdsDay, spAdsCents, spAdsAmount, dailyRowsWithSpend,
     parentChildren, childRowsForDate, childrenTodayComparison, childrenPeriodRows,
     HISTORY_DAYS, historyWindow, historyParentChildren, historyChildrenRows, dailySummary,
-    sumSummaries, recentHistoryRange, dailyScopeSummary, csvCell, csvDocument, historyCsv, todayCsv };
+    sumSummaries, historyProductRows, historyProductChildren, recentHistoryRange, dailyScopeSummary, csvCell, csvDocument, historyCsv, todayCsv };
   if (typeof module !== 'undefined' && module.exports) module.exports = model;
   else root.KBSalesModel = model;
 })(typeof window === 'undefined' ? globalThis : window);
