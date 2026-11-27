@@ -362,6 +362,31 @@ button.mc-level-sort:focus-visible{outline:2px solid #15795d;outline-offset:2px;
 @media(max-width:600px){.mcp-page .mcp-toolbar,.mcp-page .mcp-head{padding:12px}.mcp-page .mcp-toolbar{gap:8px}.mcp-page th,.mcp-page td{padding:7px 9px}.mcp-page table[data-mcp-summary]{min-width:480px}.mcp-page .mcp-context{gap:8px 18px}.mcp-page .mcp-mode{align-self:center}.mcp-page .mcp-detail-controls{gap:6px}.mcp-page .mcp-head label{font-size:12px}.mcp-page .mcp-pager{padding:8px}}
 @media print{.mcp-page .mcp-toolbar,.mcp-page .mcp-pager button{display:none}.mcp-page .mcp-scroll{overflow:visible}.mcp-page .mcp-columns{grid-template-columns:1fr}.mcp-page .mcp-head{break-after:avoid}}
 
+#filter-panel .mc-inventory-filters{display:grid;grid-template-columns:minmax(155px,1fr) 3fr;gap:15px;align-items:start;margin:12px 0 5px}
+#filter-panel .mc-types{border:0;min-width:0;padding:0;margin:0}
+#filter-panel .mc-types legend{padding:0;margin:0 0 4px}
+#filter-panel .mc-types>div{display:flex;flex-wrap:wrap;gap:5px 10px;align-items:center;min-height:32px}
+#filter-panel .mc-type-choice{display:inline-flex;align-items:center;gap:5px;line-height:1.5;cursor:pointer;color:var(--ink)}
+#filter-panel .mc-type-choice input{margin:0;accent-color:var(--brand);width:15px;height:15px}
+#filter-panel .mc-inventory-note,#mc-inventory-store .mc-inventory-note{color:var(--muted);font-size:13px;margin:5px 0 12px}
+#mc-inventory-store{margin:12px 0;padding:15px 20px}
+#mc-inventory-store summary{cursor:pointer;font-size:16px;font-weight:650;color:var(--brand)}
+#mc-inventory-store summary span{font-size:13px;font-weight:500}
+#mc-inventory-store .mc-inventory-note{margin-top:10px}
+#mc-inventory-store .mc-catalog-tools,#mc-inventory-store .mc-catalog-pages{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:8px 0}
+#mc-inventory-store .mc-catalog-tools label{display:flex;flex-wrap:wrap;align-items:center;gap:9px;font-size:13px}
+#mc-inventory-store .mc-catalog-tools input{font:inherit;padding:6px 9px;border:1px solid #bdcec3;border-radius:5px;width:min(285px,100%);background:#fff;color:var(--ink)}
+#mc-inventory-store .mc-catalog-pages{justify-content:flex-end;font-size:13px}
+#mc-inventory-store .mc-catalog-pages button{border:1px solid #bdcec3;padding:4px 8px;border-radius:5px;color:var(--brand)}
+#mc-inventory-store .mc-catalog-pages button:disabled{opacity:.55}
+#mc-inventory-store .hier-table{min-width:560px;width:100%}
+#mc-inventory-store .hier-table :is(th,td){text-align:left}
+#mc-inventory-store .hier-table thead th button{font:inherit;color:inherit;padding:4px 0}
+#mc-inventory-store .hier-table th small{display:block;font-weight:400;color:var(--muted)}
+.mc-inventory-status{white-space:normal;color:var(--muted);font-size:12px;line-height:1.4;font-weight:500}
+#review-placements .mc-inventory-status{margin:3px 0 0}
+@media(max-width:600px){#filter-panel .mc-inventory-filters{grid-template-columns:1fr;gap:10px}#mc-inventory-store{padding:12px}#mc-inventory-store .mc-catalog-tools label{display:grid}}
+
 </style>
 </head>
 <body>
@@ -415,6 +440,7 @@ button.mc-level-sort:focus-visible{outline:2px solid #15795d;outline-offset:2px;
 </div><div id="trend-legend" class="trend-legend"></div><div id="trend-plot" class="chart-shell"></div></section>
 <section id="contrib-panel" class="panel contribution" aria-labelledby="contrib-title"><div class="panel-title"><h2 id="contrib-title">广告贡献</h2><span class="section-info">占同期整体表现</span></div><div id="contrib"></div><div id="extra" class="scope-foot"></div></section></div>
 <div class="findings" id="findings" data-performance aria-label="投放观察"></div>
+<section id="mc-inventory-store" class="panel" aria-label="开启活动清单" hidden></section>
 <div id="review-comparison"></div>
 <div id="review-placements" hidden></div>
 <section id="hier-children" class="panel hierarchy-card" aria-label="当前层级明细"></section>
@@ -856,6 +882,103 @@ function demoHierarchyNodes() { return demoViews; }
 const ACTUAL_META=feed.actualMeta;
 const ACTUAL_PACK=feed.actualPack;
 
+const mcAdsInventory = (() => {
+  const typeLabels = new Map([
+    ['exact','精准'], ['broad','广泛'], ['auto','自动'], ['product','定投'], ['phrase','词组']
+  ]);
+  const status = runtime.inventory;
+  const data = status?.status === 'ready' && status.data?.version === 1 && Array.isArray(status.data.campaigns)
+    ? status.data : null;
+  const campaigns = new Map((data?.campaigns || []).map(row=>[String(row.id),row]));
+  const labelsById = new Map();
+  for (const [id, campaign] of campaigns) {
+    const types = new Set(campaign.types);
+    labelsById.set(id,[...typeLabels].filter(([key])=>types.has(key)).map(([,label])=>label));
+  }
+  function matches(id, criteria) {
+    const key = String(id);
+    if (criteria.listScope === 'enabled' && !campaigns.has(key)) return false;
+    if (!criteria.adTypes?.length) return true;
+    const types = labelsById.get(key) || [];
+    return types.length ? types.some(type=>criteria.adTypes.includes(type)) : criteria.adTypes.includes('未知');
+  }
+  function portfolioLabel(campaign) {
+    return campaign.portfolioName || ACTUAL_PACK.portfolios[campaign.portfolioId] ||
+      (campaign.portfolioId ? '广告组合 '+campaign.portfolioId : '未分配广告组合');
+  }
+  function list() {
+    return [...campaigns.values()].map(c=>({id:String(c.id), label:c.name, portfolioLabel:portfolioLabel(c)}));
+  }
+  function extend(nodes, productsByOwner, add) {
+    if (!campaigns.size) return;
+    const operators = new Map([...nodes.values()].filter(n=>n.kind==='operator'&&!n.unmapped).map(n=>[n.label,n]));
+    const encoded = value => Array.from(value,c=>c.codePointAt(0).toString(16)).join('-');
+    const noPerformance = {hasMetrics:false,rows:[],inventoryBranch:true};
+    function unknownProduct() {
+      const operator = add('operator-unmapped','operator','未匹配目录','store',{
+        ...noPerformance, unmapped:true, coverage:'当前没有唯一运营或产品归属的广告在此列出。'
+      });
+      return add('product-unmapped','product','未匹配目录的 SKU',operator.id,{
+        ...noPerformance, unmapped:true, scopeLine:'MC 美国站 · 产品归属待确认'
+      });
+    }
+    function currentProduct(operator, product) {
+      const key = JSON.stringify([operator,product]);
+      let node = productsByOwner.get(key);
+      if (node) return node;
+      let op = operators.get(operator);
+      if (!op) {
+        op = add('operator-inv-'+encoded(operator),'operator',operator,'store',{
+          ...noPerformance, title:operator+' · 运营看板', scopeLine:'MC 美国站 · 当前广告商品目录'
+        });
+        operators.set(operator,op);
+      }
+      node = add(op.id+'-product-inv-'+encoded(product),'product',product,op.id,{
+        ...noPerformance, scopeLine:'运营 '+operator+' · 当前广告商品目录'
+      });
+      productsByOwner.set(key,node);
+      return node;
+    }
+    function attach(campaign, group, product) {
+      const pid = String(campaign.portfolioId || '');
+      const context = {
+        ...noPerformance, portfolioId:pid, unmapped:product.unmapped, scopeLine:product.label+' · SP',
+        coverage:'当前开启活动清单。所选日期无推广商品报表记录时，指标显示为「—」。'
+      };
+      const portfolio = add(product.id+'-p-'+(pid || 'none'),'portfolio',portfolioLabel(campaign),product.id,context);
+      const cid=String(campaign.id);
+      const item = add(portfolio.id+'-c-'+cid,'campaign',campaign.name,portfolio.id,{...context,campaignId:cid});
+      // Performance still belongs to its archived product/portfolio path, even after an entity moves.
+      item.label = item.title = campaign.name;
+      if (group) {
+        const gid=String(group.id);
+        const child=add(item.id+'-g-'+gid,'adgroup',group.name,item.id,{...context,campaignId:cid,adGroupId:gid});
+        child.label = child.title = group.name;
+        child.inventoryBranch = true;
+      }
+      for (let ancestor=item; ancestor; ancestor=nodes.get(ancestor.parent)) ancestor.inventoryBranch=true;
+    }
+    for (const campaign of campaigns.values()) {
+      if (!campaign.groups.length) {
+        attach(campaign,null,unknownProduct());
+        continue;
+      }
+      for (const group of campaign.groups) {
+        const owners = new Map((group.owners || []).filter(pair=>
+          Array.isArray(pair)&&pair.length===2&&pair.every(x=>typeof x==='string'&&x.length)
+        ).map(pair=>[JSON.stringify(pair),pair]));
+        for (const [operator,product] of owners.values()) attach(campaign,group,currentProduct(operator,product));
+        if (group.unmapped || !owners.size) attach(campaign,group,unknownProduct());
+      }
+    }
+  }
+  return Object.freeze({
+    extend, matches, list, ready:()=>Boolean(data), asOf:()=>data?.capturedAt || null,
+    isEnabled:id=>campaigns.has(String(id)), types:id=>[...(labelsById.get(String(id)) || [])]
+  });
+})();
+window.mcAdsInventory = mcAdsInventory;
+
 const actualGroupDays = new Map();
 function actualQueryScope(day,campaignId,adGroupId){
   const dayNumber=typeof day==='string' ? reportWeek.slot(day) : day;
@@ -945,6 +1068,7 @@ function actualHierarchyNodes(){
     for(const row of node.rows)row.ctr=row.impressions?100*row.clicks/row.impressions:null;
     if(!node.sourceRows&&node.kind==='product')node.coverage='该产品的目录 SKU 在本周报表里没有推广商品记录。';
   }
+  mcAdsInventory.extend(nodes,productsByOwner,add);
   return Array.from(nodes.values());
 }
 
@@ -1291,13 +1415,13 @@ function hierarchySortMetric(metrics,key){
     default: return null;
   }
 }
-function hierarchyPerformanceMarkup(rows,nameLabel,showBusiness,listId,scope){
+function hierarchyPerformanceMarkup(rows,nameLabel,showBusiness,listId,scope,showTypes=false){
   const columns=[['cost','广告花费'],['sales','广告销售额'],['orders','广告订单'],['clicks','点击量'],
     ['ctr','点击率'],['cvr','转化率'],['acos','ACOS'],['roas','ROAS']];
   if(showBusiness)columns.unshift(['totalOrders','总订单数'],['organicOrders','自然订单数'],['profitRate','利润率']);
   const selectAll=listId?hierarchyDraftMarkAll(listId)+' ':'';
   const nameHeader=mcLevelSort.th(scope,'name',nameLabel,'text',selectAll);
-  const headers=columns.map(([key,label])=>mcLevelSort.th(scope,key,label)).join('');
+  const headers=(showTypes?mcLevelSort.th(scope,'adType','广告类型','text'):'')+columns.map(([key,label])=>mcLevelSort.th(scope,key,label)).join('');
   mcLevelSort.onRender(scope,()=>{
     renderHierarchy(selectedDays(days),totals);
     syncHierarchyDraftControls();
@@ -1318,6 +1442,7 @@ function hierarchyChildDraft(view,dates,row,campaign,group,metrics,listId){
   },listId)+' ';
 }
 function childPerformanceTable(list,dates,totalsFn,nameLabel,view=currentView()){
+  const showTypes=!view.demo && list[0]?.kind==='campaign';
   const showBusiness=hasOperatingTableMetrics(list[0]);
   const listId=hierarchyDraftLists[view.kind];
   const selectedDates=Array.from(dates,day=>({day}));
@@ -1331,6 +1456,7 @@ function childPerformanceTable(list,dates,totalsFn,nameLabel,view=currentView())
   });
   const sorted=mcLevelSort.rows(scope,entries,({node,t,business},key)=>{
     if(key==='name')return node.label;
+    if(key==='adType')return mcInventoryUI.typeValue(node.campaignId);
     if(key==='totalOrders')return business?.orders.value;
     if(key==='organicOrders'||key==='profitRate')return business?.[key]?.value;
     return hierarchySortMetric(t,key);
@@ -1338,7 +1464,9 @@ function childPerformanceTable(list,dates,totalsFn,nameLabel,view=currentView())
   const rows=sorted.map(({node,t,business})=>{
     const description=nodeDescription(node);
     let caption=node.sampleOnly?'<span class="hier-tag">已载入小计</span>':'';
-    if(!t)caption='<span class="hier-tag">'+(node.hasMetrics?'所选日期无记录':'待补')+'</span>';
+    if(!t)caption='<span class="hier-tag">'+((node.hasMetrics||node.inventoryBranch)?'所选日期无记录':'待补')+'</span>';
+    if(!t&&showTypes&&window.mcAdsInventory?.isEnabled(node.campaignId))caption='<span class="hier-tag">当前已开启 · 所选日期无记录</span>';
+    const typeCell=showTypes?'<td>'+mcInventoryUI.typeLabel(node.campaignId)+'</td>':'';
     const operatingCells=business?operatingTableMetrics.map(({key,format})=>{
       const metric=business[key];
       return '<td title="'+hierarchyText(metric.note)+'">'+format(metric.value)+'</td>';
@@ -1346,10 +1474,10 @@ function childPerformanceTable(list,dates,totalsFn,nameLabel,view=currentView())
     const mark=listId&&t&&!mcInlineAds.canUse(view)?hierarchyChildDraft(view,selectedDates,node,node.kind==='campaign'?node:path.campaign,
       node.kind==='adgroup'?node:path.adgroup,t,listId):'';
     return '<tr><td>'+mark+hierarchyLink(node.id,node.label,'hier-name')+(caption?' '+caption:'')+
-      (description?'<div class="hier-desc">'+hierarchyText(description)+'</div>':'')+'</td>'+operatingCells+
+      (description?'<div class="hier-desc">'+hierarchyText(description)+'</div>':'')+'</td>'+typeCell+operatingCells+
       hierarchyPerformanceCells(t)+'</tr>';
   });
-  return hierarchyPerformanceMarkup(rows,nameLabel,showBusiness,mcInlineAds.canUse(view)?null:listId,scope);
+  return hierarchyPerformanceMarkup(rows,nameLabel,showBusiness,mcInlineAds.canUse(view)?null:listId,scope,showTypes);
 }
 function hierarchyRealTargets(view,dates){
   const campaign=hierarchyById.get(view.parent);
@@ -2527,7 +2655,10 @@ function initializeAttributes(){
       dates.add(dateText(n));
       requestedWeeks.add(monday(n));
     }
-    return {start:range.start, end:range.end, scope:{...scope}, filters, dates, requestedWeeks, parts:new Map()};
+    const {adTypes, listScope, ...metrics} = filters;
+    const inventoryFilter = {adTypes, listScope:listScope === 'enabled' ? 'enabled' : undefined};
+    return {start:range.start, end:range.end, scope:{...scope}, filters:metrics, inventoryFilter,
+      checkInventory:Boolean(adTypes?.length || listScope === 'enabled'), dates, requestedWeeks, parts:new Map()};
   }
   function blank() {
     return {costC:0, adSalesC:0, adOrders:0, clicks:0, impressions:0, sourceRows:0};
@@ -2618,6 +2749,7 @@ function initializeAttributes(){
       const gid = String(rawGroup), group = pack.groups[gid], campaign = group && pack.campaigns[group[0]];
       if ((oi !== -1 && !Array.isArray(owner)) || !group || !campaign) throw Error('周包中的广告层级引用无效。');
       const cid = String(group[0]), pid = String(datedPortfolio ?? campaign[0] ?? '');
+      if (state.checkInventory && !window.mcAdsInventory.matches(cid, state.inventoryFilter)) continue;
       const child = branchFor(state.scope, owner, pid, cid, gid, {
         portfolio:pid ? pack.portfolios[pid] || pid : '未分配广告组合', campaign:campaign[1], group:group[1]
       });
@@ -3140,7 +3272,10 @@ const mcPeriodPane = (() => {
     const filters = window.mcCampaignScope.getFilters();
     const day = dateFilter(state.selection);
     const scopeLabel = [hierarchyKinds[view.kind] + ' · ' + view.label, day.label];
-    if (Object.keys(filters).length) scopeLabel.push('两期分别按所选条件筛选活动');
+    if (filters.adTypes?.length || filters.listScope==='enabled') {
+      scopeLabel.push('两期共用最近同步的活动状态与类型');
+    }
+    if (Object.keys(filters).some(k=>!['adTypes','listScope'].includes(k))) scopeLabel.push('两期分别按所选指标筛选活动');
     el.dataset.mcPeriodOpen = 'true';
     window.MCAdsPeriodUI.mount(el, {
       weeks, selectedWeek:feed.week,
@@ -3378,7 +3513,125 @@ function placementSummary(rows){
   return sum;
 }
 const placementExpansion={scopeKey:'',campaigns:new Set(),slots:new Map()};
-const placementParentHeaders=['广告活动','竞价策略','花费','销售额','订单','ACOS','点击率','转化率','ROAS'];
+// Campaign state and targeting belong to the latest catalog. Performance remains tied to the selected reporting dates.
+const mcInventoryUI = (() => {
+  const choices = ['精准','广泛','自动','定投','词组','未知'];
+  const scopeNames = {all:'有报表或已开启', enabled:'当前已开启', reported:'所选日期有报表'};
+  const esc = hierarchyText;
+  const pageSize = 25;
+  let catalogRows = [], filterKey = '', page = 0, sortKey = 'label', ascending = true;
+  const collator = new Intl.Collator('zh-CN', {numeric:true});
+  const clock = new Intl.DateTimeFormat('zh-CN', {
+    timeZone:'America/Los_Angeles', year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hourCycle:'h23'
+  });
+
+  function inventory() { return window.mcAdsInventory; }
+  function ready() { return !!inventory()?.ready(); }
+  function typeValue(id) {
+    const types = inventory()?.types(id) || [];
+    return types.length ? types.join(' / ') : null;
+  }
+  function typeLabel(id, demo=false) {
+    if (demo) return '—';
+    const value = typeValue(id);
+    return esc(value || (ready() ? '未知' : '清单未同步'));
+  }
+  function snapshotNote() {
+    if (!ready()) return runtime.inventory?.status === 'error' ? '开启活动清单读取失败，刷新页面可重试。' : '开启活动清单尚未同步，目前仅有周报记录可查看。';
+    const time = new Date(inventory().asOf());
+    return Number.isFinite(time.getTime()) ? '开启状态与广告类型取自 '+clock.format(time)+'（美西时间）的后台清单。' : '开启状态与广告类型取自最近同步的后台清单。';
+  }
+  function controls() {
+    const options = Object.entries(scopeNames).map(([key,value])=>'<option value="'+key+'">'+value+'</option>').join('');
+    const checkboxes = choices.map(value=>'<label class="mc-type-choice"><input type="checkbox" data-mc-ad-type="'+value+'"> '+value+'</label>').join('');
+    return '<div class="mc-inventory-filters"><label for="filter-list-scope" class="filter-control"><span class="filter-caption">活动范围</span><select id="filter-list-scope">'+options+
+      '</select></label><fieldset class="mc-types"><legend class="filter-caption">广告类型<span class="filter-unit">可多选</span></legend><div>'+checkboxes+'</div></fieldset></div>'+
+      '<p id="filter-inventory-note" class="mc-inventory-note"></p>';
+  }
+  function syncStatus() {
+    const note = document.getElementById('filter-inventory-note');
+    if (!note) return;
+    note.textContent = snapshotNote();
+    const form = document.getElementById('filter-panel');
+    form.querySelector('[value="enabled"]').disabled = !ready();
+    for (const input of form.querySelectorAll('[data-mc-ad-type]')) input.disabled = !ready();
+  }
+  function restoreControls(filters) {
+    document.getElementById('filter-list-scope').value = filters.listScope || 'all';
+    for (const input of document.querySelectorAll('#filter-panel [data-mc-ad-type]')) input.checked = !!filters.adTypes?.includes(input.dataset.mcAdType);
+    syncStatus();
+  }
+  function readControls(filters) {
+    const scope = document.getElementById('filter-list-scope').value;
+    if (scope === 'reported' || (ready() && scope === 'enabled')) filters.listScope = scope;
+    const checked = [...document.querySelectorAll('#filter-panel [data-mc-ad-type]:checked:not(:disabled)')].map(el=>el.dataset.mcAdType);
+    if (checked.length) filters.adTypes = checked;
+  }
+  function catalogTable(host) {
+    const query = host.querySelector('#mc-inventory-search').value.trim().toLocaleLowerCase();
+    const text = row => sortKey==='types' ? typeValue(row.id) || '' : row[sortKey] || '';
+    const rows = catalogRows.filter(row=>!query || [row.label, row.id, row.portfolioLabel].some(v=>String(v||'').toLocaleLowerCase().includes(query)))
+      .sort((a,b)=> (ascending ? 1 : -1)*collator.compare(text(a),text(b)) || collator.compare(a.id,b.id));
+    const pages = Math.max(1, Math.ceil(rows.length / pageSize));
+    page = Math.min(page,pages-1);
+    const table = host.querySelector('[data-mc-catalog-table]');
+    const head = [['label','广告活动'],['types','广告类型'],['portfolioLabel','广告组合']].map(([key,label])=>{
+      const active = key === sortKey;
+      return '<th scope="col" aria-sort="'+(active?(ascending?'ascending':'descending'):'none')+'"><button type="button" data-mc-catalog-sort="'+key+'">'+label+
+        ' <span aria-hidden="true">'+(active?(ascending?'↑':'↓'):'↕')+'</span></button></th>';
+    }).join('');
+    table.innerHTML = '<thead><tr>'+head+'</tr></thead><tbody>'+rows.slice(page*pageSize,(page+1)*pageSize).map(row=>
+      '<tr><th scope="row">'+esc(row.label)+'<small>ID '+esc(row.id)+'</small></th><td>'+typeLabel(row.id)+'</td><td>'+esc(row.portfolioLabel)+'</td></tr>').join('')+'</tbody>';
+    table.hidden = !rows.length;
+    host.querySelector('[data-mc-catalog-empty]').hidden = Boolean(rows.length);
+    host.querySelector('[data-mc-catalog-count]').textContent = '显示 '+(rows.length ? page*pageSize+1 : 0)+'–'+Math.min(rows.length, (page+1)*pageSize)+'，共 '+rows.length+' 个';
+    host.querySelector('[data-mc-catalog-prev]').disabled = page===0;
+    host.querySelector('[data-mc-catalog-next]').disabled = page>=pages-1;
+  }
+  function ensureCatalog(host) {
+    if (host.hasChildNodes()) return;
+    host.innerHTML = '<details id="mc-enabled-catalog"><summary>当前开启的广告活动 <span data-mc-catalog-total></span></summary>'+
+      '<p class="mc-inventory-note" data-mc-catalog-note></p><div class="mc-catalog-content" hidden><div class="mc-catalog-tools">'+
+      '<label>搜索广告活动<input id="mc-inventory-search" type="search" placeholder="名称、活动 ID 或广告组合"></label></div>'+
+      '<div class="hier-table-wrap"><table data-mc-catalog-table class="hier-table"></table></div>'+
+      '<p data-mc-catalog-empty hidden>当前条件下没有匹配的开启活动。</p>'+
+      '<div class="mc-catalog-pages"><span data-mc-catalog-count aria-live="polite"></span><button type="button" data-mc-catalog-prev>上一页</button><button type="button" data-mc-catalog-next>下一页</button></div></div></details>';
+    const details=host.querySelector('details');
+    details.addEventListener('toggle',()=>{if(details.open && ready())catalogTable(host);});
+    host.querySelector('#mc-inventory-search').addEventListener('input',()=>{page=0;catalogTable(host);});
+    details.addEventListener('click',event=>{
+      const button=event.target.closest('button');
+      if (!button) return;
+      const key=button.dataset.mcCatalogSort;
+      if(key){ascending=key===sortKey?!ascending:true;sortKey=key;page=0;}
+      else if(button.hasAttribute('data-mc-catalog-prev')) page=Math.max(0,page-1);
+      else if(button.hasAttribute('data-mc-catalog-next')) page++;
+      else return;
+      catalogTable(host);
+      if (key) host.querySelector('[data-mc-catalog-sort="'+key+'"]').focus({preventScroll:true});
+    });
+  }
+  function renderCatalog(view) {
+    const host=document.getElementById('mc-inventory-store');
+    host.hidden = view.demo || view.kind!=='store';
+    if (host.hidden) return;
+    ensureCatalog(host);
+    const available = ready();
+    host.querySelector('.mc-catalog-content').hidden = !available;
+    host.querySelector('[data-mc-catalog-note]').textContent = snapshotNote();
+    const count=host.querySelector('[data-mc-catalog-total]');
+    if (!available){catalogRows=[];count.textContent='· 暂无清单';return;}
+    const list=inventory().list(), scope=window.mcCampaignScope;
+    const key=JSON.stringify([scope.getFilters(),state.selection,inventory().asOf()]);
+    if (key!==filterKey) {page=0;filterKey=key;}
+    catalogRows=list.filter(row=>scope.allowed(row.id));
+    count.textContent=catalogRows.length===list.length ? '· '+list.length+' 个' : '· 当前筛选 '+catalogRows.length+' / 全店 '+list.length+' 个';
+    if (host.querySelector('details').open) catalogTable(host);
+  }
+  return {typeValue,typeLabel,scopeNames,snapshotNote,controls,syncStatus,restoreControls,readControls,renderCatalog};
+})();
+
+const placementParentHeaders=['广告活动','广告类型','竞价策略','花费','销售额','订单','ACOS','点击率','转化率','ROAS'];
 const placementSlotHeaders=['广告位','曝光','点击','CTR','花费','销售额','订单','转化率','ACOS','ROAS'];
 const placementBadgeNames={top:'搜索顶部',rest:'搜索其余',product:'商品页面','other:亚马逊站外':'亚马逊站外'};
 
@@ -3423,7 +3676,7 @@ function placementSortHead(scope,labels,keys,selection=''){
   const headers=labels.map((label,i)=>{
     const key=keys[i];
     if(!key)return '<th scope="col">'+hierarchyText(label)+'</th>';
-    const type=['name','strategy','date'].includes(key)?'text':'number';
+    const type=['name','adType','strategy','date'].includes(key)?'text':'number';
     return mcLevelSort.th(scope,key,label,type,i===0&&selection?selection+' ':'');
   });
   return '<thead><tr>'+headers.join('')+'</tr></thead>';
@@ -3485,7 +3738,7 @@ function placementCampaignRow(view,period,entry,index){
   const ratios=sum?'<td>'+placementAcos(sum)+'</td><td>'+pct(sum.clicks,sum.impressions)+'</td><td>'+pct(sum.adOrders,sum.clicks)+
     '</td><td>'+roas(sum)+'</td>':'<td>—</td>'.repeat(4);
   const header='<tr class="pl-campaign-row"><th scope="row"><div class="pl-campaign-name">'+placementDraftMark(view,period,campaign,records,sum)+toggle+name+'</div></th>'+
-    '<td class="pl-strategy">'+strategy+'</td>'+placementAmountCells(sum)+ratios+'</tr>';
+    '<td>'+mcInventoryUI.typeLabel(campaignId,view.demo)+'</td><td class="pl-strategy">'+strategy+'</td>'+placementAmountCells(sum)+ratios+'</tr>';
   const detail='<tr class="pl-expanded" id="'+detailId+'"'+(isOpen?'':' hidden')+'><td colspan="'+placementParentHeaders.length+'">'+
     (isOpen?campaignPlacementDetails(view,period,campaign,records,detailId):'')+'</td></tr>';
   return header+detail;
@@ -3508,6 +3761,7 @@ function renderPlacements(view,period){
   const sortScope='placement-campaigns';
   const ranked=mcLevelSort.rows(sortScope,baseOrder,(entry,key)=>{
     if(key==='name')return entry.campaign.label;
+    if(key==='adType')return view.demo?null:mcInventoryUI.typeValue(entry.campaign.campaignId);
     if(key==='strategy')return [...new Set(entry.records.map(r=>r.strategy).filter(Boolean))].join(' / ')||null;
     return placementSortValue(entry.sum,key);
   });
@@ -3527,7 +3781,7 @@ function renderPlacements(view,period){
   const scopeNote='广告位按整场活动统计，包含该活动下的全部产品。所选日期没有对应报表记录时显示「—」。';
   const notice=placementState.notice?'<p class="diag-meta" role="status">'+hierarchyText(placementState.notice)+'</p>':'';
   const table='<div class="hier-table-wrap pl-campaign-wrap" role="region" aria-label="广告活动与广告位明细" tabindex="0"><table class="pl-campaign-table">'+
-    placementSortHead(sortScope,placementParentHeaders,['name','strategy','cost','sales','orders','acos','ctr','cvr','roas'],ranked.length?hierarchyDraftMarkAll('placement-campaigns','全选本表广告活动'):'')+'<tbody>'+ranked.map((entry,index)=>placementCampaignRow(view,period,entry,index)).join('')+'</tbody></table></div>';
+    placementSortHead(sortScope,placementParentHeaders,['name','adType','strategy','cost','sales','orders','acos','ctr','cvr','roas'],ranked.length?hierarchyDraftMarkAll('placement-campaigns','全选本表广告活动'):'')+'<tbody>'+ranked.map((entry,index)=>placementCampaignRow(view,period,entry,index)).join('')+'</tbody></table></div>';
   const content='<p class="table-note">'+caption+' '+scopeNote+'</p>'+(status?'<p class="table-note">'+status+'</p>':'')+hierarchyDraftToolbar()+table;
   host.innerHTML=diagnosisSection('广告活动与广告位',stats+' · '+dateRange(period),content);
   syncHierarchyDraftControls();
@@ -6549,7 +6803,7 @@ function initializeHierarchyDraftSelection(){
 const mcInlineAds = (()=>{
   const labels={placement:'广告位加价',keyword:'关键词竞价',product:'商品定投竞价'};
   const cols=[
-    ['name','广告活动'],['strategy','竞价策略'],['cost','花费'],['sales','销售额'],['orders','订单'],
+    ['name','广告活动'],['adType','广告类型'],['strategy','竞价策略'],['cost','花费'],['sales','销售额'],['orders','订单'],
     ['acos','ACOS'],['ctr','点击率'],['cvr','转化率'],['roas','ROAS']
   ];
   const h=hierarchyText;
@@ -6650,6 +6904,7 @@ const mcInlineAds = (()=>{
   }
   function metric(c,key){
     if(key==='name')return c.campaign.label;
+    if(key==='adType')return mcInventoryUI.typeValue(c.id);
     if(key==='strategy')return c.strategy;
     const s=c.sum;
     if(!s)return null;
@@ -6726,11 +6981,13 @@ const mcInlineAds = (()=>{
   }
   function campaignBlock(c){
     const hasOpen=expanded.has(c.id),s=c.sum;
+    const status=!s&&window.mcAdsInventory?.isEnabled(c.id)
+      ? '<div class="mc-inventory-status">当前已开启 · 所选日期无广告位记录</div>' : '';
     const link=context.view.kind==='portfolio'?hierarchyLink(c.campaign.id,c.campaign.label,'hier-name'):h(c.campaign.label);
     return '<tr class="mci-campaign"><th scope="row">'+mark('data-mci-campaign',c.id,'选择'+c.campaign.label+'下的全部可调行')+
-      ' <button data-expand="'+h(c.id)+'" type="button" aria-expanded="'+hasOpen+'" aria-label="'+h((hasOpen?'收起':'展开')+c.campaign.label)+'">'+(hasOpen?'▾':'▸')+'</button> '+link+'</th>'+
-      '<td>'+h(c.strategy||'—')+'</td>'+placementAmountCells(s)+(s?'<td>'+placementAcos(s)+'</td><td>'+pct(s.clicks,s.impressions)+'</td><td>'+pct(s.adOrders,s.clicks)+'</td><td>'+roas(s)+'</td>':'<td>—</td>'.repeat(4))+'</tr>'+
-      (hasOpen?'<tr class="mci-children"><td colspan="9">'+detail(c)+'</td></tr>':'');
+      ' <button data-expand="'+h(c.id)+'" type="button" aria-expanded="'+hasOpen+'" aria-label="'+h((hasOpen?'收起':'展开')+c.campaign.label)+'">'+(hasOpen?'▾':'▸')+'</button> '+link+status+'</th>'+
+      '<td>'+mcInventoryUI.typeLabel(c.id)+'</td><td>'+h(c.strategy||'—')+'</td>'+placementAmountCells(s)+(s?'<td>'+placementAcos(s)+'</td><td>'+pct(s.clicks,s.impressions)+'</td><td>'+pct(s.adOrders,s.clicks)+'</td><td>'+roas(s)+'</td>':'<td>—</td>'.repeat(4))+'</tr>'+
+      (hasOpen?'<tr class="mci-children"><td colspan="10">'+detail(c)+'</td></tr>':'');
   }
   function selectedRows(){return Array.from(selected,id=>context.rows.get(id)).filter(Boolean);}
   function batchControls(){
@@ -6819,7 +7076,7 @@ const mcInlineAds = (()=>{
     if(button.matches('[data-mode]')){if(mode!==button.dataset.mode){mode=button.dataset.mode;render(currentView(),selectedDays(days));}return;}
     if(button.matches('[data-sort]')){
       const key=button.dataset.sort;
-      order={key,up:order.key===key?!order.up:['strategy','name'].includes(key)};
+      order={key,up:order.key===key?!order.up:['adType','strategy','name'].includes(key)};
       campaignOrders.set(JSON.stringify([context.view.id,mode]),order);
       paint();root().querySelector('[data-sort="'+key+'"]').focus({preventScroll:true});return;
     }
@@ -6897,6 +7154,9 @@ const state={selection:'week',modes:new Set(['cost','adSales','cvr']),sort:'day'
 function selectedDays(rows){return rows.filter(r=>state.selection==='week'||(state.selection==='work'&&r.day<=20)||(state.selection==='end'&&r.day>=21)||state.selection===r.day);}
 function chosen(){
   const view=currentView(),rows=selectedDays(view.rows);
+  if(view.inventoryBranch && !view.sourceRows)return [];
+  if(view.inventoryBranch && !view.demo && Array.isArray(view.presentDays) &&
+     !rows.some(row=>view.presentDays.includes(row.day)))return [];
   return mcProjectedIds===null?rows:rows.filter(row=>view.presentDays.includes(row.day));
 }
 function totals(rows){
@@ -7121,7 +7381,7 @@ function mcCampaignInfo(){
   return {total:ids.length,matched:ids.filter(id=>mcCampaignAllowed(id)).length,
     missing:ids.filter(id=>!mcPlacementSummaries.has(id)).length};
 }
-function mcProjectHierarchy(whitelist) {
+function mcProjectHierarchy(whitelist,selected) {
   const views=new Map(), children=new Map(), populated=new Set();
   // Keep routes (including the current route when zero campaigns match), but
   // only put surviving branches in metric drill-down lists.
@@ -7130,11 +7390,21 @@ function mcProjectHierarchy(whitelist) {
     const blank = days.map(({day})=>({day,salesC:null,orders:null,costC:0,adSalesC:0,adOrders:0,clicks:0,impressions:0,ctr:null}));
     views.set(id,{...original,rows:blank,presentDays:[],sourceRows:0,hasMetrics:false});
   }
+  const onlyReported=mcFilterCriteria.listScope==='reported';
+  const hasReport=node=>node.presentDays.some(day=>selected.has(day));
+  for (const campaign of mcFullHierarchy.values()) {
+    if(campaign.demo || campaign.kind!=='campaign' || !whitelist.has(String(campaign.campaignId)) ||
+       (onlyReported && !hasReport(campaign))) continue;
+    // Current campaigns with no enabled ad group are still navigable.
+    for(let n=campaign; n&&!populated.has(n.id); n=mcFullHierarchy.get(n.parent)) populated.add(n.id);
+  }
   for (const group of mcFullHierarchy.values()) {
-    if (group.demo || group.kind!=='adgroup' || !whitelist.has(String(group.campaignId))) continue;
+    if (group.demo || group.kind!=='adgroup' || !whitelist.has(String(group.campaignId)) ||
+        (onlyReported && !hasReport(group))) continue;
     const present = new Set(group.presentDays);
     for (let n=views.get(group.id); n; n=views.get(n.parent)) {
       populated.add(n.id);
+      if(!group.sourceRows)continue;
       n.hasMetrics=true;
       n.sourceRows+=group.sourceRows;
       for(const row of group.rows){
@@ -7166,8 +7436,19 @@ function mcRefreshCampaignScope(view,dates) {
   const key=active ? mcIndexPeriod+'|'+JSON.stringify(mcFilterCriteria) : 'off';
   if (mcLastProjection===key) return;
   if (active) {
-    mcProjectedIds=new Set([...mcPlacementSummaries].filter(([,item])=>mcMatchesCampaign(item)).map(([id])=>id));
-    mcProjectHierarchy(mcProjectedIds);
+    const selected=new Set(dates.map(row=>row.day));
+    const onlyReported=mcFilterCriteria.listScope==='reported';
+    const needPlacement=Boolean(mcFilterCriteria.strategy || mcFilterFields.some(k=>mcFilterCriteria[k]));
+    mcProjectedIds=new Set();
+    for(const node of mcFullHierarchy.values()){
+      if(node.demo||node.kind!=='campaign')continue;
+      const id=String(node.campaignId);
+      if(mcProjectedIds.has(id)||!mcAdsInventory.matches(id,mcFilterCriteria))continue;
+      if(onlyReported && !node.presentDays.some(day=>selected.has(day)))continue;
+      if(needPlacement && !mcMatchesCampaign(mcPlacementSummaries.get(id)))continue;
+      mcProjectedIds.add(id);
+    }
+    mcProjectHierarchy(mcProjectedIds,selected);
   }else{
     mcProjectedIds=null;
     hierarchyById=mcFullHierarchy;
@@ -7182,6 +7463,14 @@ function mcRefreshCampaignScope(view,dates) {
 }
 function mcApplyConditions(criteria) {
   const normalized={};
+  const allowedTypes=['精准','广泛','自动','定投','词组','未知'];
+  if (criteria?.adTypes!=null) {
+    if (!Array.isArray(criteria.adTypes) || criteria.adTypes.some(value=>!allowedTypes.includes(value))) return false;
+    const picked=allowedTypes.filter(value=>criteria.adTypes.includes(value));
+    if(picked.length)normalized.adTypes=picked;
+  }
+  if(criteria?.listScope!=null && !['all','reported','enabled'].includes(criteria.listScope))return false;
+  if(criteria?.listScope && criteria.listScope!=='all')normalized.listScope=criteria.listScope;
   if (typeof criteria?.strategy==='string' && criteria.strategy) normalized.strategy=criteria.strategy;
   for (const key of mcFilterFields) {
     const r=criteria?.[key];
@@ -7225,6 +7514,10 @@ function render(){
   $('hier-empty').hidden=Boolean(rows.length);
   $('hier-empty-title').textContent=mcProjectedIds!==null?'没有符合条件的推广商品记录':'该层级的投放数据待接入';
   $('hier-empty').querySelector('p').textContent=mcProjectedIds!==null?'可调整活动条件或统计日期。':'接入对应广告报表后，这里可查看当前范围的花费、销售额、订单及每日趋势。';
+  if(view.inventoryBranch&&!rows.length){
+    $('hier-empty-title').textContent='所选日期无推广商品报表记录';
+    $('hier-empty').querySelector('p').textContent='可在下方查看当前范围的活动和广告组。';
+  }
   const page=currentReviewPage();
   if(page==='periodcompare'){mcPeriodPane.show(view);return;}
   mcPeriodPane.hide();
@@ -7248,6 +7541,7 @@ function render(){
   if(page==='attributes'){renderAttributes(view,dates);return;}
   if(page==='drafts'){renderDrafts();return;}
   if(page==='method')return;
+  mcInventoryUI.renderCatalog(view);
   renderBusinessOverview(view,dates);
   renderComparison(dates);
   if(!mcInlineAds.render(view,dates))renderPlacements(view,dates);
@@ -7297,6 +7591,8 @@ const el = id => document.getElementById(id);
 const esc = text => String(text).replace(/[&<>"']/g, char =>
   ({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[char]));
 const columns = [
+  {key:'listScope',label:'活动范围',unit:''},
+  {key:'adTypes',label:'广告类型',unit:''},
   {key:'strategy',label:'竞价策略',unit:''},
   {key:'cost',label:'花费',unit:'USD'},
   {key:'sales',label:'销售额',unit:'USD'},
@@ -7358,7 +7654,11 @@ function syncFilterUI() {
     const f = activeFilters[col.key];
     if (f == null) continue;
     let description;
-    if (col.key === 'strategy') {
+    if (col.key === 'listScope') {
+      description = mcInventoryUI.scopeNames[f];
+    } else if (col.key === 'adTypes') {
+      description = f.join(' / ');
+    } else if (col.key === 'strategy') {
       description = String(f);
     } else {
       const unit = col.unit ? ' ' + col.unit : '';
@@ -7375,11 +7675,12 @@ function syncFilterUI() {
     ? '命中 '+info.matched+' / '+info.total+' 个活动' : '已筛选';
   chips.innerHTML = active ? '<span class="condition-prefix" aria-live="polite">'+esc(count)+'</span>' + conditions.join('') +
     '<button type="button" class="condition-clear" data-clear-filters>清空条件</button>' : '';
+  mcInventoryUI.syncStatus();
   if (!panel.hidden) updateStrategyOptions(el('filter-strategy').value || '');
 }
 
 function filterMetrics() {
-  return columns.filter(col => col.key !== 'strategy');
+  return columns.filter(col => !['strategy','adTypes','listScope'].includes(col.key));
 }
 
 function updateStrategyOptions(selected) {
@@ -7417,6 +7718,7 @@ function openFilterPanel() {
   panel.hidden = false;
   clearFilterError();
   const activeFilters = window.mcCampaignScope.getFilters();
+  mcInventoryUI.restoreControls(activeFilters);
   updateStrategyOptions(activeFilters.strategy || '');
   for (const col of filterMetrics()) {
     for (const bound of ['min', 'max']) {
@@ -7437,6 +7739,7 @@ function submitCampaignFilters() {
   const form = el('filter-panel');
   clearFilterError();
   const result = {};
+  mcInventoryUI.readControls(result);
   const selected = el('filter-strategy').value;
   if (selected) result.strategy = selected;
 
@@ -7482,7 +7785,7 @@ function initializeCampaignFilters() {
   });
   panel.innerHTML = '<div class="filter-heading"><div><h2 id="filter-heading">筛选广告活动</h2>' +
     '<p>按所选日期的整活动指标筛选，上下限均包含在内。同时满足各项条件的活动用于全页汇总、趋势和明细。</p></div></div>' +
-    '<div class="filter-grid"><label class="filter-control" for="filter-strategy"><span class="filter-caption">竞价策略</span>' +
+    mcInventoryUI.controls() + '<div class="filter-grid"><label class="filter-control" for="filter-strategy"><span class="filter-caption">竞价策略</span>' +
     '<select id="filter-strategy"><option value="">全部策略</option></select></label>' + ranges.join('') + '</div>' +
     '<p id="filter-error" role="alert" hidden></p>' +
     '<div class="filter-actions"><button type="button" class="condition-clear" id="filter-reset">清空筛选</button>' +

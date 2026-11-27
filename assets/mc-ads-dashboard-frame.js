@@ -145,7 +145,7 @@
     iframe.removeAttribute('src');
   }
 
-  function mount(iframe, template, userId, feed, business, weekOptions = [], onSelectWeek, onReadPeriodWeek) {
+  function mount(iframe, template, userId, feed, business, weekOptions = [], onSelectWeek, onReadPeriodWeek, inventory = {status:'unavailable',data:null}) {
     const week = feed.week;
     if (!userId || !/^\d{4}-\d{2}-\d{2}$/.test(week) || typeof template !== 'string' || !/<head\s*>/i.test(template))
       throw new Error('看板文件格式或周次无效。');
@@ -164,7 +164,7 @@
       }
     } catch { available = false; }
     const args = safeJSON([entries,channel,location.origin,available,week,weekOptions]);
-    const runtime = '<script type="application/json" id="mc-ads-runtime">' + safeJSON({feed,business}) + '<\/script>';
+    const runtime = '<script type="application/json" id="mc-ads-runtime">' + safeJSON({feed,business,inventory}) + '<\/script>';
     const init = '<script>(' + initStorage.toString() + ')(...' + args + ');<\/script>';
     const policy = '<meta data-mc-frame-policy http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'unsafe-inline\'; style-src \'unsafe-inline\'; img-src data: blob:; object-src \'none\'; base-uri \'none\'; form-action \'none\'">';
     const slot = '<script id="mc-ads-runtime" type="application/json"></script>';

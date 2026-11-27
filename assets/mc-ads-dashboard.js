@@ -78,7 +78,7 @@
 
   async function getTemplate(signal) {
     if (template) return template;
-    const res = await fetch('../assets/mc-ads-view.html?v=20261126-period-compare1', {signal,redirect:'error'});
+    const res = await fetch('../assets/mc-ads-view.html?v=20261127-enabled-types1', {signal,redirect:'error'});
     if (!res.ok) throw new Error('看板页面文件未能加载，请检查网页包是否已完整发布。');
     template = await res.text();
     return template;
@@ -102,6 +102,35 @@
     retry.hidden = false;
   }
 
+  // The directory describes the most recently synchronized account configuration.
+  // Weekly performance can still open while the first directory is pending.
+  async function readInventory(signal) {
+    const controller = new AbortController();
+    const cancel = () => controller.abort();
+    if (signal.aborted) cancel();
+    else signal.addEventListener('abort', cancel, {once:true});
+    const timeout = setTimeout(cancel, 15000);
+    try {
+      const value = await rpc('mc_ads_dashboard_inventory_read', {}, controller.signal);
+      if (value === null) return {status:'unavailable', data:null};
+      if (value?.version !== 1 || !Number.isFinite(Date.parse(value.capturedAt)) ||
+          !Array.isArray(value.campaigns) || !value.campaigns.every(c =>
+            typeof c?.id === 'string' && typeof c.name === 'string' &&
+            Array.isArray(c.types) && Array.isArray(c.groups) && c.groups.every(g =>
+              typeof g?.id === 'string' && Array.isArray(g.types) && typeof g.unmapped === 'boolean' &&
+              Array.isArray(g.owners) && g.owners.every(o => Array.isArray(o) &&
+                o.length === 2 && o.every(s => typeof s === 'string'))))) {
+        return {status:'error', data:null};
+      }
+      return {status:'ready', data:value};
+    } catch {
+      return {status:'error', data:null};
+    } finally {
+      clearTimeout(timeout);
+      signal.removeEventListener('abort', cancel);
+    }
+  }
+
   async function chooseWeek(week) {
     clearWeek();
     const run = new AbortController();
@@ -117,7 +146,7 @@
       receive({...business,status:business.loadedDays ? 'partial':'error'});
     });
     try {
-      const [html,feed] = await Promise.all([getTemplate(run.signal),
+      const [html,inventory,feed] = await Promise.all([getTemplate(run.signal), readInventory(run.signal),
         rpc('mc_ads_dashboard_week_read',{p_week:week},run.signal).then(data=>readFeed(data,week))]);
       if (selection !== run) return;
       const options = Array.from(picker.options, option => ({value:option.value, label:option.text}));
@@ -138,7 +167,7 @@
         checkAccess();
         return historicalFeed;
       }
-      MCAdsFrame.mount(frame,html,account,feed,business,options,selectWeek,readPeriodWeek);
+      MCAdsFrame.mount(frame,html,account,feed,business,options,selectWeek,readPeriodWeek,inventory);
       panel.hidden = true;
       frame.hidden = false;
     } catch (error) {
