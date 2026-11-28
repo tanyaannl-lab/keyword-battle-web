@@ -2,7 +2,7 @@
   const cfg = window.KB_CONFIG;
   if (!cfg) throw new Error('KB_CONFIG 未加载');
 
-  async function getSnapshot(auth) {
+  async function getOrderSnapshot(auth) {
     const token = auth?.session?.access_token;
     if (!token) throw new Error('登录状态已失效，请重新登录。');
 
@@ -106,7 +106,7 @@
     }
   }
 
-  async function getHistoryRange(auth, start, end, options = {}) {
+  async function getOrderRange(auth, start, end, options = {}) {
     if (!validDay(start) || !validDay(end) || end < start || end > shiftDay(start,359))
       throw new Error('请选择有效的开始和结束日期，最多可查看 360 天。');
     const signal = options.signal;
@@ -176,5 +176,77 @@
         parent_asins_by_date:state.adParentsByDate}}};
   }
 
-  window.KBSales = {getSnapshot,getHistoryRange};
+  const snapshots = new WeakMap();
+  async function getOfficial(auth, start, end, signal) {
+    const module = window.KBSalesOfficial;
+    const closed = window.KBSalesModel.previousDate(window.KBSalesModel.pacificDate());
+    const last = end < closed ? end : closed;
+    const all = [], seen = new Set();
+    for (let first = start < module.startDate ? module.startDate : start; first <= last;) {
+      const through = shiftDay(first,6) < last ? shiftDay(first,6) : last;
+      const days = await rangeRpc(auth,'mc_sales_official_days',{p_start:first,p_end:through},signal);
+      if (!Array.isArray(days)) throw new Error('业务日报读取失败。');
+      for (const day of days) {
+        module.validate(day,first,through);
+        if (seen.has(day.date)) throw new Error('业务日报包含重复日期。');
+        seen.add(day.date);
+        all.push(day);
+      }
+      first = shiftDay(through,1);
+    }
+    return all;
+  }
+
+  function rawSnapshot(snapshot) { return snapshots.get(snapshot) || snapshot; }
+
+  async function getSnapshot(auth) {
+    const raw = await getOrderSnapshot(auth);
+    if (!window.KBSalesModel.reportTimezoneMatches(raw)) return raw;
+    const {start_date:start,end_date:end} = raw.payload.period || {};
+    if (!validDay(start) || !validDay(end) || end < start || end > shiftDay(start,359))
+      throw new Error('订单快照的日期范围无效。');
+    const today = window.KBSalesModel.pacificDate();
+    // A delayed order publisher does not prevent a newer closed-day report
+    // from being read. The original generation remains the order timestamp.
+    const period = end < today ? {start_date:shiftDay(today,-14),end_date:today} : raw.payload.period;
+    const base = period === raw.payload.period ? raw : {...raw,payload:{...raw.payload,period}};
+    const reports = await getOfficial(auth,period.start_date,period.end_date);
+    const result = window.KBSalesOfficial.apply(base,reports,today,false);
+    snapshots.set(result,raw);
+    return result;
+  }
+
+  async function getHistoryRange(auth,start,end,options={}) {
+    if (!validDay(start) || !validDay(end) || end < start || end > shiftDay(start,359))
+      throw new Error('请选择有效日期，最多可查看 360 天。');
+    const recent = rawSnapshot(options.recent);
+    const short = recent && window.KBSalesModel.recentHistoryRange(recent,start,end);
+    // Official-only older days are displayable even when no order archive
+    // exists. Authorization, network and consistency errors still surface.
+    const fetchOrders = async () => {
+      if (short) return short;
+      try { return await getOrderRange(auth,start,end,options); }
+      catch (error) {
+        if (error.code === 'RANGE_NOT_PUBLISHED' || error.code === 'PGRST202') return null;
+        // The existing archive publishes a rolling 360-day window and reports its
+        // exact bounds in this error. An older official archive remains readable.
+        const bounds = error.code === '22023' && /^日期超出已发布范围（(\d{4}-\d{2}-\d{2}) 至 (\d{4}-\d{2}-\d{2})）$/.exec(error.message);
+        if (!bounds || !validDay(bounds[1]) || !validDay(bounds[2])) throw error;
+        const first = start < bounds[1] ? bounds[1] : start;
+        const last = end > bounds[2] ? bounds[2] : end;
+        if (first > last) return null;
+        if (first === start && last === end) throw error;
+        return await getOrderRange(auth,first,last,options);
+      }
+    };
+    const [orders,reports] = await Promise.all([fetchOrders(),getOfficial(auth,start,end,options.signal)]);
+    if (!orders && !reports.length) throw new Error('所选日期尚无可读取的历史数据。');
+    const base = orders || {generated_at:new Date().toISOString(),payload:{schema_version:1,
+      report_timezone:'America/Los_Angeles',period:{start_date:start,end_date:end},
+      daily_rows:[],parent_daily_rows:[],sales_daily_summaries:[],ranking:[],parent_ranking:[]}};
+    return window.KBSalesOfficial.apply({...base,payload:{...base.payload,period:{start_date:start,end_date:end}}},
+      reports,window.KBSalesModel.pacificDate(),true);
+  }
+
+  window.KBSales = {getSnapshot,getHistoryRange,rawSnapshot};
 })();

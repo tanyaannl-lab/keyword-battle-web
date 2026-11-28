@@ -38,7 +38,13 @@
   function priceFlags(row) {
     if (!row) return [];
     const flags = [];
-    if (count(row.estimated_rows) > 0) flags.push({ type: 'estimate', label: '含估算', text: '缺价商品按自家售价 × 订购数量估算，取得订单实际金额后替换。' });
+    const basis = row.sales_basis;
+    if (basis === 'official') return [{type:'actual',label:'业务日报',text:'美国站销售与流量业务报告的已订购商品销售额。'}];
+    if (basis === 'mixed') flags.push({type:'unknown',label:'多种来源',text:'所选日期使用业务日报和订单数据。'});
+    if (basis === 'pending') flags.push({type:'estimate',label:'日报待更新',text:'当前显示订单暂计金额，日报发布后更新。'});
+    if (basis === 'confirmed') flags.push({type:'actual',label:'已取得金额',text:'订单商品已取得的金额，估算部分单列。'});
+    const includedEstimates = row.sales_basis === 'mixed' ? row.included_estimated_rows : row.estimated_rows;
+    if (basis !== 'confirmed' && count(includedEstimates) > 0) flags.push({ type: 'estimate', label: '含估算', text: '缺价商品按自家售价 × 订购数量估算，取得订单实际金额后替换。' });
     if (count(row.missing_price_rows) > 0) flags.push({ type: 'missing', label: '有缺价', text: `${row.missing_price_rows} 条商品明细尚无价格，当前销售额未包含这部分金额。` });
     if (count(row.legacy_unknown_price_rows) > 0) flags.push({ type: 'unknown', label: '待核价', text: '部分历史商品金额的来源尚待核实。' });
     if ([row.estimated_rows, row.missing_price_rows, row.legacy_unknown_price_rows].some(value => value === null || value === undefined)) {
@@ -60,10 +66,11 @@
   function coveredDate(snapshot, date) {
     const data = snapshot?.payload || {};
     if (data.range_coverage && !data.range_coverage.recorded_dates?.includes(date)) return false;
+    if (data.sales_basis_by_date && (!data.sales_basis_by_date[date] || data.sales_basis_by_date[date] === 'unavailable')) return false;
     const publishedDay = snapshot?.generated_at ? pacificDate(snapshot.generated_at) : null;
     return reportTimezoneMatches(snapshot) && Array.isArray(data.daily_rows) && DATE_PATTERN.test(String(date)) &&
       DATE_PATTERN.test(String(data.period?.start_date)) && DATE_PATTERN.test(String(data.period?.end_date)) &&
-      data.period.start_date <= date && date <= data.period.end_date && !!publishedDay && date <= publishedDay;
+      data.period.start_date <= date && date <= data.period.end_date && (data.sales_basis_by_date?.[date] === 'official' || !!publishedDay && date <= publishedDay);
   }
 
   function parentChildren(snapshot, parentAsin, includeAds = false) {
@@ -73,7 +80,7 @@
     const available = reportTimezoneMatches(snapshot) && data.parent_children_available === true && mapping && typeof mapping === 'object' &&
       !Array.isArray(mapping) && Object.hasOwn(mapping, key) && Array.isArray(mapping[key]);
     const adsChildren = includeAds ? spAdsContext(snapshot)?.children.get(key) : null;
-    if (adsChildren?.length) return { available: true, asins: adsChildren };
+    if (adsChildren?.length) return { available:true, asins:[...new Set([...(available ? mapping[key] : []), ...adsChildren])].sort() };
     return { available: !!available, asins: available ? [...new Set(mapping[key].filter(asin =>
       typeof asin === 'string' && ASIN_PATTERN.test(asin) && asin !== key))].sort() : [] };
   }
@@ -86,6 +93,13 @@
   function unknownRow(date, asin) {
     return { date, asin, units: null, orders_count: null, sales_amount: null, currency: 'USD',
       estimated_rows: null, missing_price_rows: null, legacy_unknown_price_rows: null };
+  }
+
+  function rowForAbsent(snapshot, date, asin) {
+    if (!coveredDate(snapshot,date)) return unknownRow(date,asin);
+    const basis = snapshot.payload.sales_basis_by_date?.[date];
+    return {...zeroRow(date,asin), estimated_sales_amount:'0.00', sales_basis:basis,
+      orders_count:snapshot.payload.native_order_dates?.[date] === false ? null : 0};
   }
 
   function spAdsContext(snapshot) {
@@ -142,7 +156,12 @@
     const day = context?.days.get(date);
     if (!day || typeof asin !== 'string' || !ASIN_PATTERN.test(asin)) return null;
     const finalDay = day.provisional === false && date < today;
-    const children = groupType === 'parent' ? context.children.get(asin) : [asin];
+    let children = groupType === 'parent' ? context.children.get(asin) : [asin];
+    if (groupType === 'parent' && snapshot.payload.sales_basis_by_date?.[date] === 'official') {
+      const dayParents = {...snapshot.payload.sale_parent_by_date?.[date],...snapshot.payload.sp_ads_spend?.parent_asins_by_date?.[date]};
+      children = [...new Set([...(children || []),...Object.keys(dayParents)])].filter(child =>
+        (Object.hasOwn(dayParents,child) ? dayParents[child] : context.parents.get(child)) === asin);
+    }
     if (!children?.length) return null;
     let sum = 0;
     let found = false;
@@ -174,12 +193,13 @@
           date < data.period.start_date || date > data.period.end_date || date > today) continue;
       for (const [child, cents] of Object.entries(day.asin_cents)) {
         if (!cents) continue;
-        const parent = dimension === 'parent' ? context.parents.get(child) : null;
+        const saleDay = data.sale_parent_by_date?.[date], adDay = data.sp_ads_spend.parent_asins_by_date?.[date];
+        const parent = dimension === 'parent' ? (adDay?.[child] || (saleDay && Object.hasOwn(saleDay,child) ? saleDay[child] : context.parents.get(child))) : null;
         const asin = parent || child;
         const group = parent ? 'parent' : 'child';
         const id = key(date, asin, group);
         if (rows.has(id)) continue;
-        const row = source.available && coveredDate(snapshot, date) ? zeroRow(date, asin) : unknownRow(date, asin);
+        const row = source.available && coveredDate(snapshot, date) ? rowForAbsent(snapshot,date,asin) : unknownRow(date, asin);
         rows.set(id, { ...row, group_type: group, parent_asin: parent || null, image_asin: child,
           child_asins_count: parent ? context.children.get(parent)?.length : null,
           sp_ads_spend_cents: spAdsCents(snapshot, date, asin, group, today) });
@@ -196,7 +216,10 @@
     const byAsin = new Map(daily.filter(row => row && row.date === date).map(row => [row.asin, row]));
     return children.asins.map(asin => {
       const cents = spAdsCents(snapshot, date, asin, 'child', today);
-      const row = available ? byAsin.get(asin) || zeroRow(date, asin) : cents === null ? null : unknownRow(date, asin);
+      const data = snapshot.payload;
+      const dated = data.sale_parent_by_date?.[date];
+      if (dated && Object.hasOwn(dated,asin) && dated[asin] !== parentAsin) return {asin,data:null};
+      const row = available ? byAsin.get(asin) || rowForAbsent(snapshot,date,asin) : cents === null ? null : unknownRow(date, asin);
       return { asin, data: row ? { ...row, sp_ads_spend_cents: cents } : null };
     });
   }
@@ -249,16 +272,11 @@
     const data = snapshot?.payload || {};
     const today = pacificDate(now);
     const yesterday = previousDate(today);
-    const publishedDay = snapshot?.generated_at ? pacificDate(snapshot.generated_at) : null;
     const source = dimensionRows(snapshot, dimension);
-    const rowsAvailable = source.available;
-    const available = date => rowsAvailable && DATE_PATTERN.test(String(data.period?.start_date)) &&
-      DATE_PATTERN.test(String(data.period?.end_date)) && data.period.start_date <= date &&
-      date <= data.period.end_date && !!publishedDay && date <= publishedDay;
+    const available = date => source.available && coveredDate(snapshot,date);
     const todayAvailable = available(today);
     const yesterdayAvailable = available(yesterday);
     const index = new Map();
-    const zero = () => ({ units: 0, orders_count: 0, sales_amount: '0', currency: 'USD', estimated_rows: 0, missing_price_rows: 0, legacy_unknown_price_rows: 0 });
     for (const row of dailyRowsWithSpend(snapshot, dimension, today)) {
       if (!row || typeof row.asin !== 'string' || !row.asin.trim()) continue;
       if (row.date !== today && row.date !== yesterday) continue;
@@ -267,7 +285,7 @@
       const key = dimension === 'parent' ? `${row.group_type === 'parent' ? 'parent' : 'child'}:${asin}` : asin;
       if (!index.has(key)) index.set(key, { asin, group_type: row.group_type, parent_asin: row.parent_asin,
         image_asin: row.image_asin || asin, child_asins_count: row.child_asins_count,
-        today: todayAvailable ? zero() : null, yesterday: yesterdayAvailable ? zero() : null });
+        today: todayAvailable ? rowForAbsent(snapshot,today,asin) : null, yesterday: yesterdayAvailable ? rowForAbsent(snapshot,yesterday,asin) : null });
       const entry = index.get(key);
       entry[row.date === today ? 'today' : 'yesterday'] = row;
       // Prefer today's representative image and variant count when both dates have data.
@@ -353,6 +371,23 @@
     const absolute = cents < 0n ? -cents : cents;
     result.sales_amount = amountAvailable
       ? `${cents < 0n ? '-' : ''}${absolute / 100n}.${String(absolute % 100n).padStart(2, '0')}` : null;
+    const labels = new Set(rows.map(row=>row.sales_basis).filter(Boolean));
+    if (labels.size) {
+      result.sales_basis = labels.size === 1 ? [...labels][0] : 'mixed';
+      result.included_estimated_rows = rows.reduce((total,row) => total +
+        (row.sales_basis === 'confirmed' ? 0 : Number(row.included_estimated_rows ?? row.estimated_rows ?? 0)),0);
+      // Only today's estimates are presented separately. Amounts for closed
+      // provisional days already include their estimates in sales_amount.
+      const estimates = rows.filter(row => row.sales_basis === 'confirmed' || row.sales_basis === 'mixed')
+        .map(row => row.separate_estimated_amount ?? row.estimated_sales_amount);
+      const parsed = estimates.map(value => typeof value === 'number' || typeof value === 'string'
+        ? String(value).match(/^(\d+)(?:\.(\d{1,2})0*)?$/) : null);
+      const total = parsed.every(Boolean) ? parsed.reduce((sum,part) =>
+        sum+BigInt(part[1])*100n+BigInt((part[2] || '').padEnd(2,'0')),0n) : null;
+      result.separate_estimated_amount = estimates.length && total !== null
+        ? String(total/100n)+'.'+String(total%100n).padStart(2,'0') : null;
+      if (result.sales_basis === 'confirmed') result.estimated_sales_amount = result.separate_estimated_amount;
+    }
     // Product counts cannot be added across dates. Derive them from published rows
     // for the selected scope in the page, while preserving the summary order total.
     return result;
@@ -391,7 +426,8 @@
       if (!members.has(parent)) members.set(parent, new Map());
       return getGroup(members.get(parent), 'child', child);
     }
-    const salesDays = new Set();
+    const salesDays = new Set(data.range_coverage?.recorded_dates || []);
+    const ordersIncomplete = Object.values(data.native_order_dates || {}).includes(false);
     const selling = new Map();
     const parentSource = dimensionRows(snapshot, 'parent');
     const sp = data.sp_ads_spend;
@@ -456,7 +492,9 @@
       const amount = Number.isSafeInteger(cents) && known > 0 ? cents : null;
       return {
         units: metrics.units, sales_amount: metrics.sales_amount, currency: metrics.currency,
-        orders_count: metrics.orders_count, estimated_rows: metrics.estimated_rows,
+        sales_basis:metrics.sales_basis || data.range_summary?.sales_basis, estimated_sales_amount:metrics.estimated_sales_amount,
+        separate_estimated_amount:metrics.separate_estimated_amount, included_estimated_rows:metrics.included_estimated_rows,
+        orders_count: ordersIncomplete ? null : metrics.orders_count, estimated_rows: metrics.estimated_rows,
         missing_price_rows: metrics.missing_price_rows, legacy_unknown_price_rows: metrics.legacy_unknown_price_rows,
         asin: group.asin, title: sample?.title || null, group_type: group.type,
         parent_asin: group.type === 'parent' ? group.asin : null,
@@ -611,7 +649,7 @@
     if (periodTable) spendFields.push('SP已知小计（USD）', 'SP花费有值天数', '所选天数', 'SP花费含暂定日报');
     return csvDocument([...dates, '统计时区', '统计方式', '统计维度', '分组类型', 'ASIN', '父ASIN', '商品标题',
       '销量', '销售额', '币种', '订单量', '子ASIN数', '估算明细数', '缺价明细数', '待核价明细数', '金额口径',
-      ...(mode === 'daily' || periodTable ? spendFields : [])], rows.map(row => [
+      ...(mode === 'daily' || periodTable ? spendFields : []), '另列估算金额（USD）'], rows.map(row => [
       ...(periodTable ? [] : mode === 'daily' ? [row.date, row.date] : [period?.start_date, period?.end_date]), REPORT_TIMEZONE,
       mode === 'daily' ? '每日明细' : '期间汇总', dimension === 'parent' ? '父ASIN' : '子ASIN',
       row.group_type === 'parent' ? '父ASIN' : dimension === 'parent' ? '未匹配子ASIN' : '子ASIN',
@@ -619,7 +657,8 @@
       row.child_asins_count, row.estimated_rows, row.missing_price_rows, row.legacy_unknown_price_rows, priceBasis(row),
       ...(mode === 'daily' || periodTable ? [spAdsAmount(row.sp_ads_spend_cents)] : []),
       ...(periodTable ? [spAdsAmount(row.sp_ads_known_cents), row.sp_ads_known_days, row.range_days,
-        row.sp_ads_known_days ? (row.sp_ads_provisional ? '是' : '否') : null] : [])
+        row.sp_ads_known_days ? (row.sp_ads_provisional ? '是' : '否') : null] : []),
+      row.separate_estimated_amount ?? (row.sales_basis === 'confirmed' ? row.estimated_sales_amount : null)
     ]));
   }
   function todayCsv(rows, dates, dimension) {
@@ -628,11 +667,12 @@
       row.missing_price_rows, row.legacy_unknown_price_rows, priceBasis(row)] : Array(metrics.length).fill(null);
     return csvDocument(['今日日期', '昨日日期', '统计时区', '统计维度', '分组类型', 'ASIN', '父ASIN',
       ...metrics.map(label => `今日${label}`), ...metrics.map(label => `昨日${label}`),
-      '今日SP广告花费（USD）', '昨日SP广告花费（USD）'], rows.map(row => [
+      '今日SP广告花费（USD）', '昨日SP广告花费（USD）', '今日另列估算金额（USD）'], rows.map(row => [
       dates?.today, dates?.yesterday, REPORT_TIMEZONE, dimension === 'parent' ? '父ASIN' : '子ASIN',
       row.group_type === 'parent' ? '父ASIN' : dimension === 'parent' ? '未匹配子ASIN' : '子ASIN',
       row.asin, row.parent_asin, ...values(row.today), ...values(row.yesterday),
-      spAdsAmount(row.today?.sp_ads_spend_cents), spAdsAmount(row.yesterday?.sp_ads_spend_cents)
+      spAdsAmount(row.today?.sp_ads_spend_cents), spAdsAmount(row.yesterday?.sp_ads_spend_cents),
+      row.today?.estimated_sales_amount
     ]));
   }
 

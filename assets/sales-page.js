@@ -142,7 +142,8 @@
     if (dimension !== 'parent' || entry.group_type !== 'parent') return;
     let childCount = entry.child_asins_count;
     if (view !== 'history') {
-      const children = model.parentChildren(currentSnapshot, entry.asin, view !== 'home');
+      const source = view === 'home' ? KBSales.rawSnapshot(currentSnapshot) : currentSnapshot;
+      const children = model.parentChildren(source, entry.asin, view !== 'home');
       childCount = children.available ? children.asins.length : null;
     }
     const button = document.createElement('button');
@@ -216,7 +217,7 @@
     let rows;
     if (view === 'today') rows = model.childrenTodayComparison(currentSnapshot, entry.asin, new Date());
     else if (view === 'history') rows = model.historyProductChildren(historySnapshot, entry.asin);
-    else rows = model.childrenPeriodRows(currentSnapshot, entry.asin);
+    else rows = model.childrenPeriodRows(KBSales.rawSnapshot(currentSnapshot), entry.asin);
     for (const row of rows) {
       const childTr = document.createElement('tr');
       productCell(childTr, row, true);
@@ -256,6 +257,14 @@
       badge.tabIndex = 0;
       badge.setAttribute('aria-label', `${flag.label}：${flag.text}`);
       badges.appendChild(badge);
+    }
+    const directEstimate = row.sales_basis === 'confirmed';
+    if (directEstimate || row.separate_estimated_amount != null) {
+      const estimate = document.createElement('span');
+      estimate.className = 'sales-price-badge estimate';
+      const subtotal = directEstimate ? row.estimated_sales_amount : row.separate_estimated_amount;
+      estimate.textContent = `另列估算 ${money(subtotal, 'USD')}`;
+      badges.appendChild(estimate);
     }
     container.appendChild(badges);
   }
@@ -377,7 +386,7 @@
     const missing = [!todaySummary && '今日', !yesterdaySummary && '昨日'].filter(Boolean);
     $('todaySummaryStatus').textContent = missing.length
       ? `${missing.join('、')}全店汇总尚未发布，卡片显示“—”；订单量不会由各 ASIN 订单量相加推算。`
-      : '蓝色为今日，橙色为昨日。汇总范围为全店已识别商品；ASIN 搜索只筛选下方列表。';
+      : '蓝色为今日，橙色为昨日。销售额和件数按全店统计，ASIN 搜索仅筛选下方列表。';
   }
   function rangeLabel() {
     return historyRange ? `${historyRange.start} 至 ${historyRange.end}` : '尚未选择';
@@ -390,15 +399,32 @@
       ? `统计日期：${text}（美国太平洋时间）` : '统计日期：等待后台按美国太平洋时间重新发布';
   }
 
+  function coverageText(counts) {
+    if (!counts) return '';
+    return [['official','亚马逊业务日报'],['confirmed','今日订单'],['pending','日报待更新'],
+      ['legacy','历史订单'],['unavailable','暂无数据']]
+      .filter(([key]) => counts[key] > 0)
+      .map(([key,label]) => `${label} ${fmt(counts[key])} 天`).join('，');
+  }
+
   function renderScopeNotice() {
     if (!onHistory() || !model.reportTimezoneMatches(currentSnapshot)) {
       if (snapshotNotice) setNotice(snapshotNotice.text, snapshotNotice.state);
       return;
     }
-    const summary = historySnapshot?.payload.range_summary;
-    const missing = summary?.missing_price_rows;
-    const priceNote = Number(missing) > 0 ? `所选期间有 ${fmt(missing)} 条商品明细缺价，销售额尚未补齐。` : '';
-    setNotice(['销售额优先采用订单商品实际金额，缺价时按自家售价和订购数量估算。取消订单不计入销售。', priceNote].filter(Boolean).join(' '), priceNote ? 'warn' : '');
+    const data = historySnapshot?.payload;
+    const counts = data?.official_basis_counts;
+    if (!counts) {
+      setNotice(historyMessage || '正在读取所选日期的业务日报。');
+      return;
+    }
+    const parts = [coverageText(counts)];
+    if (counts.pending) parts.push('等待日报的日期先显示订单暂计值，可能包含估算。');
+    if (counts.unavailable) parts.push('合计只计入已有数据的日期。');
+    if (counts.confirmed) parts.push('今日销售额仅计已取得的订单商品金额。');
+    if (data.official_totals_difference_days > 0) parts.push(`有 ${fmt(data.official_totals_difference_days)} 天的日报全店合计与子 ASIN 加总存在差异。卡片按全店合计，表格按子 ASIN 明细。`);
+    if (data.latest_official_report_at) parts.push(`最近日报生成于 ${time(data.latest_official_report_at)}。`);
+    setNotice(parts.join(' '), counts.pending || counts.unavailable ? 'warn' : '');
   }
 
   function renderHistorySummary() {
@@ -406,10 +432,10 @@
     const coverage = data?.range_coverage;
     const summary = coverage?.days_with_records > 0 ? data.range_summary : null;
     const productTotal = productCount(summary, data?.parent_asin_available);
-    $('historyScopeText').textContent = `${rangeLabel()}（美国太平洋时间）· 全店已识别商品汇总`;
+    $('historyScopeText').textContent = `${rangeLabel()}（美国太平洋时间）· 全店汇总`;
     $('dailyRangeLabel').textContent = rangeLabel();
     $('historyCoverage').textContent = historyMessage || (coverage?.days_with_records > 0
-      ? `有销售记录 ${fmt(coverage.days_with_records)} 天，首次记录 ${coverage.recorded_start_date}，末次记录 ${coverage.recorded_end_date}。仅汇总已入库记录。`
+      ? `已覆盖 ${fmt(coverage.days_with_records)} 天，首日 ${coverage.recorded_start_date}，末日 ${coverage.recorded_end_date}。`
       : '所选期间暂无已入库的销售记录。');
     window.MCSalesHistoryChart.render({start: historyRange?.start, end: historyRange?.end,
       days: data?.sales_daily_summaries || [], message: historyMessage});
@@ -504,8 +530,8 @@
       item.append(value, bar, label);
       container.appendChild(item);
     }
-    $('unitsSold').textContent = fmt(total);
-    $('trendFoot').textContent = entries.length ? `近 15 天已识别商品合计 ${fmt(total)} 件 · 按订单日期统计` : '暂无已发布的趋势数据';
+    $('unitsSold').textContent = entries.length ? fmt(total) : '—';
+    $('trendFoot').textContent = entries.length ? `有数据的 ${fmt(entries.length)} 天合计 ${fmt(total)} 件。` : '暂无已发布的趋势数据';
   }
   function renderRanking(ranking) {
     const body = $('rankingRows');
@@ -526,8 +552,11 @@
   }
   function renderDimension() {
     const data = currentSnapshot?.payload || {};
-    const source = model.dimensionRows(currentSnapshot, dimension);
-    const parentAvailable = model.dimensionRows(onHistory() && historySnapshot ? historySnapshot : currentSnapshot, 'parent').available;
+    const rankingSnapshot = KBSales.rawSnapshot(currentSnapshot);
+    const source = model.dimensionRows(rankingSnapshot, dimension);
+    const visibleSource = onHistory() ? historySnapshot || currentSnapshot
+      : location.hash === '#today' ? currentSnapshot : rankingSnapshot;
+    const parentAvailable = model.dimensionRows(visibleSource, 'parent').available;
     $('dimensionChild').setAttribute('aria-pressed', String(dimension === 'child'));
     $('dimensionParent').setAttribute('aria-pressed', String(dimension === 'parent'));
     $('dimensionParent').disabled = !parentAvailable;
@@ -536,19 +565,19 @@
     if (!model.reportTimezoneMatches(currentSnapshot)) status.textContent = '等待后台按美国太平洋时间发布数据';
     else if (!parentAvailable) status.textContent = '父 ASIN 关系尚未同步';
     else if (dimension === 'parent') {
-      const coverage = onHistory() ? null : data.parent_coverage_15d;
+      const coverage = location.hash === '#today' || onHistory() ? null : data.parent_coverage_15d;
       status.textContent = coverage
         ? `近 15 天：${fmt(coverage.mapped_child_asins)} / ${fmt(coverage.child_asins_total)} 个子 ASIN 已识别父子关系，汇总为 ${fmt(coverage.parent_asins)} 个父 ASIN；${fmt(coverage.unknown_child_asins)} 个未识别子 ASIN 单独显示。`
         : '同一父 ASIN 下的变体合并统计；未识别父子关系的子 ASIN 单独显示。';
     } else status.textContent = '按子 ASIN 查看；可切换父 ASIN 汇总变体数据。';
     const label = dimensionLabel();
-    $('rankingHeading').textContent = `${label} 已识别销量排行`;
+    $('rankingHeading').textContent = dimension === 'parent' ? '订单明细排行（父 ASIN）' : '订单明细排行（SKU）';
     for (const id of ['rankingAsinHeading', 'todayAsinHeading', 'dailyAsinHeading']) $(id).textContent = `商品 / ${label}`;
     $('rankingVariantHeading').textContent = dimension === 'parent' ? '子 ASIN 数' : 'SKU';
     $('rankingTitleHeading').textContent = dimension === 'parent' ? '代表变体标题' : '商品标题';
     $('rankingNote').textContent = dimension === 'parent'
-      ? '父 ASIN 下的变体合并统计，订单按订单号去重；图片与标题展示代表变体。未识别父 ASIN 的商品继续按子 ASIN 显示。'
-      : '排行按商品 SKU 展示；同一子 ASIN 如有多个 SKU，可能出现多行。今日数据与历史数据按子 ASIN 合并。';
+      ? '排行来自订单明细。订单按订单号去重，子 ASIN 展开金额可能含估算。'
+      : '排行来自订单明细。同一子 ASIN 的多个 SKU 分行展示，业务日报的 ASIN 汇总见「历史数据」。';
     $('todayHeading').textContent = `今日 / 昨日${label}数据`;
     $('todayDescription').textContent = dimension === 'parent'
       ? '同一父 ASIN 下的变体合并显示；按今日销量排序。有花费但未售出的商品也会列出。'
@@ -593,13 +622,13 @@
 
   function updateRangeControls() {
     if (!model.reportTimezoneMatches(currentSnapshot)) return;
-    const end = currentSnapshot.payload.period?.end_date;
+    const end = model.pacificDate();
     if (!validDate(end)) {
       historyMessage = '后台尚未发布可查询的日期范围。';
       return;
     }
     for (const id of ['historyStart', 'historyEnd']) {
-      $(id).min = shiftDate(end, -359);
+      $(id).min = [shiftDate(end, -359), KBSalesOfficial.startDate].sort()[0];
       $(id).max = end;
     }
     const inputsMatch = historyRange && $('historyStart').value === historyRange.start && $('historyEnd').value === historyRange.end;
@@ -622,6 +651,9 @@
     } else if (start.value > end.value) {
       field = end;
       message = '结束日期须等于或晚于开始日期。';
+    } else if (end.value > shiftDate(start.value, 359)) {
+      field = end;
+      message = '每次最多查询 360 个日期。';
     } else if (!end.max) {
       message = '正在等待后台发布可查询的日期范围。';
     } else if (start.value < start.min || end.value > end.max) {
@@ -637,13 +669,13 @@
     defaultRange = false;
     historyRange = {start: start.value, end: end.value};
     if (changed) { dailyPage = 0; expandedChildren.clear(); }
-    loadHistoryRange({retry: true});
+    loadHistoryRange({force: !changed, retry: true});
   }
 
   async function loadHistoryRange({force = false, retry = false} = {}) {
     if (!onHistory() || !currentSnapshot || !model.reportTimezoneMatches(currentSnapshot) || !historyRange) return;
     const {start, end} = historyRange;
-    const version = `${start}/${end}/${currentSnapshot.generated_at || ''}`;
+    const version = [start,end,currentSnapshot.generated_at,currentSnapshot.payload.latest_official_report_at].join('/');
     if (historyRequest?.version === version) return;
     if (!force && historySourceVersion === version && (historySnapshot || !retry)) return;
     historyRequest?.controller.abort();
@@ -664,8 +696,7 @@
       const session = await KBAuth.getValidSession();
       if (request !== historyRequest) return;
       if (!session) { location.replace('../index.html'); return; }
-      const result = model.recentHistoryRange?.(currentSnapshot, start, end) ||
-        await KBSales.getHistoryRange(session, start, end, {signal: controller.signal});
+      const result = await KBSales.getHistoryRange(session, start, end, {signal: controller.signal, recent: currentSnapshot});
       if (request !== historyRequest) return;
       const data = result?.payload;
       if (!model.reportTimezoneMatches(result) || data.period?.start_date !== start || data.period?.end_date !== end ||
@@ -733,16 +764,20 @@
     $('lastSync').textContent = time(data.last_successful_sync_at);
     const prices = data.price_coverage_15d;
     $('priceCoverage').textContent = prices ? `${fmt(prices.estimated_rows)} / ${fmt(prices.missing_rows)}` : '尚未提供';
-    renderTrend(data.trend);
+    const trend = new Map((data.trend || []).map(row => [row.date, row]));
+    for (const row of data.sales_daily_summaries || []) if (row.units != null) trend.set(row.date, row);
+    const period = data.period;
+    const series = [...trend.values()].filter(row => row.date >= period.start_date && row.date <= period.end_date)
+      .sort((a,b) => a.date.localeCompare(b.date));
+    renderTrend(series);
     renderDimension();
     const ageMinutes = (Date.now() - Date.parse(snapshot.generated_at)) / 60000;
     const stale = !Number.isFinite(ageMinutes) ? '发布时间未提供。' : ageMinutes > 90 ? '数据已超过 90 分钟未发布，页面显示上次发布结果。' : '';
-    const basis = data.price_metadata_available === true
-      ? '销售额优先采用订单商品实际金额；缺价时按自家售价 × 订购数量估算，取得实际金额后替换。取消订单不计入销售。'
-      : '本次发布未提供完整的估算与缺价说明，销售额口径尚待核实。';
-    const missing = prices && Number(prices.missing_rows) > 0 ? `仍有 ${fmt(prices.missing_rows)} 条商品明细缺价，相关销售额尚未补齐。` : '';
-    snapshotNotice = {text: [stale, basis, missing].filter(Boolean).join(' '),
-      state: stale || missing || data.price_metadata_available !== true ? 'warn' : ''};
+    const counts = data.official_basis_counts;
+    const details = coverageText(counts);
+    const note = '今日销售额按订单已取得金额统计，估算另列。已结束的日期优先使用亚马逊业务日报。';
+    snapshotNotice = {text: [stale, note, details].filter(Boolean).join(' '),
+      state: stale || counts?.pending || counts?.unavailable ? 'warn' : ''};
     renderScopeNotice();
   }
   async function refresh(forceRange = false) {

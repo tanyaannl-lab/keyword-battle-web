@@ -80,15 +80,15 @@
     <div id="viewHome" class="sales-view" aria-label="首页">
       <section class="sales-kpis" aria-label="近 15 天概况">
         <article class="card sales-kpi"><div class="sales-kpi-label">订单记录</div><div class="sales-kpi-value" id="totalOrders">—</div><div class="sales-kpi-note">近 15 天已记录的订单，包含各订单状态</div></article>
-        <article class="card sales-kpi"><div class="sales-kpi-label">已识别商品销量</div><div class="sales-kpi-value" id="unitsSold">—</div><div class="sales-kpi-note">订购件数，已排除取消订单</div></article>
+        <article class="card sales-kpi"><div class="sales-kpi-label">近 15 天销量</div><div class="sales-kpi-value" id="unitsSold">—</div><div class="sales-kpi-note">按美西业务日累计订购件数</div></article>
         <article class="card sales-kpi"><div class="sales-kpi-label">商品识别覆盖率</div><div class="sales-kpi-value" id="coverageRate">—</div><div class="sales-kpi-note">已识别商品的订单 / 近 15 天订单</div></article>
         <article class="card sales-kpi"><div class="sales-kpi-label">待补全订单</div><div class="sales-kpi-value" id="pendingOrders">—</div><div class="sales-kpi-note">商品信息待补全，与待付款状态分开统计</div></article>
       </section>
 
       <div class="sales-grid">
         <section class="card">
-          <div class="card-head"><h2>近 15 天已识别商品销量</h2><p>按订单日期统计订购件数，排除取消订单。</p></div>
-          <div class="sales-chart-body"><div class="sales-chart-scroll"><div class="sales-bars" id="trendBars" role="img" aria-label="近 15 天已识别商品销量趋势"></div></div></div>
+          <div class="card-head"><h2>近 15 天销量</h2><p>已发布日取业务日报，其余日期取订单暂计件数。</p></div>
+          <div class="sales-chart-body"><div class="sales-chart-scroll"><div class="sales-bars" id="trendBars" role="img" aria-label="近 15 天销量趋势"></div></div></div>
           <div class="sales-chart-foot" id="trendFoot">—</div>
         </section>
         <section class="card">
@@ -100,14 +100,14 @@
             <div class="sales-health-row"><span>近 15 天待付款订单</span><strong id="paymentPending">—</strong></div>
             <div class="sales-health-row"><span>历史待补全订单</span><strong id="allPending">—</strong></div>
             <div class="sales-health-row"><span>历史补全失败订单</span><strong id="allFailed">—</strong></div>
-            <div class="sales-health-row"><span>近 15 天估算 / 缺价明细</span><strong id="priceCoverage">—</strong></div>
-            <p class="sales-footnote">新订单每 30 分钟同步，近 15 天订单每天核对一次。页面显示最近发布的数据，刷新不会触发亚马逊同步。</p>
+            <div class="sales-health-row"><span>近 15 天订单估算 / 缺价明细</span><strong id="priceCoverage">—</strong></div>
+            <p class="sales-footnote">订单和商品补全统计来自订单明细。业务日报每天复查最近 15 个已结束的美西日期。</p>
           </div>
         </section>
       </div>
 
       <section class="card table-card">
-        <div class="card-head"><h2 id="rankingHeading">子 ASIN 已识别销量排行</h2><p>近 15 天，按订购件数排序，展示前 10 名。</p></div>
+        <div class="card-head"><h2 id="rankingHeading">订单明细排行（SKU）</h2><p>近 15 天，按订购件数排序，展示前 10 名。</p></div>
         <div class="table-scroll">
           <table class="sales-ranking-table">
             <thead><tr><th scope="col">排名</th><th scope="col" id="rankingAsinHeading">商品 / 子 ASIN</th><th scope="col" id="rankingVariantHeading">SKU</th><th scope="col" id="rankingTitleHeading">商品标题</th><th scope="col" class="sales-number">销量（件）</th><th scope="col" class="sales-number">订单量</th></tr></thead>
@@ -119,10 +119,10 @@
     </div>
 
     <div id="viewToday" class="sales-view" aria-label="今日数据" hidden>
-      <div class="sales-summary-head"><div><h2>今日 / 昨日数据看板</h2><p>全店已识别商品汇总 · 取消订单已排除 · ASIN 搜索只筛选下方列表</p></div></div>
+      <div class="sales-summary-head"><div><h2>今日 / 昨日数据看板</h2><p>显示全店销售额、件数及去重订单数。ASIN 搜索只筛选下方列表。</p></div></div>
       <section class="sales-kpis sales-summary-kpis" aria-label="今日与昨日销售汇总">
         <article class="card sales-kpi"><div class="sales-kpi-label">销量（件）</div><div id="todayUnits" class="sales-kpi-value">—</div><div class="sales-kpi-note">今日 / 昨日 · 订购件数</div></article>
-        <article class="card sales-kpi"><div class="sales-kpi-label">销售额</div><div id="todayAmount" class="sales-kpi-value">—</div><div class="sales-kpi-note">含估算金额；缺价另行提示</div></article>
+        <article class="card sales-kpi"><div class="sales-kpi-label">销售额</div><div id="todayAmount" class="sales-kpi-value">—</div><div class="sales-kpi-note">今日估算单列，昨日金额按标注来源显示</div></article>
         <article class="card sales-kpi"><div class="sales-kpi-label">已识别商品订单量</div><div id="todayOrders" class="sales-kpi-value">—</div><div class="sales-kpi-note">全店按订单号去重，含待付款</div></article>
         <article class="card sales-kpi"><div class="sales-kpi-label" id="todayProductLabel">有记录的子 ASIN 数</div><div id="todayProducts" class="sales-kpi-value">—</div><div class="sales-kpi-note" id="todayProductNote">今日 / 昨日 · 按当前统计维度</div></article>
       </section>
@@ -160,7 +160,7 @@
       </div>
       <section class="sales-kpis sales-summary-kpis" aria-label="历史销售汇总">
         <article class="card sales-kpi"><div class="sales-kpi-label">销量（件）</div><div id="historyUnits" class="sales-kpi-value">—</div><div class="sales-kpi-note">所选期间的订购件数</div></article>
-        <article class="card sales-kpi"><div class="sales-kpi-label">销售额</div><div id="historyAmount" class="sales-kpi-value">—</div><div class="sales-kpi-note">含估算金额；缺价另行提示</div></article>
+        <article class="card sales-kpi"><div class="sales-kpi-label">销售额</div><div id="historyAmount" class="sales-kpi-value">—</div><div class="sales-kpi-note">所选日期按下方标注的数据来源汇总</div></article>
         <article class="card sales-kpi"><div class="sales-kpi-label">已识别商品订单量</div><div id="historyOrders" class="sales-kpi-value">—</div><div class="sales-kpi-note">全店按订单号去重，含待付款</div></article>
         <article class="card sales-kpi"><div class="sales-kpi-label" id="historyProductLabel">有记录的子 ASIN 数</div><div id="historyProducts" class="sales-kpi-value">—</div><div class="sales-kpi-note" id="historyProductNote">按当前统计维度</div></article>
       </section>
@@ -183,7 +183,7 @@
           </table>
         </div>
         <div class="sales-detail-pager"><span id="dailyPageInfo">—</span><div><button class="btn btn-secondary btn-sm" id="dailyPrevBtn" disabled>上一页</button><button class="btn btn-secondary btn-sm" id="dailyNextBtn" disabled>下一页</button></div></div>
-        <div class="sales-note">销售额优先采用订单商品实际金额；缺价时按自家售价 × 订购数量估算。取消订单不计入销量、销售额和订单量。“有缺价”的金额尚未补齐。SP 广告报表只覆盖部分日期时，显示已知花费小计和覆盖天数。</div>
+        <div class="sales-note">业务日报提供销售额和件数。全店取日报的当日合计，商品行取子 ASIN 明细。两者可能存在差异。订单量来自订单明细，按订单号去重。SP 广告报表只覆盖部分日期时，显示已知花费小计和覆盖天数。</div>
       </section>
     </div>
   </main>
@@ -193,9 +193,10 @@
 <script src="../assets/config.js"></script>
 <script src="../assets/auth-client.js"></script>
 <script src="../assets/app.js"></script>
-<script src="../assets/sales-client.js?v=20261127-asin-period"></script>
-<script src="../assets/sales-model.js?v=20261127-asin-period"></script>
+<script src="../assets/sales-client.js?v=20261128-sales-official"></script>
+<script src="../assets/sales-model.js?v=20261128-sales-official"></script>
 <script src="../assets/sales-history-chart.js?v=20261127-date-range"></script>
-<script src="../assets/sales-page.js?v=20261127-asin-period"></script>
+<script src="../assets/sales-official.js?v=20261128-sales-official"></script>
+<script src="../assets/sales-page.js?v=20261128-sales-official"></script>
 </body>
 </html>
