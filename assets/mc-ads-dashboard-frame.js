@@ -15,7 +15,7 @@
 
   // This function runs in the opaque frame. Only the review's own storage
   // entries are seeded. No workspace token or other account key enters it.
-  function initStorage(entries, channel, parentOrigin, available, week, weekOptions) {
+  function initStorage(entries, channel, parentOrigin, available, week, weekOptions, abaRestore) {
     const values = new Map(entries);
     const bootstrap = document.currentScript;
     const policy = bootstrap.previousElementSibling;
@@ -85,6 +85,32 @@
       }
     })});
 
+    Object.defineProperty(window, 'MCAdsABA', {value:Object.freeze({
+      restore:abaRestore,
+      remember(value) { parent.postMessage({channel,abaFocus:value},parentOrigin); },
+      request(query) {
+        return new Promise((resolve,reject) => {
+          const pipe = new MessageChannel();
+          const timeout = setTimeout(() => {
+            pipe.port1.close();
+            reject(new Error('ABA 请求超时，请重新读取以确认结果。'));
+          },60000);
+          function finish() { clearTimeout(timeout); pipe.port1.close(); }
+          pipe.port1.onmessage = event => {
+            finish();
+            if (event.data?.ok === true) resolve(event.data.result);
+            else {
+              const error = new Error(event.data?.error || 'ABA 请求失败，请重试。');
+              if (event.data?.conflict === true) error.code = 'conflict';
+              reject(error);
+            }
+          };
+          pipe.port1.onmessageerror = () => { finish(); reject(new Error('ABA 数据传输失败，请重试。')); };
+          try { parent.postMessage({channel,abaQuery:query},parentOrigin,[pipe.port2]); }
+          catch (error) { finish(); reject(error); }
+        });
+      }
+    })});
     let denied = !available;
     const storage = {
       get length() { return values.size; },
@@ -145,7 +171,7 @@
     iframe.removeAttribute('src');
   }
 
-  function mount(iframe, template, userId, feed, business, weekOptions = [], onSelectWeek, onReadPeriodWeek, inventory = {status:'unavailable',data:null}) {
+  function mount(iframe, template, userId, feed, business, weekOptions = [], onSelectWeek, onReadPeriodWeek, inventory = {status:'unavailable',data:null}, aba = {}) {
     const week = feed.week;
     if (!userId || !/^\d{4}-\d{2}-\d{2}$/.test(week) || typeof template !== 'string' || !/<head\s*>/i.test(template))
       throw new Error('看板文件格式或周次无效。');
@@ -163,7 +189,7 @@
         }
       }
     } catch { available = false; }
-    const args = safeJSON([entries,channel,location.origin,available,week,weekOptions]);
+    const args = safeJSON([entries,channel,location.origin,available,week,weekOptions,aba.restore || null]);
     const runtime = '<script type="application/json" id="mc-ads-runtime">' + safeJSON({feed,business,inventory}) + '<\/script>';
     const init = '<script>(' + initStorage.toString() + ')(...' + args + ');<\/script>';
     const policy = '<meta data-mc-frame-policy http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'unsafe-inline\'; style-src \'unsafe-inline\'; img-src data: blob:; object-src \'none\'; base-uri \'none\'; form-action \'none\'">';
@@ -205,6 +231,23 @@
       const data = event.data;
       if (event.source !== iframe.contentWindow || event.origin !== 'null' ||
           !data || data.channel !== channel) return;
+      if (Object.hasOwn(data,'abaFocus')) {
+        aba.remember?.(data.abaFocus);
+        return;
+      }
+      if (data.abaQuery && typeof data.abaQuery === 'object' && event.ports[0]) {
+        const port = event.ports[0];
+        (async () => {
+          try {
+            if (!aba.request) throw new Error('ABA 功能暂不可用。');
+            const result = await aba.request(data.abaQuery);
+            if (mounts.get(iframe) === state) port.postMessage({ok:true,result});
+          } catch (error) {
+            if (mounts.get(iframe) === state) port.postMessage({ok:false,error:error.message,conflict:error.code === 'conflict'});
+          } finally { port.close(); }
+        })();
+        return;
+      }
       if (data.periodRead && typeof data.periodRead === 'object') {
         void sendPeriodWeek(data.periodRead, event.ports[0]);
         return;

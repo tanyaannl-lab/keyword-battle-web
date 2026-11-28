@@ -393,6 +393,24 @@ button.mc-level-sort:focus-visible{outline:2px solid #15795d;outline-offset:2px;
 #review-placements .mc-inventory-status{margin:3px 0 0}
 @media(max-width:600px){#filter-panel .mc-inventory-filters{grid-template-columns:1fr;gap:10px}#mc-inventory-store{padding:12px}#mc-inventory-store .mc-catalog-tools label{display:grid}}
 
+body.aba-active :is(.calendar,.review-filters label[for="filter-time"],#hd-start,#filter-open,#filter-panel,#active-filters){display:none}
+#page-aba .aba-status,#page-aba .aba-report>p{color:var(--muted);font-size:14px}
+#page-aba .aba-status:empty{display:none}
+#page-aba h3{font-size:17px;margin:0}
+#page-aba .aba-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:10px 0 0}
+#aba-editor{margin-top:14px}
+#aba-editor label{font-weight:600}
+#aba-editor label span,#aba-validation{color:var(--muted);font-size:13px;font-weight:400}
+#aba-terms{display:block;margin-top:6px;width:min(100%,680px);min-height:82px;max-height:320px;resize:vertical;padding:9px;border:1px solid var(--line);border-radius:6px;font:inherit}
+#aba-save{background:var(--brand);border:0;color:white;padding:8px 13px;border-radius:6px;font:inherit;font-weight:600}
+#aba-save:disabled{opacity:.5}
+.aba-report{margin-top:16px}
+#aba-table{width:100%;min-width:900px}
+#aba-table thead th{text-align:center;position:static}
+#aba-table tbody th{max-width:21em;min-width:10em;text-align:left;white-space:normal;overflow-wrap:anywhere}
+#aba-table tbody td{text-align:right;white-space:nowrap}
+#aba-table thead th[colspan],#aba-table tbody td:nth-child(3n){border-left:1px solid var(--line)}
+#aba-table tbody td:nth-child(3n){text-align:center}
 </style>
 </head>
 <body>
@@ -423,6 +441,7 @@ button.mc-level-sort:focus-visible{outline:2px solid #15795d;outline-offset:2px;
     <button type="button" data-page="periodcompare" aria-controls="page-periodcompare" aria-pressed="false">周期对比</button>
     <button type="button" data-page="diagnosis" aria-controls="page-diagnosis" aria-pressed="false">查问题</button>
     <button type="button" data-page="attributes" aria-controls="page-attributes" aria-pressed="false">属性分析</button>
+    <button type="button" data-page="aba" aria-controls="page-aba" aria-pressed="false">ABA 数据</button>
     <button type="button" data-page="drafts" aria-controls="page-drafts" aria-pressed="false">调整草稿</button>
     <button type="button" data-page="method" aria-controls="page-method" aria-pressed="false">数据口径</button>
     <button type="button" data-page="daily" aria-controls="page-daily" aria-pressed="false">每日明细</button>
@@ -513,6 +532,37 @@ button.mc-level-sort:focus-visible{outline:2px solid #15795d;outline-offset:2px;
 <section id="page-attributes" aria-label="属性分析" hidden>
   <div id="attribute-level-nav" class="attr-navigation hier-tools" hidden><label for="attribute-child" id="attribute-child-label">进入下级</label><select id="attribute-child"></select></div>
   <div id="review-attributes"></div>
+</section>
+<section id="page-aba" aria-label="ABA 数据" hidden>
+  <div class="section-line">
+    <div><h2>ABA 数据</h2><span class="section-info" id="aba-period"></span></div>
+    <span class="section-info" id="aba-scope"></span>
+  </div>
+  <section class="panel" aria-labelledby="aba-list-title">
+    <div class="panel-head"><h3 id="aba-list-title">产品跟踪词</h3><span class="section-info" id="aba-updated"></span></div>
+    <p class="aba-status" id="aba-status" role="status" aria-live="polite"></p>
+    <div id="aba-controls" hidden>
+      <div class="aba-actions"><strong id="aba-count"></strong><button class="outline" id="aba-refresh" type="button">重新读取</button></div>
+      <p class="aba-status" id="aba-access"></p>
+      <div id="aba-editor" role="group" aria-label="编辑产品跟踪词" hidden>
+        <label for="aba-terms">编辑关键词 <span>每行一个，最多 30 个；重复词自动合并。</span></label>
+        <textarea id="aba-terms" rows="4" placeholder="每行输入一个关键词" spellcheck="false" aria-describedby="aba-validation"></textarea>
+        <div class="aba-actions"><button type="button" id="aba-save" disabled>保存关键词</button><button class="outline" type="button" id="aba-discard" hidden>撤销编辑</button><span id="aba-validation" role="status"></span></div>
+      </div>
+    </div>
+  </section>
+  <section class="panel aba-report" id="aba-report" aria-labelledby="aba-report-title" hidden>
+    <h3 id="aba-report-title">本周搜索词表现</h3>
+    <p>搜索频率排名按 Amazon.com 搜索词周报统计；前三个 ASIN 按该词的点击份额排列。</p>
+    <div class="table-scroll">
+      <table id="aba-table" aria-label="搜索频率排名与前三点击 ASIN">
+        <thead>
+          <tr><th rowspan="2" scope="col">关键词</th><th rowspan="2" scope="col">搜索频率排名</th><th colspan="3" scope="colgroup">点击第 1 名</th><th colspan="3" scope="colgroup">点击第 2 名</th><th colspan="3" scope="colgroup">点击第 3 名</th></tr>
+          <tr><th scope="col">ASIN</th><th scope="col">点击份额</th><th scope="col">转化份额</th><th scope="col">ASIN</th><th scope="col">点击份额</th><th scope="col">转化份额</th><th scope="col">ASIN</th><th scope="col">点击份额</th><th scope="col">转化份额</th></tr>
+        </thead><tbody id="aba-rows"></tbody>
+      </table>
+    </div>
+  </section>
 </section>
 <section id="page-drafts" aria-label="调整草稿" hidden><div id="review-drafts"></div></section>
 <div id="page-method" role="region" aria-label="数据口径" hidden>
@@ -3293,8 +3343,187 @@ const mcPeriodPane = (() => {
   return {show, hide};
 })();
 
-const reviewPages=['effects','analysis','bands','pair','periodcompare','diagnosis','attributes','drafts','method','daily'];
+const reviewPages=['effects','analysis','bands','pair','periodcompare','diagnosis','attributes','aba','drafts','method','daily'];
 let reviewPage='effects';
+
+const mcAbaPanel = (() => {
+  const el = id => document.getElementById(id);
+  const entries = new Map();
+  let current = null, lastFocus = '';
+  const weekDate = new Date(feed.week + 'T00:00:00Z');
+  const rangeDay = offset => new Date(weekDate.getTime() + offset * 86400000).toISOString().slice(0,10);
+  const week = rangeDay(-1);
+  const pctText = n => Number.isFinite(n) && n >= 0 && n <= 100 ? n.toLocaleString('zh-CN',{maximumFractionDigits:2}) + '%' : '—';
+  const normalized = value => value.split(/\r\n?|\n/).map(s => s.trim().replace(/\s+/gu,' ').toLowerCase()).filter(Boolean);
+  function list(value) { return [...new Set(normalized(value))]; }
+  function key(a) { return JSON.stringify([a.operator,a.product]); }
+
+  function showEditor(a) {
+    const input = el('aba-terms');
+    const editable = a?.data?.canEdit === true;
+    const words = a?.data?.keywords || [];
+    const terms = editable ? list(input.value) : [];
+    const long = terms.some(word => Array.from(word).length > 200);
+    const dirty = !!a && a.draft !== null;
+    el('aba-editor').hidden = !editable;
+    input.disabled = !editable || a?.busy === 'save';
+    const needsUpdate = words.some(item => item.status === 'pending' && item.queued === false);
+    el('aba-save').disabled = !editable || (!dirty && !needsUpdate) || !!a.busy || a.stale || terms.length > 30 || long;
+    el('aba-save').textContent = a?.busy === 'save' ? '正在保存…' : !dirty && needsUpdate ? '申请更新本周数据' : !terms.length && words.length ? '保存空词单' : '保存关键词';
+    el('aba-discard').hidden = !editable || !dirty;
+    el('aba-discard').disabled = !!a?.busy;
+    el('aba-count').textContent = (editable ? terms.length : words.length) + ' / 30 个词';
+    const msg = el('aba-validation');
+    msg.textContent = terms.length > 30 ? '最多保留 30 个不同的关键词，请移除 ' + (terms.length-30) + ' 个。' :
+      long ? '单个关键词最多 200 个字符。' : dirty ? '有修改待保存。' : '';
+    input.setAttribute('aria-invalid',String(terms.length > 30 || long));
+    el('aba-refresh').disabled = !!a?.busy;
+  }
+
+  function renderRows(a) {
+    const body = el('aba-rows');
+    const fragment = document.createDocumentFragment();
+    for (const item of a?.data?.keywords || []) {
+      const row = document.createElement('tr');
+      const cell = (tag,content) => {
+        const c = document.createElement(tag);
+        c.textContent = content;
+        if (tag === 'th') c.scope = 'row';
+        row.append(c); return c;
+      };
+      cell('th',item.term);
+      const matched = item.status === 'matched' && Number.isSafeInteger(item.rank) && item.rank > 0;
+      cell('td',matched ? item.rank.toLocaleString('zh-CN') : item.status === 'not_listed' ? '本周未收录' : item.queued === false ? '待申请' : '待更新');
+      const top = Array.isArray(item.top) ? item.top : [];
+      for (let position = 1; position <= 3; position++) {
+        const entry = matched && top.find((v,i) => v && (v.position ?? i+1) === position);
+        const asinCell = cell('td',entry?.asin || '—');
+        if (entry?.title) asinCell.title = entry.title;
+        cell('td',pctText(entry?.clickShare));
+        cell('td',pctText(entry?.conversionShare));
+      }
+      fragment.append(row);
+    }
+    body.replaceChildren(fragment);
+  }
+  function paint(a) {
+    if (a !== current) return;
+    const words = a.data?.keywords || [];
+    const input = el('aba-terms');
+    const next = a.draft ?? words.map(item => item.term).join('\n');
+    if (input.value !== next) input.value = next;
+    el('aba-scope').textContent = a.operator + ' · ' + a.product;
+    el('aba-controls').hidden = false;
+    el('aba-report').hidden = !words.length;
+    const pending = words.some(item => item.status === 'pending');
+    const needsUpdate = words.some(item => item.status === 'pending' && item.queued === false);
+    const published = a.data?.publishedAt ? new Date(a.data.publishedAt) : null;
+    el('aba-updated').textContent = published && Number.isFinite(published.getTime())
+      ? '数据更新时间 ' + published.toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}) + '（北京时间）' : '';
+    el('aba-status').textContent = a.note || (a.busy === 'read' ? '正在读取词单…' :
+      !words.length && a.data ? (a.data.canEdit ? '还没有跟踪词，添加后点「保存关键词」。' : '该产品还没有跟踪词。') :
+      needsUpdate ? (a.data.canEdit ? '点击「申请更新本周数据」，补查所选周的待申请关键词。' : '部分词仍需由对应运营申请更新本周数据。') :
+      pending ? '标记为「待更新」的词将在本周 ABA 数据同步后显示结果。' : '');
+    el('aba-access').textContent = a.data && !a.data.canEdit ? '当前账号可查看，词单由产品对应运营维护。' : '';
+    showEditor(a);
+    renderRows(a);
+  }
+  function scopeFocus(value) {
+    const signature = JSON.stringify(value);
+    if (lastFocus === signature) return;
+    lastFocus = signature;
+    window.MCAdsABA?.remember(value);
+  }
+  function hide() {
+    if (lastFocus && lastFocus !== 'null') scopeFocus(null);
+    current = null;
+  }
+  function accept(a, value) {
+    if (value?.operator !== a.operator || value.product !== a.product || value.week !== week ||
+        !Array.isArray(value.keywords) || value.keywords.length > 30 || typeof value.canEdit !== 'boolean' ||
+        !Number.isSafeInteger(value.revision) || value.revision < 0 ||
+        value.keywords.some(v => !v || typeof v.term !== 'string')) throw new Error('ABA 数据格式异常，请重新读取。');
+    a.data = value;
+  }
+  async function load(a) {
+    if (a.busy) return;
+    a.busy='read'; a.note=''; paint(a);
+    try {
+      const prior = a.data?.revision;
+      accept(a,await window.MCAdsABA.request({action:'read',operator:a.operator,product:a.product}));
+      if (a.draft !== null && !a.data.canEdit) a.draft = null;
+      if (a.draft !== null && (a.stale || prior !== a.data.revision)) {
+        a.note = '已读取最新词单。下表列出已保存的词，请与编辑框核对后再保存。';
+      }
+      a.stale = false;
+    } catch (error) { a.note = error.message || 'ABA 读取失败，请重试。'; a.stale = true; }
+    finally { a.busy=''; paint(a); }
+  }
+  function show(view) {
+    const path = scopeAncestors(view);
+    const operator = path.operator?.label || '';
+    const product = path.product?.label || '';
+    const valid = !view.demo && !path.product?.unmapped && feed.catalog.some(
+      person => person.operator === operator && person.groups.some(group => group.owner === product));
+    scopeFocus({active:true,operator:!view.demo ? operator : '',product:valid ? product : ''});
+    el('aba-period').textContent = '美国站 · Amazon.com · ' + week + ' 至 ' + rangeDay(5) + '（周日至周六）';
+    if (!valid || !window.MCAdsABA) {
+      current = null;
+      el('aba-scope').textContent = '';
+      el('aba-controls').hidden = el('aba-report').hidden = true;
+      el('aba-updated').textContent = el('aba-access').textContent = '';
+      el('aba-status').textContent = view.demo ? '请返回真实数据，选择目录产品后查看 ABA。' :
+        path.product?.unmapped ? '请在上方选择已归入产品目录的产品。' :
+        !valid ? '请选择上方的产品，查看该产品的关键词与周排名。' : '请从广告看板打开此页。';
+      return;
+    }
+    const id = key({operator,product});
+    if (current?.id === id) return;
+    if (!entries.has(id)) entries.set(id,{operator,product,id,data:null,draft:null,busy:'',stale:false,note:''});
+    current = entries.get(id);
+    paint(current);
+    void load(current);
+  }
+  function init() {
+    const input = el('aba-terms');
+    input.addEventListener('input',() => {
+      const a = current;
+      if (!a?.data?.canEdit) return;
+      const baseline = a.data.keywords.map(item=>item.term).sort();
+      a.draft = JSON.stringify(list(input.value).sort()) === JSON.stringify(baseline) ? null : input.value;
+      a.note = '';
+      el('aba-status').textContent = '';
+      showEditor(a);
+    });
+    el('aba-refresh').addEventListener('click',() => { if (current) void load(current); });
+    el('aba-discard').addEventListener('click',() => {
+      if (!current || current.busy) return;
+      current.draft = null; current.note=''; paint(current);
+    });
+    el('aba-save').addEventListener('click',async () => {
+      const a = current;
+      if (!a?.data?.canEdit || a.busy || a.stale || el('aba-save').disabled) return;
+      const terms = list(input.value);
+      a.busy='save'; a.note='正在保存词单…'; paint(a);
+      try {
+        accept(a,await window.MCAdsABA.request({action:'save',operator:a.operator,product:a.product,
+          revision:a.data.revision,terms}));
+        a.draft=null; a.note='已保存 ' + a.data.keywords.length + ' 个跟踪词。';
+      } catch (error) {
+        a.stale=true; a.note=(error.message || '保存未确认。') + (error.code === 'conflict' ? '' : ' 请重新读取后核对。');
+      } finally { a.busy=''; paint(a); }
+    });
+    const hint = window.MCAdsABA?.restore;
+    if (hint?.active === true) {
+      reviewPage='aba';
+      const operator = [...hierarchyById.values()].find(n => n.kind === 'operator' && !n.demo && n.label === hint.operator);
+      const product = operator && (hierarchyChildren.get(operator.id) || []).find(n => n.label === hint.product && !n.unmapped);
+      const node = product || operator;
+      if (node) { activeHierarchyId=node.id; location.hash=hierarchyUrl(node.id); }
+    }
+  }
+  return {show,hide,init};
+})();
 
 function currentReviewPage(){return reviewPage;}
 
@@ -3329,6 +3558,7 @@ function setFilterOptions(select,options,value){
 }
 
 function syncReviewWorkspace(view){
+  document.body.classList.toggle('aba-active',reviewPage==='aba');
   const path=scopeAncestors(view);
   const operators=mcSourceChildren(path.store.id);
   const products=(path.operator?[path.operator]:operators).flatMap(operator=>mcSourceChildren(operator.id));
@@ -7558,8 +7788,10 @@ function render(){
     $('hier-empty').querySelector('p').textContent='可在下方查看当前范围的活动和广告组。';
   }
   const page=currentReviewPage();
+  if(page!=='aba')mcAbaPanel.hide();
   if(page==='periodcompare'){mcPeriodPane.show(view);return;}
   mcPeriodPane.hide();
+  if(page==='aba'){mcAbaPanel.show(view);return;}
   if(page==='bands'){renderCampaignBands(view,dates);return;}
   if(page==='pair'){renderProductPair(view,dates);return;}
   if(page==='daily'){
@@ -7865,6 +8097,7 @@ window.mcCampaignFilterUI = {refresh: syncFilterUI};
 
 initializeHierarchy();
 restoreBusinessData();
+mcAbaPanel.init();
 initReviewWorkspace();
 initializeDiagnosis();
 initializeAttributes();

@@ -7,7 +7,7 @@
   const login = '../index.html?next=ads-dashboard';
   const project = 'https://peykqsnlistkhrqsiulx.supabase.co';
   const maxRaw = 64 * 1024 * 1024, maxPacked = 16 * 1024 * 1024;
-  let request, selection, auth, template, weeks = [];
+  let request, selection, auth, template, weeks = [], abaFocus = null;
 
   function clearWeek() {
     selection?.abort();
@@ -23,6 +23,7 @@
     request = null;
     clearWeek();
     auth = null;
+    abaFocus = null;
     weeks = [];
     picker.replaceChildren();
     id('weekControl').hidden = true;
@@ -38,6 +39,18 @@
       headers: {'Content-Type':'application/json', apikey:config.SUPABASE_PUBLISHABLE_KEY,
         Authorization:'Bearer ' + auth.session.access_token}, body:JSON.stringify(args)
     });
+    if (!res.ok && (name === 'mc_aba_read' || name === 'mc_aba_save')) {
+      const info = await res.json().catch(() => ({}));
+      const conflict = info.code === '40001' || res.status === 409;
+      const error = new Error(conflict ? '词单已被更新，请重新读取后核对并保存。' :
+        res.status === 401 ? '登录已过期，请重新登录。' :
+        res.status === 403 ? '当前账号没有该产品的操作权限，请重新读取词单。' :
+        res.status === 404 ? 'ABA 数据接口尚未安装。' :
+        info.code === '22023' ? '请检查所选产品、周次及关键词，每个产品最多 30 个词。' :
+        'ABA 数据服务暂时不可用，请稍后重试。');
+      if (conflict) error.code = 'conflict';
+      throw error;
+    }
     if (res.status === 401) throw new Error('登录已过期，请重新加载。');
     if (res.status === 403) throw new Error('当前账号没有 MC 美国站广告看板的查看权限。');
     if (res.status === 404) throw new Error('数据库的广告周报更新尚未安装，请先运行本次 SQL。');
@@ -78,7 +91,7 @@
 
   async function getTemplate(signal) {
     if (template) return template;
-    const res = await fetch('../assets/mc-ads-view.html?v=20261127-search-term-rows1', {signal,redirect:'error'});
+    const res = await fetch('../assets/mc-ads-view.html?v=20261127-aba1', {signal,redirect:'error'});
     if (!res.ok) throw new Error('看板页面文件未能加载，请检查网页包是否已完整发布。');
     template = await res.text();
     return template;
@@ -167,7 +180,46 @@
         checkAccess();
         return historicalFeed;
       }
-      MCAdsFrame.mount(frame,html,account,feed,business,options,selectWeek,readPeriodWeek,inventory);
+      const weekDate = new Date(week + 'T00:00:00Z');
+      weekDate.setUTCDate(weekDate.getUTCDate() - 1);
+      const abaWeek = weekDate.toISOString().slice(0,10);
+      function validProduct(operator, product) {
+        return feed.catalog.some(person => person.operator === operator &&
+          person.groups.some(group => group.owner === product));
+      }
+      const aba = {
+        restore:abaFocus,
+        remember(value) {
+          if (selection !== run) return;
+          abaFocus = value?.active === true ? {active:true,
+            operator:typeof value.operator === 'string' ? value.operator : '',
+            product:validProduct(value.operator,value.product) ? value.product : ''} : null;
+        },
+        async request(query) {
+          const {operator,product,action} = query;
+          if (selection !== run || auth?.user?.id !== account || !validProduct(operator,product)) {
+            throw new Error('所选产品不在本周目录中，请重新选择。');
+          }
+          const args = {p_operator:operator,p_product:product,p_week:abaWeek};
+          if (action === 'save') {
+            if (!Array.isArray(query.terms) || query.terms.length > 30 ||
+                !query.terms.every(term => typeof term === 'string' && term.length > 0 && [...term].length <= 200) ||
+                !Number.isSafeInteger(query.revision) || query.revision < 0) {
+              throw new Error('词单格式无效，每个产品最多 30 个词。');
+            }
+            Object.assign(args,{p_expected_revision:query.revision,p_terms:query.terms});
+          } else if (action !== 'read') {
+            throw new Error('ABA 操作无效。');
+          }
+          const session = await KBAuth.getValidSession();
+          if (!session || session.user?.id !== account || selection !== run || run.signal.aborted) {
+            throw new Error('登录状态或看板已切换，请重新加载。');
+          }
+          auth = session;
+          return rpc(action === 'save' ? 'mc_aba_save' : 'mc_aba_read',args,run.signal);
+        }
+      };
+      MCAdsFrame.mount(frame,html,account,feed,business,options,selectWeek,readPeriodWeek,inventory,aba);
       panel.hidden = true;
       frame.hidden = false;
     } catch (error) {
